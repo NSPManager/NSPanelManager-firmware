@@ -3,9 +3,11 @@
 
 #include <list>
 #include <string>
+#include <vector>
 
 /// @brief MQTT Messages container
-struct mqttMessage {
+class mqttMessage {
+public:
   std::string topic;
   std::string payload;
 };
@@ -26,7 +28,8 @@ enum editLightMode {
 };
 
 /// @brief Object used to represent a light with all its configuration
-struct lightConfig {
+class lightConfig {
+public:
   uint16_t id = 0;
   uint8_t level = 0;
   uint8_t colorTemperature = 0;
@@ -40,9 +43,14 @@ struct lightConfig {
   std::string name;
 };
 
-struct sceneConfig {
+class roomConfig; // Actual roomConfig is declared below
+class sceneConfig {
+public:
   uint16_t id = 0;
   std::string name;
+  roomConfig *room = nullptr;
+  void save();
+  void activate();
 };
 
 /// @brief Object/container used to represent a room
@@ -52,7 +60,7 @@ public:
   std::string name;
   std::list<lightConfig> ceilingLights;
   std::list<lightConfig> tableLights;
-  std::list<sceneConfig> scenes;
+  std::vector<sceneConfig> scenes;
   std::list<lightConfig *> getCeilingLightsThatAreOn();
   std::list<lightConfig *> getTableLightsThatAreOn();
   std::list<lightConfig *> getAllLightsThatAreOn();
