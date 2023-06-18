@@ -1,13 +1,22 @@
 #ifndef INTERFACE_PAGE_HPP
 #define INTERFACE_PAGE_HPP
 
-class Page {
+#include <MqttLog.hpp>
+
+class PageBase {
+public:
   /// @brief Show the intended page and do everything need to get it working
-  virtual void show();
+  void show() {
+    LOG_ERROR("Not implemented!");
+  }
   /// @brief Update the page according to new values
-  virtual void update();
+  void update() {
+    LOG_ERROR("Not implemented!");
+  }
   /// @brief Remove and event handlers or simular
-  virtual void unshow();
+  void unshow() {
+    LOG_ERROR("Not implemented!");
+  }
 };
 
 #endif
