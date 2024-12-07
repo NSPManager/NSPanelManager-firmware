@@ -12,6 +12,8 @@
 ESP_EVENT_DEFINE_BASE(NSPM_CONFIGMANAGER_EVENT);
 
 void NSPM_ConfigManager::init() {
+  esp_log_level_set("NSPM_ConfigManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
+  ESP_LOGI("NSPM_ConfigManager", "Initializing NSPM_ConfigManager.");
   NSPM_ConfigManager::_config_mutex = xSemaphoreCreateMutex();
   MqttManager::register_handler(MQTT_EVENT_DATA, &NSPM_ConfigManager::_mqtt_event_handler, NULL);
 

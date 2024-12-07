@@ -36,7 +36,6 @@ public:
   static inline const uint8_t button_scenes_all_rooms_pic2 = 62;
 
   static inline const uint8_t button_room_entities_id = 5;
-  static inline const uint8_t button_next_room_id = 10;
 
   static inline const char *label_ceiling_name = "home.n_ceiling";
   static inline const char *label_table_name = "home.n_table";
@@ -48,5 +47,8 @@ public:
   static inline const uint16_t slider_highlight_color = 65024;
 
   static inline const char *mode_label_name = "home.mode";
+  static inline const uint8_t button_next_mode_id = 6;
+
   static inline const char *room_label_name = "home.room";
+  static inline const uint8_t button_next_room_id = 10;
 };

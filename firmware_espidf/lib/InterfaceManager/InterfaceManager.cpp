@@ -24,6 +24,25 @@ void InterfaceManager::init() {
   // Show boot page
   LoadingPage::show();
 
+  // No SSID configured, the access point has been started through WiFiManager
+  // Show text to connect to AP and wait indefinefly. Panel will reboot once settings has been saved.
+  // TODO: Perhaps implement flag in WiFi manager for which more the we are currently in
+  // instead of relying on empty WiFi SSID.
+  if (ConfigManager::wifi_ssid.empty()) {
+    for (;;) {
+      std::string primary_text = "Connect to ";
+      primary_text.append(ConfigManager::wifi_hostname);
+      LoadingPage::set_loading_text(primary_text);
+
+      char ip_address_str[IP4ADDR_STRLEN_MAX];
+      esp_netif_ip_info_t ip_info = WiFiManager::ip_info();
+      sprintf(ip_address_str, IPSTR, IP2STR(&ip_info.ip));
+      LoadingPage::set_secondary_text(ip_address_str);
+
+      vTaskDelay(pdMS_TO_TICKS(1000)); // Update every second
+    }
+  }
+
   // Wait for WiFi
   std::string append_string = "";
   if (!WiFiManager::connected() || WiFiManager::ip_info().ip.addr == 0) {

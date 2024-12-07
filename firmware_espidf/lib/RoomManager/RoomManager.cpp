@@ -11,6 +11,7 @@ ESP_EVENT_DEFINE_BASE(ROOMMANAGER_EVENT);
 
 void RoomManager::init() {
   ESP_LOGI("RoomManager", "Initializing RoomManager.");
+  esp_log_level_set("RoomManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Read from config
   RoomManager::_room_statuses_mutex = xSemaphoreCreateMutex();
   RoomManager::_load_all_rooms_task_handle = NULL;
 
@@ -136,11 +137,11 @@ esp_err_t RoomManager::replace_room_status(NSPanelRoomStatus *status) {
     } else {
       // Existing room with matching ID was not found, insert into list.
       xSemaphoreGive(RoomManager::_room_statuses_mutex);
-      return ESP_ERR_NOT_FOUND;
+      return ESP_ERR_NOT_FINISHED;
     }
   }
 
-  return ESP_ERR_NOT_FOUND;
+  return ESP_ERR_NOT_FINISHED;
 }
 
 void RoomManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -185,11 +186,12 @@ void RoomManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
               }
               xSemaphoreGive(RoomManager::_room_statuses_mutex);
 
-              ESP_LOGI("RoomManager", "Loaded room config/status for room %ld::%s, will send event.", room_status->id, room_status->name);
               if (room_status->id == RoomManager::_current_room_id) {
+                ESP_LOGI("RoomManager", "Updated currently selected room, will send event.");
                 esp_event_post(ROOMMANAGER_EVENT, roommanager_event_t::CURRENT_ROOM_UPDATED, NULL, 0, pdMS_TO_TICKS(250));
               }
 
+              ESP_LOGI("RoomManager", "Loaded room config/status for room %ld::%s, will send event.", room_status->id, room_status->name);
               uint32_t room_id = room_status->id;
               esp_event_post(ROOMMANAGER_EVENT, roommanager_event_t::ROOM_LOADED, &room_id, sizeof(room_id), pdMS_TO_TICKS(250));
             } else {
@@ -229,52 +231,49 @@ void RoomManager::_load_all_rooms(void *arg) {
   std::string mqtt_base_topic = "nspanel/mqttmanager_";
   mqtt_base_topic.append(manager_address);
   mqtt_base_topic.append("/room/");
+
   NSPanelConfig config;
+  while (NSPM_ConfigManager::get_config(&config) != ESP_OK) {
+    ESP_LOGE("RoomManager", "Failed to get NSPM_Config when trying to load all rooms, will try again!");
+    vTaskDelay(pdMS_TO_TICKS(1000));
+  }
+
+  // Subscribe to all room topics
   for (;;) {
-    if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-      for (;;) {
-        std::string subscribe_topic;
-        bool all_subscribed_successfully = true;
-        for (int i = 0; i < config.n_room_ids; i++) {
-          subscribe_topic = mqtt_base_topic;
-          subscribe_topic.append(std::to_string(config.room_ids[i]));
-          subscribe_topic.append("/status");
-          if (MqttManager::subscribe(subscribe_topic) != ESP_OK) {
-            ESP_LOGE("RoomManager", "Failed to subscribe to %s while loading rooms. Will try again.", subscribe_topic.c_str());
-            all_subscribed_successfully = false;
-            break;
-          }
-          vTaskDelay(pdMS_TO_TICKS(250));
-        }
-        if (all_subscribed_successfully) {
-          // We subscribed to each room config/status topic. Cancel this loop
-          break;
-        }
+    std::string subscribe_topic;
+    bool all_subscribed_successfully = true;
+    for (int i = 0; i < config.n_room_ids; i++) {
+      subscribe_topic = mqtt_base_topic;
+      subscribe_topic.append(std::to_string(config.room_ids[i]));
+      subscribe_topic.append("/status");
+      if (MqttManager::subscribe(subscribe_topic) != ESP_OK) {
+        ESP_LOGE("RoomManager", "Failed to subscribe to %s while loading rooms. Will try again.", subscribe_topic.c_str());
+        all_subscribed_successfully = false;
+        break;
       }
-
-      // Wait for all rooms to be loaded
-      ESP_LOGI("RoomManager", "Subscribed to all room config/status topics successfully. Waiting for all rooms to load");
-      NSPanelRoomStatus status;
-      for (int i = 0; i < config.n_room_ids; i++) {
-        while (RoomManager::get_room_status(&status, config.room_ids[i]) != ESP_OK) {
-          // Failed to get config for one room, what 100ms and check again
-          ESP_LOGW("RoomManager", "Failed to get config/status for room ID %ld, will try again to check if all rooms are loaded.", config.room_ids[i]);
-          vTaskDelay(pdMS_TO_TICKS(100));
-          break;
-        }
-      }
-
-      ESP_LOGI("RoomManager", "All rooms loaded successfully, will fire event.");
-      RoomManager::_current_room_id = config.default_room;
-      esp_event_post(ROOMMANAGER_EVENT, roommanager_event_t::ALL_ROOMS_LOADED, NULL, 0, pdMS_TO_TICKS(250));
-
-      // Successfully loaded all rooms, break loop
+      vTaskDelay(pdMS_TO_TICKS(250));
+    }
+    if (all_subscribed_successfully) {
+      // We subscribed to each room config/status topic. Cancel this loop
       break;
-    } else {
-      ESP_LOGE("RoomManager", "Failed to get NSPM_Config when trying to load all rooms, will try again!");
-      vTaskDelay(pdMS_TO_TICKS(500));
     }
   }
+
+  // Wait for all rooms to be loaded
+  ESP_LOGI("RoomManager", "Subscribed to all room config/status topics successfully. Waiting for all rooms to load");
+  NSPanelRoomStatus status;
+  for (int i = 0; i < config.n_room_ids; i++) {
+    while (RoomManager::get_room_status(&status, config.room_ids[i]) != ESP_OK) {
+      // Failed to get config for one room, what 100ms and check again
+      ESP_LOGW("RoomManager", "Failed to get config/status for room ID %ld, will try again to check if all rooms are loaded.", config.room_ids[i]);
+      vTaskDelay(pdMS_TO_TICKS(100));
+      break;
+    }
+  }
+
+  ESP_LOGI("RoomManager", "All rooms loaded successfully, will fire event.");
+  RoomManager::_current_room_id = config.default_room;
+  esp_event_post(ROOMMANAGER_EVENT, roommanager_event_t::ALL_ROOMS_LOADED, NULL, 0, pdMS_TO_TICKS(250));
 
   // Load complete, delete task:
   RoomManager::_load_all_rooms_task_handle = NULL;
