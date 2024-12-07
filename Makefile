@@ -27,3 +27,7 @@ monitor:
 install:
 	@echo "Installing dependencies..."
 	pipenv install --ignore-pipfile
+
+pre-commit:
+	@echo "Run pre-commit checks..."
+	pipenv run pre-commit run --all-files

@@ -37,3 +37,8 @@ jobs:
       - name: Compile firmware
         run: |
           make build
+
+      - name: Perform pre-commit checks
+        # ensure files are correctly formatted, Markdown, yaml, end of file etc.
+        run: |
+          make pre-commit
