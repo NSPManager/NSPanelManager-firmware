@@ -212,6 +212,10 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
     } else {
       ESP_LOGE("Nextion", "Not enough bytes sent for 0x65 touch event.");
     }
+  } else if (*data->data == NEX_OUT_SLEEP) {
+    esp_event_post(NEXTION_EVENT, nextion_event_t::SLEEP_EVENT, NULL, 0, pdMS_TO_TICKS(5000));
+  } else if (*data->data == NEX_OUT_WAKE) {
+    esp_event_post(NEXTION_EVENT, nextion_event_t::WAKE_EVENT, NULL, 0, pdMS_TO_TICKS(5000));
   } else if (strncmp((char *)data->data, "NSPM", data->data_size) == 0) {
     esp_event_post(NEXTION_EVENT, nextion_event_t::RECEIVED_NSPM_FLAG, NULL, 0, pdMS_TO_TICKS(16));
   } else if (strncmp((char *)data->data, "comok", 5) == 0) {
@@ -465,4 +469,20 @@ esp_err_t Nextion::get_component_integer_value(const char *component_id, int32_t
   } else {
     return ESP_ERR_TIMEOUT;
   }
+}
+
+esp_err_t Nextion::set_brightness_level(uint8_t brightness, uint16_t mutex_timeout) {
+  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
+    uart_write_bytes(UART_NUM_2, "dim=", strlen("dim="));
+    std::string value_string = std::to_string(brightness);
+    uart_write_bytes(UART_NUM_2, value_string.c_str(), value_string.length());
+
+    // Send command finished sequence
+    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
+    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
+
+    xSemaphoreGive(Nextion::_uart_write_mutex);
+    return ESP_OK;
+  }
+  return ESP_ERR_TIMEOUT;
 }

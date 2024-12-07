@@ -4,7 +4,6 @@
 #include <MqttManager.hpp>
 #include <NSPM_version.hpp>
 #include <Nextion.hpp>
-#include <PageManager.hpp>
 #include <RoomManager.hpp>
 #include <WebManager.hpp>
 #include <WiFiManager.hpp>
@@ -47,9 +46,6 @@ extern "C" void app_main() {
       WiFiManager::start_client(&ConfigManager::wifi_ssid, &ConfigManager::wifi_psk, &ConfigManager::wifi_hostname);
     }
   }
-
-  // Initialize PageManager memory
-  PageManager::init();
 
   // Start task that handles MQTT connection
   MqttManager::start(&ConfigManager::mqtt_server, &ConfigManager::mqtt_port, &ConfigManager::mqtt_username, &ConfigManager::mqtt_password);

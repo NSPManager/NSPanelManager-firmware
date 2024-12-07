@@ -9,6 +9,7 @@
 #include <Nextion_event.hpp>
 #include <RoomManager.hpp>
 #include <RoomManager_event.hpp>
+#include <ScreensaverPage.hpp>
 #include <WiFiManager.hpp>
 #include <esp_log.h>
 
@@ -94,6 +95,28 @@ void InterfaceManager::init() {
 
 void InterfaceManager::_nextion_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
   switch (event_id) {
+  case nextion_event_t::SLEEP_EVENT:
+    ScreensaverPage::show();
+    break;
+
+  case nextion_event_t::WAKE_EVENT: {
+    // Someone touched the screensaver, unshow it and go to the default page, whatever is selected in the manager
+    NSPanelConfig config;
+    if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+      Nextion::set_brightness_level(config.screen_dim_level, 1000);
+      if (config.default_page == 0) { // TODO: Convert to protobuf ENUM for clarity
+        HomePage::show();
+      } else {
+        ESP_LOGE("ScreensaverPage", "Unknown default page %ld, will default to home page!", config.default_page);
+        HomePage::show();
+      }
+
+      ScreensaverPage::unshow();
+    } else {
+      ESP_LOGE("ScreensaverPage", "Failed to get NSPanel Config when unshowing screensaver page!");
+    }
+    break;
+  }
 
   default:
     break;

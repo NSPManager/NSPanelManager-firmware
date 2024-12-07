@@ -9,6 +9,8 @@ enum nextion_event_t {
   CONNECTED,
   RECEIVED_NSPM_FLAG,
   TOUCH_EVENT,
+  SLEEP_EVENT,
+  WAKE_EVENT,
 };
 
 struct nextion_event_data_t {

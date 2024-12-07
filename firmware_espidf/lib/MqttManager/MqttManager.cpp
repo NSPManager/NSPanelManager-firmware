@@ -2,7 +2,8 @@
 #include <esp_log.h>
 
 void MqttManager::start(std::string *server, uint16_t *port, std::string *username, std::string *password) {
-  ESP_LOGI("MQTT", "Starting MQTTManager, will connect to %s:%d", server->c_str(), *port);
+  esp_log_level_set("MqttManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
+  ESP_LOGI("MqttManager", "Starting MQTTManager, will connect to %s:%d", server->c_str(), *port);
   MqttManager::_connected = false;
   MqttManager::_mqtt_config.broker.address.hostname = server->c_str();
   MqttManager::_mqtt_config.broker.address.port = *port;
@@ -16,7 +17,7 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
   MqttManager::_mqtt_config.buffer.out_size = 512;
   MqttManager::_mqtt_client = esp_mqtt_client_init(&MqttManager::_mqtt_config);
   if (MqttManager::_mqtt_client == NULL) {
-    ESP_LOGE("MQTT", "Failed to create MQTT client!");
+    ESP_LOGE("MqttManager", "Failed to create MQTT client!");
     esp_restart();
     return;
   }
@@ -25,21 +26,21 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
   esp_err_t result = esp_mqtt_client_register_event(MqttManager::_mqtt_client, esp_mqtt_event_id_t::MQTT_EVENT_ANY, MqttManager::_mqtt_event_handler, NULL);
   switch (result) {
   case ESP_ERR_NO_MEM:
-    ESP_LOGE("MQTT", "Failed to allocate MQTT event handler!");
+    ESP_LOGE("MqttManager", "Failed to allocate MQTT event handler!");
     esp_restart();
     break;
 
   case ESP_ERR_INVALID_ARG:
-    ESP_LOGE("MQTT", "Failed to initialize MQTT event handler!");
+    ESP_LOGE("MqttManager", "Failed to initialize MQTT event handler!");
     esp_restart();
     break;
 
   case ESP_OK:
-    ESP_LOGV("MQTT", "Attached MQTT event handler.");
+    ESP_LOGV("MqttManager", "Attached MQTT event handler.");
     break;
 
   default:
-    ESP_LOGW("MQTT", "Unknown status code when registering MQTT event handler: %s", esp_err_to_name(result));
+    ESP_LOGW("MqttManager", "Unknown status code when registering MQTT event handler: %s", esp_err_to_name(result));
     break;
   }
 
@@ -47,16 +48,16 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
   result = esp_mqtt_client_start(MqttManager::_mqtt_client);
   switch (result) {
   case ESP_ERR_INVALID_ARG:
-    ESP_LOGE("MQTT", "Failed to start MQTT client!");
+    ESP_LOGE("MqttManager", "Failed to start MQTT client!");
     esp_restart();
     break;
 
   case ESP_OK:
-    ESP_LOGI("MQTT", "Started MQTT client.");
+    ESP_LOGI("MqttManager", "Started MQTT client.");
     break;
 
   default:
-    ESP_LOGW("MQTT", "Unknown status code when registering MQTT event handler: %s", esp_err_to_name(result));
+    ESP_LOGW("MqttManager", "Unknown status code when registering MQTT event handler: %s", esp_err_to_name(result));
     break;
   }
 }
@@ -67,26 +68,26 @@ void MqttManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
 
   switch ((esp_mqtt_event_id_t)event_id) {
   case MQTT_EVENT_CONNECTED:
-    ESP_LOGI("MQTT", "Connected to MQTT server.");
+    ESP_LOGI("MqttManager", "Connected to MQTT server.");
     MqttManager::_connected = true;
     break;
 
   case MQTT_EVENT_DISCONNECTED:
-    ESP_LOGW("MQTT", "Lost connection to MQTT server.");
+    ESP_LOGW("MqttManager", "Lost connection to MQTT server.");
     MqttManager::_connected = false;
     break;
 
   case MQTT_EVENT_ERROR:
-    ESP_LOGI("MQTT", "MQTT_EVENT_ERROR");
+    ESP_LOGI("MqttManager", "MQTT_EVENT_ERROR");
     if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
       if (event->error_handle->esp_tls_last_esp_err != 0) {
-        ESP_LOGE("MQTT", "Error report from esp-tls!");
+        ESP_LOGE("MqttManager", "Error report from esp-tls!");
       } else if (event->error_handle->esp_tls_stack_err != 0) {
-        ESP_LOGE("MQTT", "Error report from tls stack!");
+        ESP_LOGE("MqttManager", "Error report from tls stack!");
       } else if (event->error_handle->esp_transport_sock_errno != 0) {
-        ESP_LOGE("MQTT", "Captured as transport's socket errno!");
+        ESP_LOGE("MqttManager", "Captured as transport's socket errno!");
       }
-      ESP_LOGI("MQTT", "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
+      ESP_LOGI("MqttManager", "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
     }
     break;
 

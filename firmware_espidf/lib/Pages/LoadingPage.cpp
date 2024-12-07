@@ -1,10 +1,10 @@
 #include <GUI_data.hpp>
+#include <InterfaceManager.hpp>
 #include <LoadingPage.hpp>
 #include <Nextion.hpp>
-#include <PageManager.hpp>
 
 void LoadingPage::show() {
-  PageManager::set_current_page(PageManager::available_pages::LOADING);
+  InterfaceManager::_current_page = InterfaceManager::available_pages::LOADING;
   Nextion::go_to_page(GUI_LOADING_PAGE::page_name, 250);
 }
 

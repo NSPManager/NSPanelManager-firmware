@@ -105,6 +105,14 @@ public:
   static esp_err_t get_component_integer_value(const char *component_id, int32_t *result, uint16_t timeout, uint16_t mutex_timeout);
 
   /**
+   * Request the current value of a component on the Nextion display
+   * @param brightness: The new brightness for the screen
+   * @param mutex_timeout: Timeout (in ms) of how long to wait for UART mutex
+   * @return: Return ESP_ERR_TIMEOUT if no value was returned within the given timeout
+   */
+  static esp_err_t set_brightness_level(uint8_t brightness, uint16_t mutex_timeout);
+
+  /**
    * Restart the Nextion display via GPIO power management
    */
   static void restart();

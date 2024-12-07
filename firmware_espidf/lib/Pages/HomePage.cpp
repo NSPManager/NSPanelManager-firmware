@@ -1,18 +1,19 @@
 #include <GUI_data.hpp>
 #include <HomePage.hpp>
+#include <InterfaceManager.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
 #include <Nextion.hpp>
 #include <Nextion_event.hpp>
-#include <PageManager.hpp>
 #include <RoomManager.hpp>
 #include <RoomManager_event.hpp>
 #include <esp_log.h>
 #include <protobuf_nspanel.pb-c.h>
+#include <vector>
 
 void HomePage::show() {
   esp_log_level_set("HomePage", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
-  PageManager::set_current_page(PageManager::available_pages::HOME);
+  InterfaceManager::_current_page = InterfaceManager::available_pages::HOME;
   Nextion::go_to_page(GUI_HOME_PAGE::page_name, 250);
 
   HomePage::_update_display();
