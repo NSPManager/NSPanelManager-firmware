@@ -7,4 +7,3 @@ module.exports = {
   darkMode: 'selector',
   plugins: [require('@tailwindcss/forms')],
 }
-

@@ -1,0 +1,139 @@
+name: Build main (edge)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-release-edge:
+    name: Build edge release
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Export build number as env variable
+        run: echo "BUILD_NUMBER=${{ github.run_number }}" >> $GITHUB_ENV
+
+      - name: Extract version
+        run: |
+          VERSION_FILE="include/nspm-bin-version.h"
+
+          # Use grep to extract the version string from the define statement
+          VERSION=$(grep -oP '#define NSPanelManagerFirmwareVersion "\K([^"]+)' $VERSION_FILE)
+
+          # Store the version in an environment variable
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+          # Optional: Print version to verify
+          echo "Version in environment variable: ${{ env.VERSION }}"
+
+      - name: Replace version in nspm-bin-version.h
+        run: |
+          echo "FIRMWARE_IDENTIFIER=${{ env.VERSION }}-${{ env.BUILD_NUMBER }}-edge" >> $GITHUB_ENV
+          echo "This build will generate firmware identifier ${{ env.FIRMWARE_IDENTIFIER }}"
+
+      - name: Replace version and sha in nspm-bin-version.h
+        run: |
+          VERSION_FILE="include/nspm-bin-version.h"
+
+          # Replace the version string in the header file using sed
+          sed -i 's/#define NSPanelManagerFirmwareVersion ".*"/#define NSPanelManagerFirmwareVersion "${{ env.FIRMWARE_IDENTIFIER }}"/' $VERSION_FILE
+          sed -i "s/#define NSPanelManagerFirmwareCommitSha \".*\"/#define NSPanelManagerFirmwareCommitSha \"$GITHUB_SHA\"/" $VERSION_FILE
+
+          cat $VERSION_FILE
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: '3.12'
+          cache: "pipenv"
+
+      - name: Install pipenv
+        run: |
+          python -m pip install --upgrade pip
+          pip install pipenv
+
+      - name: Install project required dependencies
+        # i.e: platform.io
+        run: |
+          make install
+
+      - name: Perform pre-commit checks
+        # ensure files are correctly formatted, Markdown, yaml, end of file etc.
+        run: |
+          make pre-commit
+
+      - name: Build firmware.bin
+        run: |
+          make build-firmware
+
+      - name: Build littlefs.bin
+        run: |
+          make build-littlefs
+
+      - name: Build AIO (all in one image)
+        # includes bootloader + partitions + firmware + littlefs
+        # used only the first time an NSPanel is flashed over serial
+        # not for OTA updates
+        run: |
+          make build-aio
+
+      - name: Store firmware .bin as build artifact
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: firmware-${{ env.FIRMWARE_IDENTIFIER }}
+          path: |
+            .pio/build/esp32dev/firmware.bin
+            .pio/build/esp32dev/firmware.bin.md5
+            .pio/build/esp32dev/littlefs.bin
+            .pio/build/esp32dev/littlefs.bin.md5
+            .pio/build/esp32dev/firmware-aio.bin
+            .pio/build/esp32dev/firmware-aio.bin.md5
+          retention-days: 1  # Retention policy for 1 day
+
+      - name: Upload firmware.bin to cloudsmith
+        uses: cloudsmith-io/action@7af394e0f8add4867bce109385962dafecad1b8d # v0.6.14
+        with:
+          api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
+          command: "push"
+          format: "raw"
+          owner: "nspanelmanager"
+          repo: "nspanelmanager-firmwares"
+          file: ".pio/build/esp32dev/firmware.bin"
+          name: "firmware-${{ env.FIRMWARE_IDENTIFIER }}"
+          summary: "Edge release of main branch"
+          description: "${{ github.sha }}"
+          version: ${{ env.FIRMWARE_IDENTIFIER }}
+          tags: "experimental, edge, firmware"
+
+      - name: Upload littlefs.bin to cloudsmith
+        uses: cloudsmith-io/action@7af394e0f8add4867bce109385962dafecad1b8d # v0.6.14
+        with:
+          api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
+          command: "push"
+          format: "raw"
+          owner: "nspanelmanager"
+          repo: "nspanelmanager-firmwares"
+          file: ".pio/build/esp32dev/littlefs.bin"
+          name: "littlefs-${{ env.FIRMWARE_IDENTIFIER }}"
+          summary: "Edge release of main branch"
+          description: "${{ github.sha }}"
+          version: ${{ env.FIRMWARE_IDENTIFIER }}
+          tags: "experimental, edge, littlefs"
+
+      - name: Upload firmware-aio.bin to cloudsmith
+        uses: cloudsmith-io/action@7af394e0f8add4867bce109385962dafecad1b8d # v0.6.14
+        with:
+          api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
+          command: "push"
+          format: "raw"
+          owner: "nspanelmanager"
+          repo: "nspanelmanager-firmwares"
+          file: ".pio/build/esp32dev/firmware-aio.bin"
+          name: "firmware-aio-${{ env.FIRMWARE_IDENTIFIER }}"
+          summary: "Edge release of main branch"
+          description: "${{ github.sha }}"
+          version: ${{ env.FIRMWARE_IDENTIFIER }}
+          tags: "experimental, edge, firmware-aio"

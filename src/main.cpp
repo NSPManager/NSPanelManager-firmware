@@ -78,6 +78,7 @@ void sendMqttManagerRegistrationRequest() {
     doc["mac_origin"] = WiFi.macAddress();
     doc["friendly_name"] = NSPMConfig::instance->wifi_hostname.c_str();
     doc["version"] = NSPanelManagerFirmwareVersion;
+    doc["commit-sha"] = NSPanelManagerFirmwareCommitSha;
     doc["md5_firmware"] = NSPMConfig::instance->md5_firmware;
     doc["md5_data_file"] = NSPMConfig::instance->md5_data_file;
     doc["md5_tft_file"] = NSPMConfig::instance->md5_tft_file;
@@ -346,8 +347,11 @@ void taskManageWifiAndMqtt(void *param) {
 
 void setup() {
   Serial.begin(115200);
-  Serial.print("Starting NSPanel Manager firmware v. ");
-  Serial.println(NSPanelManagerFirmwareVersion);
+  Serial.printf("Starting NSPanel Manager firmware v. %s (%s)\n",
+    NSPanelManagerFirmwareVersion,
+    NSPanelManagerFirmwareCommitSha
+  );
+
   vTaskDelay(250 / portTICK_PERIOD_MS);
   // Load config if any, and if it fails. Factory reset!
   if (!(config.init() && config.loadFromLittleFS())) {

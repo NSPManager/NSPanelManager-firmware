@@ -1,3 +1,4 @@
+# Include directory
 
 This directory is intended for project header files.
 
@@ -7,7 +8,6 @@ header file in your project source file (C, C++, etc) located in `src` folder
 by including it, with the C preprocessing directive `#include'.
 
 ```src/main.c
-
 #include "header.h"
 
 int main (void)
@@ -36,4 +36,4 @@ Read more about using header files in official GCC documentation:
 * Once-Only Headers
 * Computed Includes
 
-https://gcc.gnu.org/onlinedocs/cpp/Header-Files.html
+[https://gcc.gnu.org/onlinedocs/cpp/Header-Files.html](https://gcc.gnu.org/onlinedocs/cpp/Header-Files.html)

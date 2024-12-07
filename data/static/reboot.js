@@ -2,7 +2,7 @@ var hasRebootBeenCalled = false;
 var hasRebooted = false;
 
 // Websocket timeout handler
-function connectionMonitor() { 
+function connectionMonitor() {
     // Do a simple HTTP GET request to check if the device is reachable
     $.ajax({
         url: "/connection_test",
