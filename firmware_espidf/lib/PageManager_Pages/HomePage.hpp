@@ -1,4 +1,5 @@
 #pragma once
+#include <MutexWrapper.hpp>
 #include <cstdint>
 #include <esp_event.h>
 #include <esp_timer.h>
@@ -104,7 +105,6 @@ private:
    */
   static void _special_mode_timeout_timer_callback(void *arg);
 
-  // Vars
   // When pressing something, what are we supposed to affect?
   static inline HomePageAffectMode _current_affect_mode = HomePageAffectMode::ROOM;
 
@@ -112,16 +112,16 @@ private:
   static inline HomePageEditMode _current_edit_mode = HomePageEditMode::ALL_LIGHTS;
 
   // The cached value for the "Brightness"-slider
-  static inline int32_t _cache_brightness_slider;
+  static inline MutexWrapped<int32_t> _cache_brightness_slider;
 
   // The cached value for the "Color temperature"-slider
-  static inline int32_t _cache_color_temperature_slider;
+  static inline MutexWrapped<int32_t> _cache_color_temperature_slider;
 
   // The cached value for the "Ceiling lights" brightness label
-  static inline int32_t _cache_ceiling_light_brightness;
+  static inline MutexWrapped<int32_t> _cache_ceiling_light_brightness;
 
   // The cached value for the "Table lights" brightness label
-  static inline int32_t _cache_table_light_brightness;
+  static inline MutexWrapped<int32_t> _cache_table_light_brightness;
 
   // Should we ignore the next release of the ceiling button? This is used to
   // ignore the touch up that happens after special mode is activated

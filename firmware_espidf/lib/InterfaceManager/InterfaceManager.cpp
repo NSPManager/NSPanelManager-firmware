@@ -7,6 +7,7 @@
 #include <NSPM_ConfigManager.hpp>
 #include <Nextion.hpp>
 #include <Nextion_event.hpp>
+#include <RoomManager.hpp>
 #include <RoomManager_event.hpp>
 #include <WiFiManager.hpp>
 #include <esp_log.h>
@@ -19,7 +20,7 @@ void InterfaceManager::init() {
   }
 
   esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_nextion_event_handler, NULL);
-  esp_event_handler_register(ROOMMANAGER_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_room_manager_event_handler, NULL);
+  RoomManager::register_handler(ESP_EVENT_ANY_ID, InterfaceManager::_room_manager_event_handler, NULL);
 
   // Show boot page
   LoadingPage::show();
