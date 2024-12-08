@@ -56,7 +56,7 @@ public:
 class GUI_SCREENSAVER_PAGE {
 public:
   static inline const char *page_name = "screensaver";
-  static inline const char *screensaver_background_control_variable_name = "screensaver2.ssBackground";
+  static inline const char *screensaver_background_control_variable_name = "screensaver.ssBackground";
 
   static inline const char *label_current_weather_icon_name = "screensaver.curIcon";
   static inline const char *label_current_temperature_name = "screensaver.curTemp";

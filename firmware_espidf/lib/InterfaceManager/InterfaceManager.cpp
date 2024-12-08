@@ -14,6 +14,9 @@
 #include <esp_log.h>
 
 void InterfaceManager::init() {
+  esp_log_level_set("InterfaceManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
+  current_page_unshow_callback.set(NULL);
+  InterfaceManager::_unshow_queue = xQueueCreate(4, sizeof(std::function<void()>));
   esp_err_t nextion_init_result = Nextion::init();
   if (nextion_init_result != ESP_OK) {
     ESP_LOGE("InterfaceManager", "Failed to initialize Nextion display. Will not continue with InterfaceManager!");
@@ -93,11 +96,28 @@ void InterfaceManager::init() {
   // successfully loaded the event handler for RoomManager will take over and send the Nextion display to the correct page
 }
 
+void InterfaceManager::call_unshow_callback() {
+  auto unshow_handle = InterfaceManager::current_page_unshow_callback.get();
+  if (unshow_handle != nullptr) {
+    xQueueSend(InterfaceManager::_unshow_queue, &unshow_handle, pdMS_TO_TICKS(500));
+    xTaskCreatePinnedToCore(InterfaceManager::_task_unshow_page, "unshow_task", 4096, NULL, 6, NULL, 1);
+  }
+}
+
+void InterfaceManager::_task_unshow_page(void *param) {
+  std::function<void()> unshow_handle;
+  while (xQueueReceive(InterfaceManager::_unshow_queue, &unshow_handle, pdMS_TO_TICKS(250)) == pdPASS) {
+    unshow_handle();
+  }
+  vTaskDelete(NULL);
+}
+
 void InterfaceManager::_nextion_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
   switch (event_id) {
-  case nextion_event_t::SLEEP_EVENT:
+  case nextion_event_t::SLEEP_EVENT: {
     ScreensaverPage::show();
     break;
+  }
 
   case nextion_event_t::WAKE_EVENT: {
     // Someone touched the screensaver, unshow it and go to the default page, whatever is selected in the manager
@@ -105,13 +125,11 @@ void InterfaceManager::_nextion_event_handler(void *arg, esp_event_base_t event_
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
       Nextion::set_brightness_level(config.screen_dim_level, 1000);
       if (config.default_page == 0) { // TODO: Convert to protobuf ENUM for clarity
-        HomePage::show();
+        HomePage::show();             // TODO: Show the user selected first page
       } else {
         ESP_LOGE("ScreensaverPage", "Unknown default page %ld, will default to home page!", config.default_page);
         HomePage::show();
       }
-
-      ScreensaverPage::unshow();
     } else {
       ESP_LOGE("ScreensaverPage", "Failed to get NSPanel Config when unshowing screensaver page!");
     }
@@ -124,12 +142,10 @@ void InterfaceManager::_nextion_event_handler(void *arg, esp_event_base_t event_
 }
 
 void InterfaceManager::_room_manager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-  switch (event_id) {
-  case roommanager_event_t::ALL_ROOMS_LOADED:
-    HomePage::show();
-    break;
-
-  default:
-    break;
+  // Received event that all rooms has been loaded AND we are currently on the loading page.
+  // This should only happen on first boot of panel, force navigate to Home page.
+  if (event_id == roommanager_event_t::ALL_ROOMS_LOADED && LoadingPage::showing()) {
+    ESP_LOGI("InterfaceManager", "Loaded all rooms and currently showing loading page. Will show HomePage.");
+    HomePage::show(); // TODO: Show the user selected first page.
   }
 }

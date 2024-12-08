@@ -1,4 +1,5 @@
 #pragma once
+#include <MutexWrapper.hpp>
 #include <esp_event.h>
 #include <protobuf_nspanel.pb-c.h>
 
@@ -36,38 +37,42 @@ private:
   static void _update_display_brightness();
 
   /**
+   * Go to the correct Nextion page and show/hide the background depending on user settings.
+   */
+  static void _go_to_nextion_page();
+
+  /**
    * Handle events from MQTT manager, such as new weather forecasts sent over MQTT
    */
   static void _mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
+  /**
+   * Handle events from NSPM_ConfigManager
+   */
+  static void _nspm_config_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
   // Vars:
   // The most current weather data for forecast and current weather
-  static inline NSPanelWeatherUpdate *_weather_update_data = NULL;
+  static inline NSPanelWeatherUpdate *_weather_update_data = nullptr;
 
   // Mutex to only allow one task at the time access to _weather_update_data
   static inline SemaphoreHandle_t _weather_update_data_mutex = NULL;
 
   // The current time string
-  static inline std::string _current_time;
+  static inline MutexWrapped<std::string> _current_time;
 
   // The current date string
-  static inline std::string _current_date;
+  static inline MutexWrapped<std::string> _current_date;
 
   // Are we showing AM, PM or nothing as a string
-  static inline std::string _am_pm_string;
+  static inline MutexWrapped<std::string> _am_pm_string;
 
   // What brightness show the screensaver show. Default to 50%
-  static inline uint8_t _screensaver_brightness = 50;
+  static inline MutexWrapped<uint8_t> _screensaver_brightness;
 
   // Is the screensaver page currently show?
-  static inline bool _currently_shown = false;
+  static inline MutexWrapped<bool> _currently_shown;
 
   // What screensaver mode is currently active.
-  static inline NSPanelConfig__NSPanelScreensaverMode _current_screensaver_mode;
-
-  // What screensaver mode was previously active.
-  static inline NSPanelConfig__NSPanelScreensaverMode _last_current_screensaver_mode;
-
-  // Has the screensaver page been show earlier? This is to only subscribe to MQTT topics once.
-  static inline bool _previously_shown = false;
+  static inline MutexWrapped<NSPanelConfig__NSPanelScreensaverMode> _current_screensaver_mode;
 };

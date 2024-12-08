@@ -4,11 +4,18 @@
 #include <Nextion.hpp>
 
 void LoadingPage::show() {
-  InterfaceManager::_current_page = InterfaceManager::available_pages::LOADING;
+  InterfaceManager::call_unshow_callback();
+  InterfaceManager::current_page_unshow_callback.set(LoadingPage::unshow);
   Nextion::go_to_page(GUI_LOADING_PAGE::page_name, 250);
+  LoadingPage::_currently_showing = true;
 }
 
 void LoadingPage::unshow() {
+  LoadingPage::_currently_showing = false;
+}
+
+bool LoadingPage::showing() {
+  return LoadingPage::_currently_showing;
 }
 
 void LoadingPage::set_loading_text(std::string text) {

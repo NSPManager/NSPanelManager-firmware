@@ -9,13 +9,18 @@ public:
     this->_mutex = xSemaphoreCreateMutex();
   }
 
+  MutexWrapped(T value) {
+    this->_mutex = xSemaphoreCreateMutex();
+    this->_value = value;
+  }
+
   T get() {
-    if (xSemaphoreTake(this->_mutex, portMAX_DELAY) == pdPASS) {
-      T current_value = this->_value;
-      xSemaphoreGive(this->_mutex);
-      return current_value;
+    // Wait indefinefly to take mutex and return contained value.
+    while ((xSemaphoreTake(this->_mutex, portMAX_DELAY) != pdPASS)) {
     }
-    return NULL;
+    T current_value = this->_value;
+    xSemaphoreGive(this->_mutex);
+    return current_value;
   }
 
   void set(T new_value) {

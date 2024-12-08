@@ -1,5 +1,7 @@
 #pragma once
+#include <MutexWrapper.hpp>
 #include <esp_event.h>
+#include <functional>
 
 class InterfaceManager {
 public:
@@ -9,18 +11,16 @@ public:
   static void init();
 
   /**
-   * ENUM representation of all available pages
+   * When calling "show" on any page this can be used to unshow the previous page if
+   * that page had declared an unshow callback function.
    */
-  enum available_pages {
-    FIRST_PAGE_IGNORE, // This page does nothing, it's more of a flag that "Hey, this value is not set!"
-    LOADING,
-    HOME,
-    SCENES,
-    ENTITIES,
-    SCREENSAVER,
-  };
+  static inline MutexWrapped<std::function<void()>> current_page_unshow_callback;
 
-  static inline available_pages _current_page;
+  /**
+   * Start a task to call unshow on given callback. This is to not remove a registered loop event handler
+   * from within that handler. Doing so will cause a crash.
+   */
+  static void call_unshow_callback();
 
 private:
   /**
@@ -32,4 +32,14 @@ private:
    * @brief Handle any event trigger from the RoomManager
    */
   static void _room_manager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
+  /**
+   * Unshow the currently showing page by starting a task to prevent the running task from removing
+   * its own task handler from within. Doing so will cause a crash
+   */
+  static void _task_unshow_page(void *param);
+
+  // Vars
+  // Queue of unshow function pointer to call from _task_unshow_page
+  static inline QueueHandle_t _unshow_queue;
 };

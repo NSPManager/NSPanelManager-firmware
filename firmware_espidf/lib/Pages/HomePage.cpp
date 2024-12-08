@@ -13,7 +13,10 @@
 
 void HomePage::show() {
   esp_log_level_set("HomePage", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
-  InterfaceManager::_current_page = InterfaceManager::available_pages::HOME;
+
+  InterfaceManager::call_unshow_callback();
+  InterfaceManager::current_page_unshow_callback.set(HomePage::unshow);
+
   Nextion::go_to_page(GUI_HOME_PAGE::page_name, 250);
 
   HomePage::_update_display();
