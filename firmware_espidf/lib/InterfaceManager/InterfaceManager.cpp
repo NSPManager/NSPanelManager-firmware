@@ -91,6 +91,8 @@ void InterfaceManager::init() {
   LoadingPage::set_loading_text("Loading config");
   NSPM_ConfigManager::init(); // Register to manager and load all config
 
+  ESP_LOGI("InterfaceManager", "Interface manager init complete. Waiting for rooms to load.");
+
   // WiFi and MQTT connected.
   // RoomManager will take over and load the config, once the config has been
   // successfully loaded the event handler for RoomManager will take over and send the Nextion display to the correct page

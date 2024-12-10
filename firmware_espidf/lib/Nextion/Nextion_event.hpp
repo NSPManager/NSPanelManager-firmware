@@ -11,6 +11,10 @@ enum nextion_event_t {
   TOUCH_EVENT,
   SLEEP_EVENT,
   WAKE_EVENT,
+  UPDATE_STARTED,
+  UPDATE_READY_FOR_NEXT_CHUNK,
+  UPDATE_JUMP_TO_OFFSET,
+  UPDATE_FINISHED,
 };
 
 struct nextion_event_data_t {

@@ -6,6 +6,16 @@
 #include <esp_event.h>
 #include <freertos/semphr.h>
 
+/**
+ * Different available states of the Nextion display
+ */
+enum nextion_state_t {
+  INITIALIZING,
+  RUNNING,
+  INITIALIZING_UPDATE,
+  UPDATING
+};
+
 class Nextion {
 public:
   /**
@@ -117,6 +127,11 @@ public:
    */
   static void restart();
 
+  /**
+   * Get the current Nextion display state
+   */
+  static nextion_state_t get_current_state();
+
 private:
   // Handle all events from UART
   static void _task_uart_event(void *param);
@@ -175,6 +190,12 @@ private:
 
   // Event queue for uart events
   static inline QueueHandle_t _uart_event_queue;
+
+  // Mutex to only allow one task at the time to read/write the _current_nextion_state variable
+  static inline SemaphoreHandle_t _nextion_state_mutex;
+
+  // The current state of the display according to the ESP32 firmware
+  static inline nextion_state_t _current_nextion_state;
 
   // When starting the Nextion display, did we receive the "NSPM" flag indicating that our NSPanel Manager firmware is running on the Nextion display?
   static inline bool _has_received_nspm_flag;

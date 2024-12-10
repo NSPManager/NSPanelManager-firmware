@@ -2,9 +2,11 @@
 #include <InterfaceManager.hpp>
 #include <LittleFS.hpp>
 #include <MqttManager.hpp>
+#include <NSPM_ConfigManager.hpp>
 #include <NSPM_version.hpp>
 #include <Nextion.hpp>
 #include <RoomManager.hpp>
+#include <UpdateManager.hpp>
 #include <WebManager.hpp>
 #include <WiFiManager.hpp>
 #include <esp_log.h>
@@ -58,4 +60,12 @@ extern "C" void app_main() {
 
   // Start the interface and load config
   InterfaceManager::init();
+
+  // Wait until we have been accepted by a manager and received both address and port
+  while (NSPM_ConfigManager::get_manager_address().empty() && NSPM_ConfigManager::get_manager_port() == 0) {
+    vTaskDelay(pdMS_TO_TICKS(250));
+  }
+
+  // Hook into update manager
+  UpdateManager::init();
 }
