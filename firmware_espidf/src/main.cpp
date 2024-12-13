@@ -14,7 +14,7 @@
 
 extern "C" void app_main() {
   // Set global log level initially. This is later set from saved config.
-  esp_log_level_set("*", ESP_LOG_DEBUG);
+  // esp_log_level_set("*", ESP_LOG_DEBUG);
 
   ESP_LOGI("Main", "Starting NSPanel Manager firmware. Version " NSPM_VERSION ".");
 
@@ -49,11 +49,14 @@ extern "C" void app_main() {
     }
   }
 
-  // Start task that handles MQTT connection
-  MqttManager::start(&ConfigManager::mqtt_server, &ConfigManager::mqtt_port, &ConfigManager::mqtt_username, &ConfigManager::mqtt_password);
+  // Only start managers for actual functionality if MQTT is configured.
+  if (!ConfigManager::mqtt_server.empty()) {
+    // Start task that handles MQTT connection
+    MqttManager::start(&ConfigManager::mqtt_server, &ConfigManager::mqtt_port, &ConfigManager::mqtt_username, &ConfigManager::mqtt_password);
 
-  // Start RoomManager
-  RoomManager::init();
+    // Start RoomManager
+    RoomManager::init();
+  }
 
   // Start task that handles the HTTP server
   WebManager::start();

@@ -8,6 +8,8 @@
 #define min(a, b) ((a) < (b) ? (a) : (b))
 
 void WiFiManager::start_client(std::string *ssid, std::string *psk, std::string *hostname) {
+  esp_log_level_set("WiFiManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config.
+
   WiFiManager::_connected = false;
   WiFiManager::_ip_info.ip.addr = 0;
 
@@ -27,15 +29,15 @@ void WiFiManager::start_client(std::string *ssid, std::string *psk, std::string 
 
   // Set SSID
   if (ssid->size() > sizeof(WiFiManager::_config.sta.ssid)) {
-    ESP_LOGE("WiFi", "SSID To long, max length: %d", sizeof(WiFiManager::_config.sta.ssid));
+    ESP_LOGE("WiFiManager", "SSID To long, max length: %d", sizeof(WiFiManager::_config.sta.ssid));
     return;
   }
   ssid->copy((char *)WiFiManager::_config.sta.ssid, ssid->size(), 0); // Set WiFi SSID
-  ESP_LOGI("WiFi", "Will connect to WiFi %s", WiFiManager::_config.sta.ssid);
+  ESP_LOGI("WiFiManager", "Will connect to WiFi %s", WiFiManager::_config.sta.ssid);
 
   // Set passwork/PSK
   if (psk->size() > sizeof(WiFiManager::_config.sta.password)) {
-    ESP_LOGE("WiFi", "PSK To long, max length: %d", sizeof(WiFiManager::_config.sta.password));
+    ESP_LOGE("WiFiManager", "PSK To long, max length: %d", sizeof(WiFiManager::_config.sta.password));
     return;
   }
   psk->copy((char *)WiFiManager::_config.sta.password, psk->size(), 0);
@@ -46,6 +48,7 @@ void WiFiManager::start_client(std::string *ssid, std::string *psk, std::string 
 }
 
 void WiFiManager::start_ap(std::string *ssid) {
+  esp_log_level_set("WiFiManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config.
   WiFiManager::_connected = false;
   WiFiManager::_ip_info.ip.addr = 0;
 
@@ -62,12 +65,12 @@ void WiFiManager::start_ap(std::string *ssid) {
 
   // Set SSID
   if (ssid->size() > sizeof(WiFiManager::_config.ap.ssid)) {
-    ESP_LOGE("WiFi", "SSID To long, max length: %d", sizeof(WiFiManager::_config.ap.ssid));
+    ESP_LOGE("WiFiManager", "SSID To long, max length: %d", sizeof(WiFiManager::_config.ap.ssid));
     return;
   }
   ssid->copy((char *)WiFiManager::_config.ap.ssid, ssid->size(), 0); // Set WiFi SSID
   WiFiManager::_config.ap.ssid_len = ssid->length();
-  ESP_LOGI("WiFi", "Will setup WiFi %s", WiFiManager::_config.ap.ssid);
+  ESP_LOGI("WiFiManager", "Will setup WiFi %s", WiFiManager::_config.ap.ssid);
 
   // Setup other default AP parameters
   WiFiManager::_config.ap.max_connection = 4;
@@ -102,12 +105,12 @@ void WiFiManager::_event_handler(void *arg, esp_event_base_t event_base, int32_t
       esp_wifi_connect(); // WiFi station started, start trying to connect to configured wifi.
       break;
     case WIFI_EVENT_STA_DISCONNECTED:
-      ESP_LOGI("WiFi", "Lost connection to Wifi, will try to reconnect.");
+      ESP_LOGI("WiFiManager", "Lost connection to Wifi, will try to reconnect.");
       WiFiManager::_connected = false;
       esp_wifi_connect(); // We lost connection, try to reconnect.
       break;
     case WIFI_EVENT_STA_CONNECTED:
-      ESP_LOGI("WiFi", "Connected to WiFi.");
+      ESP_LOGI("WiFiManager", "Connected to WiFi.");
       WiFiManager::_connected = true;
       break;
 
@@ -119,7 +122,7 @@ void WiFiManager::_event_handler(void *arg, esp_event_base_t event_base, int32_t
     case IP_EVENT_STA_GOT_IP: {
       ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
       WiFiManager::_ip_info = event->ip_info;
-      ESP_LOGI("WiFi", "Got IP: " IPSTR ", Netmask: " IPSTR ", Gateway: " IPSTR, IP2STR(&event->ip_info.ip), IP2STR(&event->ip_info.netmask), IP2STR(&event->ip_info.gw));
+      ESP_LOGI("WiFiManager", "Got IP: " IPSTR ", Netmask: " IPSTR ", Gateway: " IPSTR, IP2STR(&event->ip_info.ip), IP2STR(&event->ip_info.netmask), IP2STR(&event->ip_info.gw));
       break;
     }
 

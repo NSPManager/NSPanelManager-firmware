@@ -120,5 +120,5 @@ private:
   static inline esp_event_loop_args_t _local_event_loop_args;
 
   // Event loop used for RoomManager events
-  static inline esp_event_loop_handle_t _local_event_loop;
+  static inline esp_event_loop_handle_t _local_event_loop = NULL;
 };

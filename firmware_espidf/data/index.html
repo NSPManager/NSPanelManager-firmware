@@ -157,7 +157,7 @@
         return response.json();
       }).then(data => {
         document.title = "NSPMPanel - " + data.wifi_hostname;
-        document.getElementById("version").innerText = "Version: " + data.version;
+        document.getElementById("version_badge").innerText = data.version;
         document.getElementById("wifi_hostname").value = data.wifi_hostname;
         document.getElementById("wifi_psk").value = data.wifi_hostname;
         document.getElementById("log_level").value = data.log_level;
@@ -401,11 +401,14 @@
     <section class="section">
       <div class="container">
         <h1 class="text-4xl font-medium text-gray-50" id="page-title">NSPanelManager panel</h1>
-        <h2 id="version" class="text-xl text-gray-50" id="page-subtitle">Version LOADING</h2>
       </div>
     </section>
 
     <div id="status_label" class="mt-3 md:flex space-y-1 md:space-y-0 md:space-x-2">
+      <div class="flex items-center">
+        <span class="bg-gray-50 text-gray-800 px-2 py-1 rounded-l text-xs">Version</span>
+        <span id="version_badge" class="bg-slate-950 text-slate-100 px-2 py-1 rounded-r text-xs">LOADING</span>
+      </div>
       <div class="flex items-center">
         <span class="bg-gray-50 text-gray-800 px-2 py-1 rounded-l text-xs">Connection to panel</span>
         <span id="nspanel_connection_badge"

@@ -154,11 +154,19 @@ esp_err_t RoomManager::replace_room_status(NSPanelRoomStatus *status) {
 }
 
 esp_err_t RoomManager::register_handler(int32_t event_id, esp_event_handler_t event_handler, void *event_handler_arg) {
-  return esp_event_handler_register_with(RoomManager::_local_event_loop, ROOMMANAGER_EVENT, event_id, event_handler, event_handler_arg);
+  if (RoomManager::_local_event_loop != NULL) {
+    return esp_event_handler_register_with(RoomManager::_local_event_loop, ROOMMANAGER_EVENT, event_id, event_handler, event_handler_arg);
+  } else {
+    return ESP_ERR_NOT_FINISHED;
+  }
 }
 
 esp_err_t RoomManager::unregister_handler(int32_t event_id, esp_event_handler_t event_handler) {
-  return esp_event_handler_unregister_with(RoomManager::_local_event_loop, ROOMMANAGER_EVENT, event_id, event_handler);
+  if (RoomManager::_local_event_loop != NULL) {
+    return esp_event_handler_unregister_with(RoomManager::_local_event_loop, ROOMMANAGER_EVENT, event_id, event_handler);
+  } else {
+    return ESP_ERR_NOT_FINISHED;
+  }
 }
 
 void RoomManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
