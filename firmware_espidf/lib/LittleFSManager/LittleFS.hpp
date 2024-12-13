@@ -4,6 +4,7 @@
 class LittleFS {
 public:
   static esp_err_t mount();
+  static esp_err_t unmount();
   static bool is_mounted();
 
 private:

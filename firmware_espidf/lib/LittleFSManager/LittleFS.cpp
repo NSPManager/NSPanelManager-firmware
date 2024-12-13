@@ -29,6 +29,10 @@ esp_err_t LittleFS::mount() {
   return result;
 }
 
+esp_err_t LittleFS::unmount() {
+  return esp_vfs_littlefs_unregister("spiffs");
+}
+
 bool LittleFS::is_mounted() {
   return LittleFS::_is_mounted;
 }

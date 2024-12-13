@@ -1,4 +1,5 @@
 #include <ConfigManager.hpp>
+#include <LittleFS.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
 #include <UpdateManager.hpp>
@@ -48,12 +49,12 @@ void UpdateManager::update_firmware(void *param) {
         ConfigManager::md5_firmware = md5_string;
         ConfigManager::save_config();
 
-        UpdateManager::_update_littlefs_ota();
+        UpdateManager::update_littlefs(NULL);
         esp_restart();
       }
     } else {
       ESP_LOGI("UpdateManager", "Firmware already up to date. Will check LittleFS.");
-      UpdateManager::_update_littlefs_ota();
+      UpdateManager::update_littlefs(NULL);
     }
   } else {
     ESP_LOGE("UpdateManager", "Failed to new firmware MD5 checksum.");
@@ -81,6 +82,9 @@ void UpdateManager::update_littlefs(void *param) {
       if (UpdateManager::_update_littlefs_ota() == ESP_OK) {
         ESP_LOGI("UpdateManager", "LittleFS update complete, will save new MD5 checksum.");
         ConfigManager::md5_data_file = md5_string;
+        LittleFS::unmount();
+        LittleFS::mount();
+        // Save the existing config loaded into memory into the new LittleFS partition.
         ConfigManager::save_config();
 
         esp_restart();
