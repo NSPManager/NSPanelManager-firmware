@@ -130,16 +130,7 @@ public:
 
 class GUI_DROPDOWN_PAGE {
 public:
-<<<<<<< HEAD
 
-=======
-  static inline const char *page_name = "items4";
-  static inline const char *label_item1 = "items4";
-  static inline const char *button_item1 = "items4";
-  static inline const char *hotspot_item1 = "items4"; // above button
-  // static inline const uint8_t dimmer_slider_id = 2;
-  // static inline const char *component_text_name = "t_loading";
->>>>>>> a0c5694fb12425081f3b47a7b00679e5dcd35975
 };
 //GUI_ITEMS 4 8 and 12 pages used to display both room items and scene items
 //
