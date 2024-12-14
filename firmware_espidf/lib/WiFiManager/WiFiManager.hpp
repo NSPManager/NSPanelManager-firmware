@@ -51,7 +51,7 @@ private:
   static inline wifi_config_t _config;
 
   // Is the WiFi connected?
-  static inline bool _connected;
+  static inline bool _connected = false;
 
   // Current IP address
   static inline esp_netif_ip_info_t _ip_info;
