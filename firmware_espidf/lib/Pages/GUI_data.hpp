@@ -130,18 +130,24 @@ public:
 
 class GUI_DROPDOWN_PAGE {
 public:
-  static inline const char *page_name = "items4";
-  static inline const char *label_item1 = "items4";
-  static inline const char *button_item1 = "items4";
-  static inline const char *hotspot_item1 = "items4"; //above button
-  //static inline const uint8_t dimmer_slider_id = 2;
-  //static inline const char *component_text_name = "t_loading";
 
 };
-
+//GUI_ITEMS 4 8 and 12 pages used to display both room items and scene items
+//
 class GUI_ITEMS4_PAGE {
 public:
+  //color should only be changed when using the switch icon
+  //when using the scene icon color should always be white
+  static inline const uint16_t items_button_off_pco = 65535; //color when off
+  static inline const uint16_t items_button_off_pco2 = 65535; //color when off
+  static inline const uint16_t items_button_on_pco = 65024; //color when on
+  static inline const uint16_t items_button_on_pco2 = 65024; //color when on
+  static inline const char *items_button_switch_on_txt = "u";
+  static inline const char *items_button_switch_off_txt = "v";
+  static inline const char *items_button_saveicon_txt = "w";  
+  
   static inline const char *page_name = "items4";
+  static inline const char *page_header_label = "current";
   static inline const uint8_t slider_save_id = 9;
   static inline const char *slider_save_name = "slider_save";
   
@@ -162,7 +168,18 @@ public:
 
 class GUI_ITEMS8_PAGE {
 public:
+  //color should only be changed when using the switch icon
+  //when using the scene icon color should always be white
+  static inline const uint16_t items_button_off_pco = 65535; //color when off
+  static inline const uint16_t items_button_off_pco2 = 65535; //color when off
+  static inline const uint16_t items_button_on_pco = 65024; //color when on
+  static inline const uint16_t items_button_on_pco2 = 65024; //color when on
+  static inline const char *items_button_switch_on_txt = "u";
+  static inline const char *items_button_switch_off_txt = "v";
+  static inline const char *items_button_saveicon_txt = "w";
+
   static inline const char *page_name = "items8";
+  static inline const char *page_header_label = "current";
   static inline const uint8_t slider_save_id = 17;
   static inline const char *slider_save_name = "slider_save";
   
@@ -194,7 +211,18 @@ public:
 
 class GUI_ITEMS12_PAGE {
 public:
+  //color should only be changed when using the switch icon
+  //when using the scene icon color should always be white
+  static inline const uint16_t items_button_off_pco = 65535; //color when off
+  static inline const uint16_t items_button_off_pco2 = 65535; //color when off
+  static inline const uint16_t items_button_on_pco = 65024; //color when on
+  static inline const uint16_t items_button_on_pco2 = 65024; //color when on
+  static inline const char *items_button_switch_on_txt = "s";
+  static inline const char *items_button_switch_off_txt = "t";
+  static inline const char *items_button_saveicon_txt = "w";  
+
   static inline const char *page_name = "items12";
+  static inline const char *page_header_label = "current";
   static inline const uint8_t slider_save_id = 30;
   static inline const char *slider_save_name = "slider_save";
   
@@ -222,16 +250,16 @@ public:
   static inline const uint8_t item8_id = 8;
   static inline const char *item8_label_name = "i8_label";
   static inline const char *item8_button_name = "i8_button";
-  static inline const uint9_t item9_id = 9;
+  static inline const uint8_t item9_id = 9;
   static inline const char *item9_label_name = "i9_label";
   static inline const char *item9_button_name = "i9_button";
-  static inline const uint10_t item10_id = 10;
+  static inline const uint8_t item10_id = 10;
   static inline const char *item10_label_name = "i10_label";
   static inline const char *item10_button_name = "i10_button";
-  static inline const uint11_t item11_id = 11;
+  static inline const uint8_t item11_id = 11;
   static inline const char *item11_label_name = "i11_label";
   static inline const char *item11_button_name = "i11_button";
-  static inline const uint12_t item12_id = 12;
+  static inline const uint8_t item12_id = 12;
   static inline const char *item12_label_name = "i12_label";
   static inline const char *item12_button_name = "i12_button";
 };
