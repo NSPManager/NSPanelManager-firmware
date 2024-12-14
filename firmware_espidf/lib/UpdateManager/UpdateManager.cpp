@@ -79,12 +79,12 @@ void UpdateManager::update_littlefs(void *param) {
 
     if (md5_string.compare(ConfigManager::md5_data_file) != 0) {
       ESP_LOGI("UpdateManager", "New LittleFS available. Will update OTA.");
+      LittleFS::unmount(); // Unmount LittleFS
       if (UpdateManager::_update_littlefs_ota() == ESP_OK) {
         ESP_LOGI("UpdateManager", "LittleFS update complete, will save new MD5 checksum.");
         ConfigManager::md5_data_file = md5_string;
-        LittleFS::unmount();
-        LittleFS::mount();
         // Save the existing config loaded into memory into the new LittleFS partition.
+        LittleFS::mount();
         ConfigManager::save_config();
 
         esp_restart();
@@ -331,12 +331,18 @@ esp_err_t UpdateManager::_update_littlefs_ota() {
     esp_http_client_cleanup(client);
     return ESP_ERR_NOT_FINISHED;
   }
+
   esp_http_client_fetch_headers(client);
   uint64_t total_file_size = esp_http_client_get_content_length(client);
   ESP_LOGI("UpdateManager", "Remote LittleFS image size: %lld bytes.", total_file_size);
 
   // Delete current LittleFS partition
-  err = esp_partition_erase_range(littlefs_partition, littlefs_partition->address, littlefs_partition->size);
+  err = esp_partition_erase_range(littlefs_partition, 0, littlefs_partition->size);
+  if (err != ESP_OK) {
+    ESP_LOGE("UpdateManager", "Failed to erase existing LittleFS partition. Error: %s", esp_err_to_name(err));
+    esp_http_client_cleanup(client);
+    return ESP_ERR_NOT_FINISHED;
+  }
 
   uint64_t last_progress_update = 0;
   float progress;
@@ -366,12 +372,12 @@ esp_err_t UpdateManager::_update_littlefs_ota() {
         progress = (std::round(((double)total_bytes_read / (double)total_file_size) * 100) / 100) * 100;
         esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::LITTLEFS_UPDATE_PROGRESS, &progress, sizeof(progress), pdMS_TO_TICKS(50));
 
-        ESP_LOGD("UpdateManager", "Progress %llx/%llx (%f%%)", total_bytes_read, total_file_size, progress);
+        ESP_LOGD("UpdateManager", "Progress %llu/%llu (%f%%)", total_bytes_read, total_file_size, progress);
         last_progress_update = esp_timer_get_time() / 1000;
       }
     } else {
       // Received 0 bytes ie. we've read all data and connection closed.
-      ESP_LOGI("UpdateManager", "Wrote %llx bytes to LittleFS partition via OTA from manager. Update complete.", total_bytes_read);
+      ESP_LOGI("UpdateManager", "Wrote %llu bytes to LittleFS partition via OTA from manager. Update complete.", total_bytes_read);
       esp_http_client_cleanup(client);
       esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::LITTLEFS_UPDATE_FINISHED, NULL, 0, pdMS_TO_TICKS(50));
       return ESP_OK;

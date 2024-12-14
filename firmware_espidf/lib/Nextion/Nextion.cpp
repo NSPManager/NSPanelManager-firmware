@@ -220,7 +220,7 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
     esp_event_post(NEXTION_EVENT, nextion_event_t::SLEEP_EVENT, NULL, 0, pdMS_TO_TICKS(5000));
   } else if (*data->data == NEX_OUT_WAKE) {
     esp_event_post(NEXTION_EVENT, nextion_event_t::WAKE_EVENT, NULL, 0, pdMS_TO_TICKS(5000));
-  } else if (strncmp((char *)data->data, "NSPM", data->data_size) == 0) {
+  } else if (strncmp((char *)data->data, "NSPM", data->data_size) == 0) { // TODO: Compare last bytes of message instead of first as there may be garbage data output from the panel before sending NSPM-flag
     esp_event_post(NEXTION_EVENT, nextion_event_t::RECEIVED_NSPM_FLAG, NULL, 0, pdMS_TO_TICKS(16));
   } else if (strncmp((char *)data->data, "comok", 5) == 0) {
     ESP_LOGD("Nextion", "Connected to Nextion display, comok data: %s", data->data);
