@@ -23,6 +23,16 @@ private:
    */
   static void _measure_temperature(void *arg);
 
+  /**
+   * Update internal values from loaded config
+   */
+  static void _update_from_config();
+
+  /**
+   * Handle events such as new config loaded
+   */
+  static void _event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
   // Vars:
   // Handle to timer responsible for sending status updates periodically
   static inline esp_timer_handle_t _status_update_timer;
@@ -37,7 +47,7 @@ private:
   static inline MutexWrapped<double> _measured_average_temperature = 0;
 
   // Records of measured temperatures from _measure_temperature function.
-  static inline float _measured_temperatures[30] = {0};
+  static inline float _measured_temperatures[30];
 
   // What index is the next index to insert/replace read temperature into.
   static inline uint8_t _measured_temperature_next_index;
@@ -50,6 +60,9 @@ private:
 
   // Status report object used to send protobuf data to manager
   static inline NSPanelStatusReport _status_report;
+
+  // Calibration value for the read temperature from the manager
+  static inline float _temperature_offset_calibration;
 
   // ADC characteristics
   static inline esp_adc_cal_characteristics_t *_adc_chars;

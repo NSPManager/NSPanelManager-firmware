@@ -155,8 +155,11 @@ void InterfaceManager::_update_manager_event_handler(void *arg, esp_event_base_t
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
       Nextion::set_brightness_level(config.screen_dim_level, 1000);
     }
-    InterfaceManager::_screensaver_blocked.set(true);
-    LoadingPage::show();
+    // If screensaver blocked is false we are currently not showing loading page. Show it.
+    if (!InterfaceManager::_screensaver_blocked.get()) {
+      LoadingPage::show();
+      InterfaceManager::_screensaver_blocked.set(true);
+    }
     LoadingPage::set_loading_text("Updating firmware.");
     LoadingPage::set_secondary_text("0%");
     break;
@@ -167,8 +170,11 @@ void InterfaceManager::_update_manager_event_handler(void *arg, esp_event_base_t
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
       Nextion::set_brightness_level(config.screen_dim_level, 1000);
     }
-    InterfaceManager::_screensaver_blocked.set(true);
-    LoadingPage::show();
+    // If screensaver blocked is false we are currently not showing loading page. Show it.
+    if (!InterfaceManager::_screensaver_blocked.get()) {
+      LoadingPage::show();
+      InterfaceManager::_screensaver_blocked.set(true);
+    }
     LoadingPage::set_loading_text("Updating LittleFS.");
     LoadingPage::set_secondary_text("0%");
     break;
@@ -191,14 +197,12 @@ void InterfaceManager::_update_manager_event_handler(void *arg, esp_event_base_t
   }
 
   case updatemanager_event_t::FIRMWARE_UPDATE_FINISHED: {
-    LoadingPage::show();
     LoadingPage::set_loading_text("Firmware update complete.");
     LoadingPage::set_secondary_text("100%");
     break;
   }
 
   case updatemanager_event_t::LITTLEFS_UPDATE_FINISHED: {
-    LoadingPage::show();
     LoadingPage::set_loading_text("LittleFS update complete.");
     LoadingPage::set_secondary_text("100%");
     break;
