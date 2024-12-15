@@ -10,6 +10,7 @@
 ESP_EVENT_DEFINE_BASE(NEXTION_EVENT);
 
 esp_err_t Nextion::init() {
+  esp_log_level_set("Nextion", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
   // Setup initial values and create mutexes:
   Nextion::_nextion_state_mutex = xSemaphoreCreateMutex();
   Nextion::_uart_write_mutex = xSemaphoreCreateMutex();
@@ -174,7 +175,7 @@ void Nextion::_task_uart_event(void *param) {
 
 void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
   nextion_event_data_t *data = (nextion_event_data_t *)event_data;
-  // ESP_LOGD("Nextion", "Read Nextion data: %s, size: %d", data->data, data->data_size);
+  ESP_LOGD("Nextion", "Read Nextion data: %s, size: %d", data->data, data->data_size);
 
   if (*data->data == NEX_RET_NUMBER_HEAD) {
     // Got numeric data
@@ -220,7 +221,7 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
     esp_event_post(NEXTION_EVENT, nextion_event_t::SLEEP_EVENT, NULL, 0, pdMS_TO_TICKS(5000));
   } else if (*data->data == NEX_OUT_WAKE) {
     esp_event_post(NEXTION_EVENT, nextion_event_t::WAKE_EVENT, NULL, 0, pdMS_TO_TICKS(5000));
-  } else if (strncmp((char *)data->data, "NSPM", data->data_size) == 0) { // TODO: Compare last bytes of message instead of first as there may be garbage data output from the panel before sending NSPM-flag
+  } else if (strncmp((char *)data->data + data->data_size - sizeof("NSPM"), "NSPM", sizeof("NSPM")) == 0) { // TODO: Compare last bytes of message instead of first as there may be garbage data output from the panel before sending NSPM-flag
     esp_event_post(NEXTION_EVENT, nextion_event_t::RECEIVED_NSPM_FLAG, NULL, 0, pdMS_TO_TICKS(16));
   } else if (strncmp((char *)data->data, "comok", 5) == 0) {
     ESP_LOGD("Nextion", "Connected to Nextion display, comok data: %s", data->data);

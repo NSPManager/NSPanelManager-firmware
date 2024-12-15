@@ -1,6 +1,7 @@
 #include <WiFiManager.hpp>
 #include <esp_event.h>
 #include <esp_log.h>
+#include <esp_mac.h>
 #include <esp_netif.h>
 #include <string>
 
@@ -162,4 +163,18 @@ bool WiFiManager::connected() {
 
 esp_netif_ip_info_t WiFiManager::ip_info() {
   return WiFiManager::_ip_info;
+}
+
+std::string WiFiManager::ip_string() {
+  char ip_str[IP4ADDR_STRLEN_MAX];
+  sprintf(ip_str, IPSTR, IP2STR(&WiFiManager::_ip_info.ip));
+  return std::string(ip_str);
+}
+
+std::string WiFiManager::mac_string() {
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_STA); // Read MAC address for Wi-Fi Station
+  char mac_str[30];                    // Format: AA:BB:CC:DD:EE:FF
+  snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X", mac[3], mac[4], mac[5], mac[3], mac[4], mac[5]);
+  return std::string(mac_str);
 }

@@ -10,7 +10,9 @@
 #include <RoomManager.hpp>
 #include <RoomManager_event.hpp>
 #include <ScreensaverPage.hpp>
+#include <UpdateManager_event.hpp>
 #include <WiFiManager.hpp>
+#include <cmath>
 #include <esp_log.h>
 
 void InterfaceManager::init() {
@@ -24,6 +26,7 @@ void InterfaceManager::init() {
   }
 
   esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_nextion_event_handler, NULL);
+  esp_event_handler_register(UPDATEMANAGER_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_update_manager_event_handler, NULL);
   RoomManager::register_handler(ESP_EVENT_ANY_ID, InterfaceManager::_room_manager_event_handler, NULL);
 
   // Show boot page
@@ -117,7 +120,9 @@ void InterfaceManager::_task_unshow_page(void *param) {
 void InterfaceManager::_nextion_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
   switch (event_id) {
   case nextion_event_t::SLEEP_EVENT: {
-    ScreensaverPage::show();
+    if (!InterfaceManager::_screensaver_blocked.get()) {
+      ScreensaverPage::show();
+    }
     break;
   }
 
@@ -135,6 +140,67 @@ void InterfaceManager::_nextion_event_handler(void *arg, esp_event_base_t event_
     } else {
       ESP_LOGE("ScreensaverPage", "Failed to get NSPanel Config when unshowing screensaver page!");
     }
+    break;
+  }
+
+  default:
+    break;
+  }
+}
+
+void InterfaceManager::_update_manager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
+  switch (event_id) {
+  case updatemanager_event_t::FIRMWARE_UPDATE_STARTED: {
+    NSPanelConfig config;
+    if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+      Nextion::set_brightness_level(config.screen_dim_level, 1000);
+    }
+    InterfaceManager::_screensaver_blocked.set(true);
+    LoadingPage::show();
+    LoadingPage::set_loading_text("Updating firmware.");
+    LoadingPage::set_secondary_text("0%");
+    break;
+  }
+
+  case updatemanager_event_t::LITTLEFS_UPDATE_STARTED: {
+    NSPanelConfig config;
+    if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+      Nextion::set_brightness_level(config.screen_dim_level, 1000);
+    }
+    InterfaceManager::_screensaver_blocked.set(true);
+    LoadingPage::show();
+    LoadingPage::set_loading_text("Updating LittleFS.");
+    LoadingPage::set_secondary_text("0%");
+    break;
+  }
+
+  case updatemanager_event_t::FIRMWARE_UPDATE_PROGRESS: {
+    float *progress_percentage = (float *)event_data;
+    std::string percent_string = std::to_string(static_cast<int>(std::round(*progress_percentage)));
+    percent_string.append("%");
+    LoadingPage::set_secondary_text(percent_string.c_str());
+    break;
+  }
+
+  case updatemanager_event_t::LITTLEFS_UPDATE_PROGRESS: {
+    float *progress_percentage = (float *)event_data;
+    std::string percent_string = std::to_string(static_cast<int>(std::round(*progress_percentage)));
+    percent_string.append("%");
+    LoadingPage::set_secondary_text(percent_string.c_str());
+    break;
+  }
+
+  case updatemanager_event_t::FIRMWARE_UPDATE_FINISHED: {
+    LoadingPage::show();
+    LoadingPage::set_loading_text("Firmware update complete.");
+    LoadingPage::set_secondary_text("100%");
+    break;
+  }
+
+  case updatemanager_event_t::LITTLEFS_UPDATE_FINISHED: {
+    LoadingPage::show();
+    LoadingPage::set_loading_text("LittleFS update complete.");
+    LoadingPage::set_secondary_text("100%");
     break;
   }
 

@@ -29,6 +29,11 @@ private:
   static void _nextion_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
   /**
+   * @brief Handle any event trigger from the UpdateManager
+   */
+  static void _update_manager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
+  /**
    * @brief Handle any event trigger from the RoomManager
    */
   static void _room_manager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
@@ -42,4 +47,8 @@ private:
   // Vars
   // Queue of unshow function pointer to call from _task_unshow_page
   static inline QueueHandle_t _unshow_queue;
+
+  // In the case of a Nextion "sleep" event, ie. trigger screensaver, should we
+  // or is the screensaver blocked?
+  static inline MutexWrapped<bool> _screensaver_blocked = false;
 };

@@ -247,7 +247,7 @@ esp_err_t UpdateManager::_update_firmware_ota() {
         progress = (std::round(((double)data_read_len / (double)firmware_size) * 100) / 100) * 100;
         esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::FIRMWARE_UPDATE_PROGRESS, &progress, sizeof(progress), pdMS_TO_TICKS(50));
 
-        ESP_LOGD("UpdateManager", "Progress %d/%d (%f%%)", data_read_len, firmware_size, progress);
+        // ESP_LOGD("UpdateManager", "Progress %d/%d (%f%%)", data_read_len, firmware_size, progress);
         last_progress_update = esp_timer_get_time() / 1000;
       }
     } else if (ret == ESP_OK) {
@@ -372,7 +372,7 @@ esp_err_t UpdateManager::_update_littlefs_ota() {
         progress = (std::round(((double)total_bytes_read / (double)total_file_size) * 100) / 100) * 100;
         esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::LITTLEFS_UPDATE_PROGRESS, &progress, sizeof(progress), pdMS_TO_TICKS(50));
 
-        ESP_LOGD("UpdateManager", "Progress %llu/%llu (%f%%)", total_bytes_read, total_file_size, progress);
+        // ESP_LOGD("UpdateManager", "Progress %llu/%llu (%f%%)", total_bytes_read, total_file_size, progress);
         last_progress_update = esp_timer_get_time() / 1000;
       }
     } else {

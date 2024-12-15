@@ -40,6 +40,18 @@ public:
    */
   static esp_netif_ip_info_t ip_info();
 
+  /**
+   * @brief Get current IP address formatted as a string
+   * @return Current IP formatted as string in format 111.222.333.444
+   */
+  static std::string ip_string();
+
+  /**
+   * @brief Get MAC address formatted as a string
+   * @return MAC formatted as string in format AA:BB:CC:DD:EE:FF
+   */
+  static std::string mac_string();
+
 private:
   static void _event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 

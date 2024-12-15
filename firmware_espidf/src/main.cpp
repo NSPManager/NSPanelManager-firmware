@@ -6,6 +6,7 @@
 #include <NSPM_version.hpp>
 #include <Nextion.hpp>
 #include <RoomManager.hpp>
+#include <StatusUpdateManager.hpp>
 #include <UpdateManager.hpp>
 #include <WebManager.hpp>
 #include <WiFiManager.hpp>
@@ -56,6 +57,9 @@ extern "C" void app_main() {
 
     // Start RoomManager
     RoomManager::init();
+
+    // Start manager to handles temperature and status updates
+    StatusUpdateManager::init();
   }
 
   // Start task that handles the HTTP server
