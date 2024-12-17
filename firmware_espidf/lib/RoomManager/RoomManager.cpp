@@ -274,7 +274,7 @@ void RoomManager::_load_all_rooms(void *arg) {
         all_subscribed_successfully = false;
         break;
       }
-      vTaskDelay(pdMS_TO_TICKS(250));
+      vTaskDelay(pdMS_TO_TICKS(500));
     }
     if (all_subscribed_successfully) {
       // We subscribed to each room config/status topic. Cancel this loop

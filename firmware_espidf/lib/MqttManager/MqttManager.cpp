@@ -1,4 +1,7 @@
 #include <MqttManager.hpp>
+#include <NSPM_ConfigManager.hpp>
+#include <WiFiManager.hpp>
+#include <cJSON.h>
 #include <esp_log.h>
 
 void MqttManager::start(std::string *server, uint16_t *port, std::string *username, std::string *password) {
@@ -12,9 +15,40 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
     MqttManager::_mqtt_config.credentials.username = username->c_str();
     MqttManager::_mqtt_config.credentials.authentication.password = password->c_str();
   }
-  MqttManager::_mqtt_config.credentials.client_id = "NSPMPanel-TODO"; // TODO: Replace "TODO" with actual unique name.
+  std::string mqtt_client_id = "NSPMPanel-";
+  mqtt_client_id.append(WiFiManager::mac_string());
+
+  MqttManager::_mqtt_config.credentials.client_id = mqtt_client_id.c_str();
   MqttManager::_mqtt_config.buffer.size = 4096;
   MqttManager::_mqtt_config.buffer.out_size = 512;
+
+  MqttManager::_state_topic = "nspanel/";
+  MqttManager::_state_topic.append(WiFiManager::mac_string());
+  MqttManager::_state_topic.append("/state");
+
+  // Create JSON object for state offline message used in last will for MQTT connection.
+  cJSON *json = cJSON_CreateObject();
+  if (json != NULL) {
+    cJSON_AddStringToObject(json, "mac", WiFiManager::mac_string().c_str());
+    cJSON_AddStringToObject(json, "state", "offline");
+  } else {
+    ESP_LOGE("MqttManager", "Failed to create cJSON object when trying to send online state update!");
+    return;
+  }
+
+  // Format JSON to string
+  char *json_string = cJSON_Print(json);
+  MqttManager::_last_will_message = json_string;
+  cJSON_free(json);
+
+  // Set last will message in config and update config of client
+  MqttManager::_mqtt_config.session.last_will.msg = MqttManager::_last_will_message.c_str();
+  MqttManager::_mqtt_config.session.last_will.msg_len = MqttManager::_last_will_message.length();
+  MqttManager::_mqtt_config.session.last_will.topic = MqttManager::_state_topic.c_str();
+  MqttManager::_mqtt_config.session.last_will.retain = true;
+  MqttManager::_mqtt_config.session.last_will.qos = 0;
+
+  // Initialize MQTT client with built config
   MqttManager::_mqtt_client = esp_mqtt_client_init(&MqttManager::_mqtt_config);
   if (MqttManager::_mqtt_client == NULL) {
     ESP_LOGE("MqttManager", "Failed to create MQTT client!");
@@ -70,6 +104,7 @@ void MqttManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
   case MQTT_EVENT_CONNECTED:
     ESP_LOGI("MqttManager", "Connected to MQTT server.");
     MqttManager::_connected = true;
+    MqttManager::_send_mqtt_online_update();
     break;
 
   case MQTT_EVENT_DISCONNECTED:
@@ -93,6 +128,26 @@ void MqttManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
 
   default:
     break;
+  }
+}
+
+void MqttManager::_send_mqtt_online_update() {
+  if (!MqttManager::_state_topic.empty()) {
+    cJSON *json = cJSON_CreateObject();
+    if (json != NULL) {
+      cJSON_AddStringToObject(json, "mac", WiFiManager::mac_string().c_str());
+      cJSON_AddStringToObject(json, "state", "online");
+    } else {
+      ESP_LOGE("MqttManager", "Failed to create cJSON object when trying to send online state update!");
+      return;
+    }
+
+    char *json_string = cJSON_Print(json);
+    if (MqttManager::publish(MqttManager::_state_topic, json_string, strlen(json_string), false) != ESP_OK) {
+      ESP_LOGE("MqttManager", "Failed to send online state update to topic %s!", MqttManager::_state_topic.c_str());
+    }
+
+    cJSON_free(json);
   }
 }
 

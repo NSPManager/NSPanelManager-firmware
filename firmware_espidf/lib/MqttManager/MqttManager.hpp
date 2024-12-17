@@ -61,9 +61,13 @@ public:
 private:
   /**
    * @brief Handle MQTT events.
-   * @param event: That even that occurred
    */
   static void _mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
+  /**
+   * Send status update that we are online
+   */
+  static void _send_mqtt_online_update();
 
   /**
    * The configuration used to init and setup the MQTT client.
@@ -79,4 +83,14 @@ private:
    * Are we connected to the MQTT manager?
    */
   static inline bool _connected = false;
+
+  /**
+   * Topic to send state updates (online/offline) to when connected/disconnected
+   */
+  static inline std::string _state_topic;
+
+  /**
+   * When disconnected from MQTT, send this message to tell all other entities on MQTT that the panel is offline.
+   */
+  static inline std::string _last_will_message;
 };

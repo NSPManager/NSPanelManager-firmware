@@ -8,6 +8,7 @@
 #include <driver/adc.h>
 #include <esp_adc_cal.h>
 #include <esp_log.h>
+#include <esp_mac.h>
 #include <esp_timer.h>
 #include <esp_wifi.h>
 
@@ -73,10 +74,8 @@ void StatusUpdateManager::_send_status_update(void *arg) {
   // TODO: Load warnings
 
   // Build MQTT topic to publish status report on:
-  std::string status_report_topic = "nspanel/mqttmanager_";
-  status_report_topic.append(NSPM_ConfigManager::get_manager_address());
-  status_report_topic.append("/nspanel/");
-  status_report_topic.append(ConfigManager::wifi_hostname);
+  std::string status_report_topic = "nspanel/";
+  status_report_topic.append(mac_string);
   status_report_topic.append("/status_report");
 
   // Send status update
@@ -85,21 +84,6 @@ void StatusUpdateManager::_send_status_update(void *arg) {
   size_t packed_data_size = nspanel_status_report__pack(&StatusUpdateManager::_status_report, buffer.data());
   if (MqttManager::publish(status_report_topic, (const char *)buffer.data(), packed_data_size, false) != ESP_OK) {
     ESP_LOGW("StatusUpdateManager", "Failed to send status report. Will try again next time.");
-  }
-
-  // Build MQTT topic to publish temperature on:
-  std::string temperature_topic = "nspanel/mqttmanager_";
-  temperature_topic.append(NSPM_ConfigManager::get_manager_address());
-  temperature_topic.append("/nspanel/");
-  temperature_topic.append(ConfigManager::wifi_hostname);
-  temperature_topic.append("/temperature");
-
-  char temperature_str[7];
-  snprintf(temperature_str, sizeof(temperature_str), "%.1f", StatusUpdateManager::_measured_average_temperature.get());
-
-  // Build temperature string
-  if (MqttManager::publish(temperature_topic.c_str(), temperature_str, strlen(temperature_str), false) != ESP_OK) {
-    ESP_LOGW("StatusUpdateManager", "Failed to send temperature status report.");
   }
 }
 
