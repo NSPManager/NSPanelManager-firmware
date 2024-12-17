@@ -3,6 +3,7 @@
 #include <NSPM_ConfigManager.hpp>
 #include <NSPM_ConfigManager_event.hpp>
 #include <StatusUpdateManager.hpp>
+#include <UpdateManager_event.hpp>
 #include <WiFiManager.hpp>
 #include <cmath>
 #include <driver/adc.h>
@@ -16,6 +17,16 @@ void StatusUpdateManager::init() {
   esp_log_level_set("StatusUpdateManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
 
   esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, ESP_EVENT_ANY_ID, StatusUpdateManager::_event_handler, NULL);
+  esp_event_handler_register(UPDATEMANAGER_EVENT, ESP_EVENT_ANY_ID, StatusUpdateManager::_update_manager_event_handler, NULL);
+
+  // Setup Mutex and default values before starting timers/tasks that handle _status_report
+  StatusUpdateManager::_status_report_mutex = xSemaphoreCreateMutex();
+  nspanel_status_report__init(&StatusUpdateManager::_status_report);
+  StatusUpdateManager::_status_report.nspanel_state = NSPanelStatusReport__State::NSPANEL_STATUS_REPORT__STATE__ONLINE;
+  StatusUpdateManager::_status_report.update_progress = 0;
+  StatusUpdateManager::_status_report.rssi = 0;
+  StatusUpdateManager::_status_report.temperature = 0;
+  StatusUpdateManager::_status_report.mac_address = (char *)WiFiManager::mac_string();
 
   // Create status update timer
   esp_err_t err = esp_timer_create(&StatusUpdateManager::_status_update_timer_args, &StatusUpdateManager::_status_update_timer);
@@ -28,14 +39,6 @@ void StatusUpdateManager::init() {
   if (err != ESP_OK) {
     ESP_LOGE("StatusUpdateManager", "Failed to start ESP timer to periodically measure temperature! Error: %s", esp_err_to_name(err));
   }
-
-  // Set default status report state
-  // TODO: Implement UpdateManager events to update nspanel_state and also update_progress
-  nspanel_status_report__init(&StatusUpdateManager::_status_report);
-  StatusUpdateManager::_status_report.nspanel_state = NSPanelStatusReport__State::NSPANEL_STATUS_REPORT__STATE__ONLINE;
-  StatusUpdateManager::_status_report.update_progress = 0;
-  StatusUpdateManager::_status_report.rssi = 0;
-  StatusUpdateManager::_status_report.temperature = 0; // TODO: Implement logic to get actual temperature
 
   // Setup ADC for reading temperature
   adc1_config_width(ADC_WIDTH_BIT_12);
@@ -62,28 +65,34 @@ void StatusUpdateManager::_send_status_update(void *arg) {
     ESP_LOGW("StatusUpdateManager", "Failed to get current wifi RSSI. Will use old value.");
   }
 
-  size_t used_heap_size = heap_caps_get_total_size(MALLOC_CAP_DEFAULT) - xPortGetFreeHeapSize();
-  size_t heap_used_pct = (used_heap_size / (float)heap_caps_get_total_size(MALLOC_CAP_DEFAULT)) * 100;
-  StatusUpdateManager::_status_report.heap_used_pct = heap_used_pct;
-  std::string ip_string = WiFiManager::ip_string();
-  StatusUpdateManager::_status_report.ip_address = (char *)ip_string.c_str();
-  std::string mac_string = WiFiManager::mac_string();
-  StatusUpdateManager::_status_report.mac_address = (char *)mac_string.c_str();
-  StatusUpdateManager::_status_report.temperature = StatusUpdateManager::_measured_average_temperature.get();
+  size_t packed_data_size = 0;
+  std::vector<uint8_t> buffer;
+  if (xSemaphoreTake(StatusUpdateManager::_status_report_mutex, pdMS_TO_TICKS(5000)) == pdTRUE) {
+    size_t used_heap_size = heap_caps_get_total_size(MALLOC_CAP_DEFAULT) - xPortGetFreeHeapSize();
+    size_t heap_used_pct = (used_heap_size / (float)heap_caps_get_total_size(MALLOC_CAP_DEFAULT)) * 100;
+    StatusUpdateManager::_status_report.heap_used_pct = heap_used_pct;
+    StatusUpdateManager::_status_report.ip_address = (char *)WiFiManager::ip_string().c_str();
+    StatusUpdateManager::_status_report.temperature = StatusUpdateManager::_measured_average_temperature.get();
 
-  // TODO: Load warnings
+    // TODO: Load warnings
+    // Send status update
+    size_t packed_length = nspanel_status_report__get_packed_size(&StatusUpdateManager::_status_report);
+    buffer.resize(packed_length);
+    packed_data_size = nspanel_status_report__pack(&StatusUpdateManager::_status_report, buffer.data());
+    xSemaphoreGive(StatusUpdateManager::_status_report_mutex);
+  } else {
+    ESP_LOGE("StatusUpdateManager", "Failed to get _status_update_mutex when trying to send status update!");
+  }
 
-  // Build MQTT topic to publish status report on:
-  std::string status_report_topic = "nspanel/";
-  status_report_topic.append(mac_string);
-  status_report_topic.append("/status_report");
+  if (packed_data_size > 0) {
+    // Build MQTT topic to publish status report on:
+    std::string status_report_topic = "nspanel/";
+    status_report_topic.append(WiFiManager::mac_string());
+    status_report_topic.append("/status_report");
 
-  // Send status update
-  uint32_t packed_length = nspanel_status_report__get_packed_size(&StatusUpdateManager::_status_report);
-  std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
-  size_t packed_data_size = nspanel_status_report__pack(&StatusUpdateManager::_status_report, buffer.data());
-  if (MqttManager::publish(status_report_topic, (const char *)buffer.data(), packed_data_size, false) != ESP_OK) {
-    ESP_LOGW("StatusUpdateManager", "Failed to send status report. Will try again next time.");
+    if (MqttManager::publish(status_report_topic, (const char *)buffer.data(), packed_data_size, false) != ESP_OK) {
+      ESP_LOGW("StatusUpdateManager", "Failed to send status report. Will try again next time.");
+    }
   }
 }
 
@@ -141,5 +150,103 @@ void StatusUpdateManager::_event_handler(void *arg, esp_event_base_t event_base,
     default:
       break;
     }
+  }
+}
+
+void StatusUpdateManager::_update_manager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
+  switch (event_id) {
+  case updatemanager_event_t::FIRMWARE_UPDATE_STARTED: {
+    ESP_LOGD("StatusUpdateManager", "Updating status report state.");
+    if (xSemaphoreTake(StatusUpdateManager::_status_report_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+      StatusUpdateManager::_status_report.nspanel_state = NSPanelStatusReport__State::NSPANEL_STATUS_REPORT__STATE__UPDATING_FIRMWARE;
+      StatusUpdateManager::_status_report.update_progress = 0;
+      xSemaphoreGive(StatusUpdateManager::_status_report_mutex);
+    }
+
+    // Restart timer with a 1 second interval instead of default 30
+    esp_timer_stop(StatusUpdateManager::_status_update_timer);
+    esp_timer_start_periodic(StatusUpdateManager::_status_update_timer, 1000 * 1000);
+    break;
+  }
+
+  case updatemanager_event_t::LITTLEFS_UPDATE_STARTED: {
+    if (xSemaphoreTake(StatusUpdateManager::_status_report_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+      StatusUpdateManager::_status_report.nspanel_state = NSPanelStatusReport__State::NSPANEL_STATUS_REPORT__STATE__UPDATING_LITTLEFS;
+      StatusUpdateManager::_status_report.update_progress = 0;
+      xSemaphoreGive(StatusUpdateManager::_status_report_mutex);
+    }
+
+    // Restart timer with a 1 second interval instead of default 30
+    esp_timer_stop(StatusUpdateManager::_status_update_timer);
+    esp_timer_start_periodic(StatusUpdateManager::_status_update_timer, 1000 * 1000);
+    break;
+  }
+
+  case updatemanager_event_t::NEXTION_UPDATE_STARTED: {
+    if (xSemaphoreTake(StatusUpdateManager::_status_report_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+      StatusUpdateManager::_status_report.nspanel_state = NSPanelStatusReport__State::NSPANEL_STATUS_REPORT__STATE__UPDATING_TFT;
+      StatusUpdateManager::_status_report.update_progress = 0;
+      xSemaphoreGive(StatusUpdateManager::_status_report_mutex);
+    }
+
+    // Restart timer with a 5 second interval instead of default 30. Use 5 seconds as the TFT/Nextion update is really slow.
+    esp_timer_stop(StatusUpdateManager::_status_update_timer);
+    esp_timer_start_periodic(StatusUpdateManager::_status_update_timer, 5000 * 1000);
+    break;
+  }
+
+  case updatemanager_event_t::FIRMWARE_UPDATE_PROGRESS: {
+    float *progress_percentage = (float *)event_data;
+    if (xSemaphoreTake(StatusUpdateManager::_status_report_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+      StatusUpdateManager::_status_report.update_progress = std::round(*progress_percentage);
+      xSemaphoreGive(StatusUpdateManager::_status_report_mutex);
+    }
+    break;
+  }
+
+  case updatemanager_event_t::LITTLEFS_UPDATE_PROGRESS: {
+    float *progress_percentage = (float *)event_data;
+    if (xSemaphoreTake(StatusUpdateManager::_status_report_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+      StatusUpdateManager::_status_report.update_progress = std::round(*progress_percentage);
+      xSemaphoreGive(StatusUpdateManager::_status_report_mutex);
+    }
+    break;
+  }
+
+  case updatemanager_event_t::NEXTION_UPDATE_PROGRESS: {
+    float *progress_percentage = (float *)event_data;
+    if (xSemaphoreTake(StatusUpdateManager::_status_report_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+      StatusUpdateManager::_status_report.update_progress = std::round(*progress_percentage);
+      xSemaphoreGive(StatusUpdateManager::_status_report_mutex);
+    }
+    break;
+  }
+
+  case updatemanager_event_t::FIRMWARE_UPDATE_FINISHED: {
+    if (xSemaphoreTake(StatusUpdateManager::_status_report_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+      StatusUpdateManager::_status_report.update_progress = 100;
+      xSemaphoreGive(StatusUpdateManager::_status_report_mutex);
+    }
+    break;
+  }
+
+  case updatemanager_event_t::LITTLEFS_UPDATE_FINISHED: {
+    if (xSemaphoreTake(StatusUpdateManager::_status_report_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+      StatusUpdateManager::_status_report.update_progress = 100;
+      xSemaphoreGive(StatusUpdateManager::_status_report_mutex);
+    }
+    break;
+  }
+
+  case updatemanager_event_t::NEXTION_UPDATE_FINISHED: {
+    if (xSemaphoreTake(StatusUpdateManager::_status_report_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+      StatusUpdateManager::_status_report.update_progress = 100;
+      xSemaphoreGive(StatusUpdateManager::_status_report_mutex);
+    }
+    break;
+  }
+
+  default:
+    break;
   }
 }

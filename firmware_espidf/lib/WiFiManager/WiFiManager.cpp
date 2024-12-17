@@ -17,6 +17,11 @@ void WiFiManager::start_client(std::string *ssid, std::string *psk, std::string 
   esp_netif_init();
   esp_netif_create_default_wifi_sta();
 
+  // Load MAC address from ESP32 into memory
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_STA); // Read MAC address for Wi-Fi Station
+  uint8_t mac_len = snprintf(WiFiManager::_mac_address, sizeof(WiFiManager::_mac_address), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
   WiFiManager::_init_config = WIFI_INIT_CONFIG_DEFAULT();
   esp_wifi_init(&WiFiManager::_init_config);
 
@@ -171,10 +176,6 @@ std::string WiFiManager::ip_string() {
   return std::string(ip_str);
 }
 
-std::string WiFiManager::mac_string() {
-  uint8_t mac[6];
-  esp_read_mac(mac, ESP_MAC_WIFI_STA); // Read MAC address for Wi-Fi Station
-  char mac_str[30];                    // Format: AA:BB:CC:DD:EE:FF
-  snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-  return std::string(mac_str);
+const char *WiFiManager::mac_string() {
+  return WiFiManager::_mac_address;
 }

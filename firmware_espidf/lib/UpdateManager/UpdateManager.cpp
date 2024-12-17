@@ -50,6 +50,9 @@ void UpdateManager::update_firmware(void *param) {
         ConfigManager::save_config();
 
         UpdateManager::update_littlefs(NULL);
+
+        ESP_LOGI("UpdateManager", "Update complete. Will start in 2 seconds");
+        vTaskDelay(pdMS_TO_TICKS(2000));
         esp_restart();
       }
     } else {
@@ -87,6 +90,8 @@ void UpdateManager::update_littlefs(void *param) {
         LittleFS::mount();
         ConfigManager::save_config();
 
+        ESP_LOGI("UpdateManager", "Update complete. Will start in 2 seconds");
+        vTaskDelay(pdMS_TO_TICKS(2000));
         esp_restart();
       }
     } else {

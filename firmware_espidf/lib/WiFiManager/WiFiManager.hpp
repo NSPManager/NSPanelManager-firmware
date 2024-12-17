@@ -50,7 +50,7 @@ public:
    * @brief Get MAC address formatted as a string
    * @return MAC formatted as string in format AA:BB:CC:DD:EE:FF
    */
-  static std::string mac_string();
+  static const char *mac_string();
 
 private:
   static void _event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
@@ -67,4 +67,7 @@ private:
 
   // Current IP address
   static inline esp_netif_ip_info_t _ip_info;
+
+  // MAC address of ESP32 WiFi
+  static inline char _mac_address[18];
 };

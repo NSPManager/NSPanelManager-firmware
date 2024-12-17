@@ -33,6 +33,11 @@ private:
    */
   static void _event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
+  /**
+   * Handle firmware/littlefs/nextion update events
+   */
+  static void _update_manager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
   // Vars:
   // Handle to timer responsible for sending status updates periodically
   static inline esp_timer_handle_t _status_update_timer;
@@ -57,6 +62,9 @@ private:
 
   // Total sum of all measured temperatures. Used to calculate _measured_average_temperature
   static inline float _measured_temperature_total_sum;
+
+  // Mutex to only allow once task at the time access to the _status_report.
+  static inline SemaphoreHandle_t _status_report_mutex;
 
   // Status report object used to send protobuf data to manager
   static inline NSPanelStatusReport _status_report;
