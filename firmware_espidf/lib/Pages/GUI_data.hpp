@@ -130,10 +130,51 @@ public:
 
 class GUI_DROPDOWN_PAGE {
 public:
+/*
+Dropdown page has 2 rows with 3 buttons each
+Each "button" consists of 3 Nextion devices: 
+1 Dual state button (val=0/1 for OFF/ON, txt=is used to choose icon in font
+2 Text Label and 
+3 Hotspot. 
+Hotspot is covering both label and button and is what the user is pressing. 
+Press and release event is activated on hotspots.
+*/
+  static inline const char *page_name = "dropdown";
+  static inline const char *page_header_label = "current";
+  
+  static inline const char *item1_button_name = "i1_button";
+  static inline const char *item1_label_name = "i1_label";
+  static inline const char *item1_hotspot_name = "i1_hotspot";
+  static inline const uint8_t item1_hotspot_id = 13;
+  
+  static inline const char *item2_button_name = "i2_button";
+  static inline const char *item2_label_name = "i2_label";
+  static inline const char *item2_hotspot_name = "i2_hotspot";
+  static inline const uint8_t item2_hotspot_id = 14;
 
+  static inline const char *item3_button_name = "i3_button";
+  static inline const char *item3_label_name = "i3_label";
+  static inline const char *item3_hotspot_name = "i3_hotspot";
+  static inline const uint8_t item3_hotspot_id = 15;
+  
+  static inline const char *item4_button_name = "i4_button";
+  static inline const char *item4_label_name = "i4_label";
+  static inline const char *item4_hotspot_name = "i4_hotspot";
+  static inline const uint8_t item4_hotspot_id = 16;
+  
+  static inline const char *item5_button_name = "i5_button";
+  static inline const char *item5_label_name = "i5_label";
+  static inline const char *item5_hotspot_name = "i5_hotspot";
+  static inline const uint8_t item5_hotspot_id = 17;
+  
+  static inline const char *item6_button_name = "i6_button";
+  static inline const char *item6_label_name = "i6_label";
+  static inline const char *item6_hotspot_name = "i6_hotspot";
+  static inline const uint8_t item6_hotspot_id = 18;
+  
 };
 //GUI_ITEMS 4 8 and 12 pages used to display both room items and scene items
-//
+
 class GUI_ITEMS4_PAGE {
 public:
   //color should only be changed when using the switch icon
