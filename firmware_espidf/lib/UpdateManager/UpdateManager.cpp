@@ -2,6 +2,8 @@
 #include <LittleFS.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
+#include <Nextion.hpp>
+#include <Nextion_event.hpp>
 #include <UpdateManager.hpp>
 #include <UpdateManager_event.hpp>
 #include <cJSON.h>
@@ -28,6 +30,84 @@ void UpdateManager::init() {
 }
 
 void UpdateManager::update_gui(void *param) {
+  NSPanelConfig config;
+  if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+    esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, UpdateManager::_nextion_event_handler, NULL);
+
+    std::string tft_file_url = "http://";
+    tft_file_url.append(NSPM_ConfigManager::get_manager_address());
+    tft_file_url.append(":");
+    tft_file_url.append(std::to_string(NSPM_ConfigManager::get_manager_port()));
+    tft_file_url.append(config.is_us_panel ? "/download_tft_us" : "/download_tft_eu");
+
+    size_t remote_tft_file_size;
+    while (UpdateManager::_get_remote_file_size(tft_file_url, &remote_tft_file_size) != ESP_OK) {
+      ESP_LOGW("UpdateManager", "Failed to get remote TFT file size. Will try again in 500ms");
+      vTaskDelay(pdMS_TO_TICKS(500));
+    }
+
+    ESP_LOGI("UpdateManager", "Will start updating GUI. Remote file size: %zu bytes", remote_tft_file_size);
+    while (Nextion::start_update(ConfigManager::nextion_upload_baudrate, ConfigManager::use_latest_nextion_upload_protocol, remote_tft_file_size) != ESP_OK) {
+      ESP_LOGW("UpdateManager", "Failed to init update process with Nextion display. Will try again in 5000ms");
+      vTaskDelay(pdMS_TO_TICKS(5000));
+    }
+
+    esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::NEXTION_UPDATE_STARTED, NULL, 0, pdMS_TO_TICKS(500));
+
+    // Update started. Wait for notifications and when they arrive, download data from offset into buffer and write to display.
+    std::vector<uint8_t> tft_data_buffer;
+    float progress;
+    for (;;) {
+      if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(20000)) == pdPASS) {
+        // Got event to send new data. Calculate next chunk size but a max of 4096 bytes:
+        UpdateManager::_nextion_update_last_written_bytes = remote_tft_file_size - UpdateManager::_nextion_update_current_offset;
+        if (UpdateManager::_nextion_update_last_written_bytes > 4096) {
+          UpdateManager::_nextion_update_last_written_bytes = 4096;
+        }
+
+        ESP_LOGD("UpdateManager", "Received notification. Will download TFT bytes %llu and %llu bytes forward.", UpdateManager::_nextion_update_current_offset, UpdateManager::_nextion_update_last_written_bytes);
+        esp_err_t res;
+        for (;;) { // Try downloading data until it succeeds
+          res = UpdateManager::_download_data(&tft_data_buffer, tft_file_url.c_str(), UpdateManager::_nextion_update_current_offset, UpdateManager::_nextion_update_last_written_bytes);
+          if (res == ESP_OK && tft_data_buffer.size() == UpdateManager::_nextion_update_last_written_bytes) {
+            break; // Download was successful. Exit loop.
+          } else {
+            tft_data_buffer.clear(); // Clear buffer and try again.
+            ESP_LOGE("UpdateManager", "Failed to download TFT chunk when updating GUI. Will try again in 5 seconds.");
+            vTaskDelay(pdMS_TO_TICKS(5000));
+          }
+        }
+
+        while (Nextion::write_update_bytes(tft_data_buffer.data(), tft_data_buffer.size()) != ESP_OK) {
+          ESP_LOGE("UpdateManager", "Failed to write TFT chunk to UART while updating GUI. Will try again in 5 seconds.");
+          tft_data_buffer.clear(); // Failed to download data. Clear buffer and try again.
+          vTaskDelay(pdMS_TO_TICKS(5000));
+        }
+        ESP_LOGD("UpdateManager", "Wrote %zu bytes to Nextion display. Total bytes written: %llu", tft_data_buffer.size(), UpdateManager::_nextion_update_current_offset + tft_data_buffer.size());
+
+        // Clear buffer for next use
+        tft_data_buffer.clear();
+
+        progress = (std::round((((double)UpdateManager::_nextion_update_current_offset + (double)UpdateManager::_nextion_update_last_written_bytes) / (double)remote_tft_file_size) * 100) / 100) * 100;
+        esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::NEXTION_UPDATE_PROGRESS, &progress, sizeof(progress), pdMS_TO_TICKS(250));
+
+        if (UpdateManager::_nextion_update_current_offset + UpdateManager::_nextion_update_last_written_bytes >= remote_tft_file_size) {
+          break; // Update complete
+        }
+      } else {
+        ESP_LOGE("UpdateManager", "Have still not received a new Nextion update event while waiting for 20s. Will wait another 20s.");
+      }
+    }
+
+    esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::NEXTION_UPDATE_FINISHED, NULL, 0, pdMS_TO_TICKS(500));
+    ESP_LOGI("UpdateManager", "Nextion GUI update complete. Will restart in 10 seconds.");
+    vTaskDelay(pdMS_TO_TICKS(10000));
+
+    esp_restart();
+    vTaskDelete(NULL);
+  } else {
+    ESP_LOGE("UpdateManager", "Failed to get NSPanelConfig when trying to update GUI.");
+  }
 }
 
 void UpdateManager::update_firmware(void *param) {
@@ -38,7 +118,7 @@ void UpdateManager::update_firmware(void *param) {
   firmware_md5_string.append("/checksum_firmware");
 
   std::vector<uint8_t> data;
-  if (UpdateManager::_download_data(&data, firmware_md5_string.c_str()) == ESP_OK) {
+  if (UpdateManager::_download_data(&data, firmware_md5_string.c_str(), -1, -1) == ESP_OK) {
     std::string md5_string = std::string((char *)data.data(), data.size());
     ESP_LOGD("UpdateManager", "Got new MD5 sum from manager: %s", md5_string.c_str());
 
@@ -76,7 +156,7 @@ void UpdateManager::update_littlefs(void *param) {
   littlefs_md5_string.append("/checksum_data_file");
 
   std::vector<uint8_t> data;
-  if (UpdateManager::_download_data(&data, littlefs_md5_string.c_str()) == ESP_OK) {
+  if (UpdateManager::_download_data(&data, littlefs_md5_string.c_str(), -1, -1) == ESP_OK) {
     std::string md5_string = std::string((char *)data.data(), data.size());
     ESP_LOGD("UpdateManager", "Got new MD5 sum from manager: %s", md5_string.c_str());
 
@@ -102,7 +182,7 @@ void UpdateManager::update_littlefs(void *param) {
   }
 }
 
-esp_err_t UpdateManager::_download_data(std::vector<uint8_t> *return_data, const char *download_url) {
+esp_err_t UpdateManager::_download_data(std::vector<uint8_t> *return_data, const char *download_url, int64_t offset, int64_t length) {
   if (xSemaphoreTake(UpdateManager::_download_data_store_mutex, portMAX_DELAY) == pdPASS) {
     UpdateManager::_download_data_store = return_data;
 
@@ -112,6 +192,18 @@ esp_err_t UpdateManager::_download_data(std::vector<uint8_t> *return_data, const
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
+
+    if (offset >= 0 && length > 0) {
+      std::string range_header = "bytes=";
+      range_header.append(std::to_string(offset));
+      range_header.append("-");
+      range_header.append(std::to_string(offset + length));
+      esp_err_t err = esp_http_client_set_header(client, "Range", range_header.c_str());
+      if (err != ESP_OK) {
+        ESP_LOGE("UpdateManager", "Failed to set range header will trying to download chunk of data! Error: %s", esp_err_to_name(err));
+        return ESP_ERR_NOT_FINISHED;
+      }
+    }
 
     // Perform the actual HTTP request to get data
     esp_err_t err = esp_http_client_perform(client);
@@ -132,14 +224,42 @@ esp_err_t UpdateManager::_download_data(std::vector<uint8_t> *return_data, const
   return ESP_ERR_NOT_FINISHED;
 }
 
+esp_err_t UpdateManager::_get_remote_file_size(std::string url, size_t *file_size) {
+  // Start actual littlefs update
+  esp_http_client_config_t http_config = {
+      .url = url.c_str(),
+      .cert_pem = NULL,
+      .keep_alive_enable = true,
+  };
+
+  // Setup HTTP connection:
+  esp_http_client_handle_t client = esp_http_client_init(&http_config);
+  if (client == NULL) {
+    ESP_LOGE("UpdateManager", "Failed to initialise HTTP connection");
+    return ESP_ERR_NOT_FINISHED;
+  }
+  esp_err_t err = esp_http_client_open(client, 0);
+  if (err != ESP_OK) {
+    ESP_LOGE("UpdateManager", "Failed to open HTTP connection: %s", esp_err_to_name(err));
+    esp_http_client_cleanup(client);
+    return ESP_ERR_NOT_FINISHED;
+  }
+
+  esp_http_client_fetch_headers(client);
+  *file_size = esp_http_client_get_content_length(client);
+
+  esp_http_client_cleanup(client);
+  return ESP_OK;
+}
+
 esp_err_t UpdateManager::_http_event_handler(esp_http_client_event_t *event) {
   switch (event->event_id) {
   case HTTP_EVENT_ON_DATA:
     if (!esp_http_client_is_chunked_response(event->client) && UpdateManager::_download_data_store != nullptr) {
-      UpdateManager::_download_data_store->resize(UpdateManager::_download_data_store->size() + event->data_len); // Resize to handle new data size
-
-      // Write out the data received
-      memcpy(UpdateManager::_download_data_store->data() + UpdateManager::_download_data_store->size() - event->data_len, event->data, event->data_len);
+      UpdateManager::_download_data_store->reserve(UpdateManager::_download_data_store->size() + event->data_len);
+      UpdateManager::_download_data_store->insert(UpdateManager::_download_data_store->end(), (uint8_t *)event->data, (uint8_t *)event->data + event->data_len);
+    } else {
+      ESP_LOGE("UpdateManager", "Download data is chunked. Not supported!");
     }
     break;
 
@@ -174,20 +294,44 @@ void UpdateManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
     if (cJSON_IsString(item) && item->valuestring != NULL) {
       std::string command_string = item->valuestring;
 
-      if (command_string.compare("reboot") == 0) {
+      if (command_string.compare("reboot") == 0) { // TODO: Move to some place more fitting.
         ESP_LOGI("UpgradeManager", "Received command to reboot. Will reboot NSPanel.");
         esp_restart();
       } else if (command_string.compare("firmware_update") == 0 && UpdateManager::_current_update_task == NULL) {
         xTaskCreatePinnedToCore(UpdateManager::update_firmware, "update_firmware", 8192, NULL, 4, &UpdateManager::_current_update_task, 1);
-        // UpdateManager::update_firmware();
-      } else if (command_string.compare("tft_update") == 0) {
-        UpdateManager::update_gui(NULL);
+      } else if (command_string.compare("tft_update") == 0 && UpdateManager::_current_update_task == NULL) {
+        xTaskCreatePinnedToCore(UpdateManager::update_gui, "update_firmware", 8192, NULL, 4, &UpdateManager::_current_update_task, 1);
       } else {
         ESP_LOGW("UpgradeManager", "Unknown command: %s", item->valuestring);
       }
     }
 
     cJSON_free(json);
+  }
+}
+
+void UpdateManager::_nextion_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
+  switch (event_id) {
+  case nextion_event_t::UPDATE_READY_FOR_NEXT_CHUNK: {
+    UpdateManager::_nextion_update_current_offset += UpdateManager::_nextion_update_last_written_bytes;
+    xTaskNotifyGive(UpdateManager::_current_update_task);
+    break;
+  }
+
+  case nextion_event_t::UPDATE_JUMP_TO_OFFSET: {
+    size_t *jump_offset = (size_t *)event_data;
+    if (*jump_offset > 0) { // If set to zero, continue and treat it as a 0x05 as 0 means "continue and do not jump"
+      UpdateManager::_nextion_update_current_offset = *jump_offset;
+    } else {
+      UpdateManager::_nextion_update_current_offset += UpdateManager::_nextion_update_last_written_bytes;
+    }
+    ESP_LOGI("UpdateManager", "Received instruction from Nextion display to jump to %zu TFT file offset.", *jump_offset);
+    xTaskNotifyGive(UpdateManager::_current_update_task);
+    break;
+  }
+
+  default:
+    break;
   }
 }
 
@@ -230,11 +374,11 @@ esp_err_t UpdateManager::_update_firmware_ota() {
     return ESP_ERR_NOT_FINISHED;
   }
 
-  ret = UpdateManager::_validate_image_header(&app_desc);
-  if (ret != ESP_OK) {
-    ESP_LOGE("UpdateManager", "image header verification failed");
-    return ESP_ERR_NOT_FINISHED;
-  }
+  // ret = UpdateManager::_validate_image_header(&app_desc);
+  // if (ret != ESP_OK) {
+  //   ESP_LOGE("UpdateManager", "image header verification failed");
+  //   return ESP_ERR_NOT_FINISHED;
+  // }
 
   int firmware_size = esp_https_ota_get_image_size(https_ota_handle);
   ESP_LOGI("UpdateManager", "Will update firmware from %s. Remote file size: %d bytes.", firmware_download_url.c_str(), firmware_size);
@@ -390,38 +534,4 @@ esp_err_t UpdateManager::_update_littlefs_ota() {
   }
 
   return ESP_ERR_NOT_FINISHED;
-}
-
-esp_err_t UpdateManager::_validate_image_header(esp_app_desc_t *new_app_info) {
-  if (new_app_info == NULL) {
-    return ESP_ERR_INVALID_ARG;
-  }
-
-  const esp_partition_t *running = esp_ota_get_running_partition();
-  esp_app_desc_t running_app_info;
-  if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK) {
-    ESP_LOGI("UpdateManager", "Running firmware version: %s", running_app_info.version);
-  }
-
-  // #ifndef CONFIG_EXAMPLE_SKIP_VERSION_CHECK
-  //   if (memcmp(new_app_info->version, running_app_info.version, sizeof(new_app_info->version)) == 0) {
-  //     ESP_LOGW("UpdateManager", "Current running version is the same as a new. We will not continue the update.");
-  //     return ESP_FAIL;
-  //   }
-  // #endif
-
-#ifdef CONFIG_BOOTLOADER_APP_ANTI_ROLLBACK
-  /**
-   * Secure version check from firmware image header prevents subsequent download and flash write of
-   * entire firmware image. However this is optional because it is also taken care in API
-   * esp_https_ota_finish at the end of OTA update procedure.
-   */
-  const uint32_t hw_sec_version = esp_efuse_read_secure_version();
-  if (new_app_info->secure_version < hw_sec_version) {
-    ESP_LOGW("UpdateManager", "New firmware security version is less than eFuse programmed, %" PRIu32 " < %" PRIu32, new_app_info->secure_version, hw_sec_version);
-    return ESP_FAIL;
-  }
-#endif
-
-  return ESP_OK;
 }

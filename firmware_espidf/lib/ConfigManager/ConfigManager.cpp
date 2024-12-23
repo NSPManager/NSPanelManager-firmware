@@ -91,12 +91,14 @@ esp_err_t ConfigManager::load_config() {
     ConfigManager::md5_gui = item->valuestring;
   }
 
-  item = cJSON_GetObjectItem(json, "use_latest_nextion_upload_protocol");
+  item = cJSON_GetObjectItem(json, "use_new_upload_protocol");
   if (cJSON_IsBool(item)) {
     ConfigManager::use_latest_nextion_upload_protocol = cJSON_IsTrue(item);
+  } else if (cJSON_IsString(item) && item->valuestring != NULL) {
+    ConfigManager::use_latest_nextion_upload_protocol = (strncmp("true", item->valuestring, sizeof("true")) == 0);
   }
 
-  item = cJSON_GetObjectItem(json, "nextion_upload_baudrate");
+  item = cJSON_GetObjectItem(json, "upload_baud");
   if (cJSON_IsNumber(item)) {
     ConfigManager::nextion_upload_baudrate = item->valueint;
   }
@@ -155,11 +157,11 @@ esp_err_t ConfigManager::save_config() {
   cJSON_AddStringToObject(json, "md5_gui", ConfigManager::md5_gui.c_str());
 
   if (ConfigManager::use_latest_nextion_upload_protocol) {
-    cJSON_AddTrueToObject(json, "use_latest_nextion_upload_protocol");
+    cJSON_AddTrueToObject(json, "use_new_upload_protocol");
   } else {
-    cJSON_AddFalseToObject(json, "use_latest_nextion_upload_protocol");
+    cJSON_AddFalseToObject(json, "use_new_upload_protocol");
   }
-  cJSON_AddNumberToObject(json, "nextion_upload_baudrate", ConfigManager::nextion_upload_baudrate);
+  cJSON_AddNumberToObject(json, "upload_baud", ConfigManager::nextion_upload_baudrate);
 
   char *json_string = cJSON_Print(json);
   size_t bytes_written = fwrite(json_string, sizeof(char), strlen(json_string), f);

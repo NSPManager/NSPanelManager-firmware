@@ -123,14 +123,31 @@ public:
   static esp_err_t set_brightness_level(uint8_t brightness, uint16_t mutex_timeout);
 
   /**
-   * Restart the Nextion display via GPIO power management
+   * Get the current Nextion display state
+   */
+  static nextion_state_t get_current_state();
+
+  /**
+   * Restart the Nextion display via GPIO pins (power off and power on. Not a soft reboot via commands!)
    */
   static void restart();
 
   /**
-   * Get the current Nextion display state
+   * Restart the Nextion display and start the update process.
+   * @param upload_baudrate: What serial baud rate to use when sending upload data to the screen.
+   * @param use_new_upload_protocol: False: use upload protocol "v1.0". True: use upload protocol "v1.2".
+   * @param upload_file_size: Size of the new TFT file to be uploaded to the Nextion display.
+   * @return ESP_OK on success or ESP_ERR_NOT_FINISHED if failed to init update.
    */
-  static nextion_state_t get_current_state();
+  static esp_err_t start_update(uint32_t upload_baudrate, bool use_new_upload_protocol, uint64_t upload_file_size);
+
+  /**
+   * Write update data to the Nextion display.
+   * @param data: Pointer to buffer from where to read upload data from.
+   * @param size: The number of bytes to read from buffer.
+   * @return ESP_OK if successful or ESP_ERR_NOT_FINISHED if failed to write bytes to uart.
+   */
+  static esp_err_t write_update_bytes(uint8_t *data, uint16_t size);
 
 private:
   // Handle all events from UART

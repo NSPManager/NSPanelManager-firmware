@@ -42,7 +42,7 @@ esp_err_t Nextion::init() {
       .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
       .source_clk = UART_SCLK_DEFAULT};
 
-  uart_driver_install(UART_NUM_2, NEXTION_UART_BUFFER_SIZE * 2, NEXTION_UART_BUFFER_SIZE * 2, 8, &Nextion::_uart_event_queue, 0); // Setup UART driver
+  uart_driver_install(UART_NUM_2, NEXTION_UART_BUFFER_SIZE * 2, 6000, 8, &Nextion::_uart_event_queue, 0); // Setup UART driver
   uart_param_config(UART_NUM_2, &Nextion::_uart_config);
   uart_set_pin(UART_NUM_2, GPIO_NUM_16, GPIO_NUM_17, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
   uart_enable_pattern_det_baud_intr(UART_NUM_2, 0xFF, 3, 9, 0, 0); // Setup pattern detection to trigger interrupt when 3 consecutive 0xFF has been received.
@@ -59,9 +59,7 @@ esp_err_t Nextion::init() {
 
   ESP_LOGD("Nextion", "Turning Nextion display off and on again.");
   gpio_set_direction(NEXTION_ON_OFF_GPIO, GPIO_MODE_OUTPUT);
-  gpio_set_level(NEXTION_ON_OFF_GPIO, 1); // Turn off power to the display
-  vTaskDelay(pdMS_TO_TICKS(250));         // Wait for screen to turn off
-  gpio_set_level(NEXTION_ON_OFF_GPIO, 0); // Turn on power to the display
+  Nextion::restart();
 
   // Wait for 'NSPM' flag, if we receive it.
   if (Nextion::_wait_for_event(NEXTION_EVENT, nextion_event_t::RECEIVED_NSPM_FLAG, 2500, 250) == ESP_OK) {
@@ -105,6 +103,7 @@ void Nextion::_task_uart_event(void *param) {
   uart_event_t event;
   size_t uart_buffered_data_size;
   nextion_event_data_t uart_buffer;
+  bool read_nextion_jump_instruction = false;
   std::vector<uint8_t> uart_pattern_buffer(3);
   // std::vector<uint8_t> uart_read_buffer(NEXTION_UART_BUFFER_SIZE);
   for (;;) {
@@ -112,9 +111,52 @@ void Nextion::_task_uart_event(void *param) {
     if (xQueueReceive(Nextion::_uart_event_queue, (void *)&event, portMAX_DELAY)) {
       switch (event.type) {
       case UART_DATA: {
-        // std::fill(uart_read_buffer.begin(), uart_read_buffer.end(), 0);
-        // uart_read_bytes(UART_NUM_2, uart_read_buffer.data(), event.size, pdMS_TO_TICKS(64)); // Read data into vector
-        // ESP_LOGD("Nextion", "UART_DATA read %s", uart_read_buffer.data());
+        if (event.size <= NEXTION_UART_BUFFER_SIZE) {
+          if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+            if (Nextion::_current_nextion_state == nextion_state_t::UPDATING) {
+              uart_buffer.data_size = uart_read_bytes(UART_NUM_2, uart_buffer.data, event.size, pdMS_TO_TICKS(64));
+
+              // Special handling for 0x08 jump instruction from Nextion display.
+              if (uart_buffer.data[0] == 0x08) {
+                read_nextion_jump_instruction = true;
+                xSemaphoreGive(Nextion::_nextion_state_mutex); // Give back mutex as we do a continue here and will not reach the xSemaphoreGive at the bottom.
+                continue;                                      // Wait for next event after 0x08 to received the 4 bytes of offset data.
+              } else if (read_nextion_jump_instruction) {      // Least event read was a 0x08 jump instruction. Read this data as jump dest and reset.
+                if (event.size >= 4) {
+                  // Copy all data 1 byte forward in memory and then set data[0] = 0x08
+                  for (int i = event.size; i > 0; i--) {
+                    uart_buffer.data[i] = uart_buffer.data[i - 1];
+                  }
+                  uart_buffer.data[0] = 0x08;
+                  uart_buffer.data_size++;
+                }
+                read_nextion_jump_instruction = false; // Reset special handling
+              }
+
+              // Set '\0' bytes in array one after data to ensure that any printing of data is contained.
+              uart_buffer.data[uart_buffer.data_size] = '\0';
+
+              switch (esp_event_post_to(Nextion::_handle_uart_data_event_loop, NEXTION_EVENT, nextion_event_t::RECEIVED_DATA, &uart_buffer, sizeof(uart_buffer), pdMS_TO_TICKS(16))) {
+              case ESP_OK:
+                break;
+
+              case ESP_ERR_TIMEOUT:
+                ESP_LOGE("Nextion", "Failed to post new event data from UART event!");
+                break;
+
+              case ESP_ERR_INVALID_ARG:
+                ESP_LOGE("Nextion", "Invalid combination of event base and data when posting event from UART data!");
+                break;
+
+              default:
+                ESP_LOGE("Nextion", "Unknown error when posting event data from UART event!");
+              }
+            }
+            xSemaphoreGive(Nextion::_nextion_state_mutex);
+          } else {
+            ESP_LOGE("Nextion", "Failed to take _nextion_state_mutex while checking current state!");
+          }
+        }
         break;
       }
 
@@ -175,7 +217,7 @@ void Nextion::_task_uart_event(void *param) {
 
 void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
   nextion_event_data_t *data = (nextion_event_data_t *)event_data;
-  ESP_LOGD("Nextion", "Read Nextion data: %s, size: %d", data->data, data->data_size);
+  // ESP_LOGD("Nextion", "Read Nextion data: %s, size: %d", data->data, data->data_size);
 
   if (*data->data == NEX_RET_NUMBER_HEAD) {
     // Got numeric data
@@ -221,11 +263,25 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
     esp_event_post(NEXTION_EVENT, nextion_event_t::SLEEP_EVENT, NULL, 0, pdMS_TO_TICKS(5000));
   } else if (*data->data == NEX_OUT_WAKE) {
     esp_event_post(NEXTION_EVENT, nextion_event_t::WAKE_EVENT, NULL, 0, pdMS_TO_TICKS(5000));
-  } else if (strncmp((char *)data->data + data->data_size - sizeof("NSPM"), "NSPM", sizeof("NSPM")) == 0) { // TODO: Compare last bytes of message instead of first as there may be garbage data output from the panel before sending NSPM-flag
+  } else if (strncmp((char *)data->data + data->data_size - strlen("NSPM"), "NSPM", strlen("NSPM")) == 0) { // TODO: Compare last bytes of message instead of first as there may be garbage data output from the panel before sending NSPM-flag
     esp_event_post(NEXTION_EVENT, nextion_event_t::RECEIVED_NSPM_FLAG, NULL, 0, pdMS_TO_TICKS(16));
   } else if (strncmp((char *)data->data, "comok", 5) == 0) {
     ESP_LOGD("Nextion", "Connected to Nextion display, comok data: %s", data->data);
     esp_event_post(NEXTION_EVENT, nextion_event_t::CONNECTED, NULL, 0, pdMS_TO_TICKS(16));
+  } else if (*data->data == 0x05) {
+    esp_event_post(NEXTION_EVENT, nextion_event_t::UPDATE_READY_FOR_NEXT_CHUNK, NULL, 0, pdMS_TO_TICKS(1000));
+  } else if (*data->data == 0x08) {
+    if (data->data_size >= 5) {
+      size_t byte_offset;
+      byte_offset = data->data[1];
+      byte_offset += data->data[2] << 8;
+      byte_offset += data->data[3] << 16;
+      byte_offset += data->data[4] << 24;
+
+      esp_event_post(NEXTION_EVENT, nextion_event_t::UPDATE_JUMP_TO_OFFSET, &byte_offset, sizeof(byte_offset), pdMS_TO_TICKS(1000));
+    } else {
+      ESP_LOGE("Nextion", "Not enough bytes sent for 0x08 update byte offset! Only read %zu bytes.", data->data_size);
+    }
   } else {
     ESP_LOGW("Nextion", "Unknown event data from Nextion: %s", data->data);
   }
@@ -584,4 +640,62 @@ esp_err_t Nextion::set_brightness_level(uint8_t brightness, uint16_t mutex_timeo
 
 nextion_state_t Nextion::get_current_state() {
   return Nextion::_current_nextion_state;
+}
+
+void Nextion::restart() {
+  gpio_set_level(NEXTION_ON_OFF_GPIO, 1); // Turn off power to the display
+  vTaskDelay(pdMS_TO_TICKS(250));         // Wait for screen to turn off
+  gpio_set_level(NEXTION_ON_OFF_GPIO, 0); // Turn on power to the display
+}
+
+esp_err_t Nextion::start_update(uint32_t upload_baudrate, bool use_new_upload_protocol, uint64_t upload_file_size) {
+  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(10000)) == pdTRUE) {
+    if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(10000)) == pdTRUE) {
+      Nextion::_current_nextion_state = nextion_state_t::UPDATING; // Set state to updating so that other functions won't write to the UART.
+      xSemaphoreGive(Nextion::_nextion_state_mutex);
+    } else {
+      ESP_LOGE("Nextion", "Failed to take _nextion_state_mutex while processing request to start update!");
+      xSemaphoreGive(Nextion::_uart_write_mutex);
+      return ESP_ERR_NOT_FINISHED;
+    }
+    Nextion::restart();
+
+    // Wait for panel to start
+    vTaskDelay(pdMS_TO_TICKS(5000));
+
+    ESP_LOGI("Nextion", "Will try to init Nextion update process. New TFT file size: %llu", upload_file_size);
+    std::string init_upload_command = use_new_upload_protocol ? "whmi-wris " : "whmi-wri ";
+    init_upload_command.append(std::to_string(upload_file_size));
+    init_upload_command.append(",");
+    init_upload_command.append(std::to_string(upload_baudrate));
+    init_upload_command.append(",1");
+    uart_write_bytes(UART_NUM_2, init_upload_command.c_str(), init_upload_command.length());
+
+    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
+    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
+
+    uart_wait_tx_done(UART_NUM_2, pdMS_TO_TICKS(1000)); // Wait up to 1 second for TX buffer to clear.
+
+    // Switch uart to desired baud
+    uart_set_baudrate(UART_NUM_2, upload_baudrate);
+
+    xSemaphoreGive(Nextion::_uart_write_mutex);
+    return ESP_OK;
+  } else {
+    ESP_LOGE("Nextion", "Failed to take _uart_write_mutex while trying to start update to panel.");
+  }
+  return ESP_ERR_NOT_FINISHED;
+}
+
+esp_err_t Nextion::write_update_bytes(uint8_t *data, uint16_t size) {
+  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+    bool write_success = uart_write_bytes(UART_NUM_2, data, size) >= 0;
+    uart_wait_tx_done(UART_NUM_2, pdMS_TO_TICKS(1000)); // Wait up to 1 second for TX buffer to clear.
+
+    xSemaphoreGive(Nextion::_uart_write_mutex);
+    return write_success ? ESP_OK : ESP_ERR_NOT_FINISHED;
+  } else {
+    ESP_LOGE("Nextion", "Failed to take _uart_write_mutex while trying to start update to panel.");
+  }
+  return ESP_ERR_NOT_FINISHED;
 }
