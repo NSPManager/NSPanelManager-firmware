@@ -671,13 +671,17 @@ esp_err_t Nextion::start_update(uint32_t upload_baudrate, bool use_new_upload_pr
     init_upload_command.append(",1");
     uart_write_bytes(UART_NUM_2, init_upload_command.c_str(), init_upload_command.length());
 
+    ESP_LOGD("Nextion", "Sending update init command to Nextion display: %s", init_upload_command.c_str());
+
     uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
     uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
 
     uart_wait_tx_done(UART_NUM_2, pdMS_TO_TICKS(1000)); // Wait up to 1 second for TX buffer to clear.
 
     // Switch uart to desired baud
-    uart_set_baudrate(UART_NUM_2, upload_baudrate);
+    if (uart_set_baudrate(UART_NUM_2, upload_baudrate) != ESP_OK) {
+      ESP_LOGE("Nextion", "Failed to set UART baudrate %lu when initializing Nextion update!", upload_baudrate);
+    }
 
     xSemaphoreGive(Nextion::_uart_write_mutex);
     return ESP_OK;

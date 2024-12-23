@@ -51,6 +51,11 @@ private:
    */
   static void _nspm_config_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
+  /**
+   * Handle events from StatusUpdateManager for when a new average temperature has been calculated
+   */
+  static void _new_temperature_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
   // Vars:
   // The most current weather data for forecast and current weather
   static inline NSPanelWeatherUpdate *_weather_update_data = nullptr;
@@ -72,6 +77,9 @@ private:
 
   // Is the screensaver page currently show?
   static inline MutexWrapped<bool> _currently_shown;
+
+  // The temperature currently being shown on the screensaver
+  static inline MutexWrapped<double> _current_temperature;
 
   // What screensaver mode is currently active.
   static inline MutexWrapped<NSPanelConfig__NSPanelScreensaverMode> _current_screensaver_mode;

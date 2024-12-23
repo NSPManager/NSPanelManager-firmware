@@ -3,6 +3,7 @@
 #include <NSPM_ConfigManager.hpp>
 #include <NSPM_ConfigManager_event.hpp>
 #include <StatusUpdateManager.hpp>
+#include <StatusUpdateManager_events.hpp>
 #include <UpdateManager_event.hpp>
 #include <WiFiManager.hpp>
 #include <cmath>
@@ -12,6 +13,8 @@
 #include <esp_mac.h>
 #include <esp_timer.h>
 #include <esp_wifi.h>
+
+ESP_EVENT_DEFINE_BASE(STATUSUPDATEMANAGER_EVENT);
 
 void StatusUpdateManager::init() {
   esp_log_level_set("StatusUpdateManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
@@ -68,8 +71,11 @@ void StatusUpdateManager::_send_status_update(void *arg) {
   size_t packed_data_size = 0;
   std::vector<uint8_t> buffer;
   if (xSemaphoreTake(StatusUpdateManager::_status_report_mutex, pdMS_TO_TICKS(5000)) == pdTRUE) {
-    size_t used_heap_size = heap_caps_get_total_size(MALLOC_CAP_DEFAULT) - xPortGetFreeHeapSize();
-    size_t heap_used_pct = (used_heap_size / (float)heap_caps_get_total_size(MALLOC_CAP_DEFAULT)) * 100;
+    multi_heap_info_t heap_info;
+    heap_caps_get_info(&heap_info, MALLOC_CAP_INTERNAL);
+    float heap_size = heap_info.total_free_bytes + heap_info.total_allocated_bytes;
+
+    size_t heap_used_pct = (heap_info.total_allocated_bytes / heap_size) * 100;
     StatusUpdateManager::_status_report.heap_used_pct = heap_used_pct;
     StatusUpdateManager::_status_report.ip_address = (char *)WiFiManager::ip_string().c_str();
     StatusUpdateManager::_status_report.temperature = StatusUpdateManager::_measured_average_temperature.get();
@@ -97,8 +103,6 @@ void StatusUpdateManager::_send_status_update(void *arg) {
 }
 
 void StatusUpdateManager::_measure_temperature(void *arg) {
-  // TODO: Implement logic to get actual temperature
-
   uint32_t read_voltage_mv;
   if (esp_adc_cal_get_voltage(adc_channel_t::ADC_CHANNEL_2, StatusUpdateManager::_adc_chars, &read_voltage_mv) == ESP_OK) {
     // We now have temperature as a voltage. Convert voltage into celsius:
@@ -119,10 +123,13 @@ void StatusUpdateManager::_measure_temperature(void *arg) {
     // Set _measured_temperature_next_index slot to read value and recalculate average temperature
     StatusUpdateManager::_measured_temperatures[StatusUpdateManager::_measured_temperature_next_index++] = current_temperature;
     StatusUpdateManager::_measured_temperature_total_sum += current_temperature;
-    StatusUpdateManager::_measured_average_temperature.set(StatusUpdateManager::_measured_temperature_total_sum / StatusUpdateManager::_measured_temperature_total_samples);
+    double average_temperature = StatusUpdateManager::_measured_temperature_total_sum / StatusUpdateManager::_measured_temperature_total_samples;
+    StatusUpdateManager::_measured_average_temperature.set(average_temperature);
 
     if (StatusUpdateManager::_measured_temperature_next_index >= 30) {
       StatusUpdateManager::_measured_temperature_next_index = 0;
+      // Only send event ever 30 seconds to skip unnecessary events
+      esp_event_post(STATUSUPDATEMANAGER_EVENT, statusupdatemanagerevent_t::AVERAGE_TEMP_UPDATE, &average_temperature, sizeof(average_temperature), pdMS_TO_TICKS(250));
     }
   } else {
     ESP_LOGW("StatusUpdateManager", "Failed to get read voltage while measuring temperature from NTC.");

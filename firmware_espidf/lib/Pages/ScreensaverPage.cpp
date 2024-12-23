@@ -6,6 +6,7 @@
 #include <NSPM_ConfigManager_event.hpp>
 #include <Nextion.hpp>
 #include <ScreensaverPage.hpp>
+#include <StatusUpdateManager_events.hpp>
 #include <esp_log.h>
 
 void ScreensaverPage::show() {
@@ -19,6 +20,7 @@ void ScreensaverPage::show() {
 
   MqttManager::register_handler(MQTT_EVENT_DATA, ScreensaverPage::_mqtt_event_handler, NULL);
   esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, ESP_EVENT_ANY_ID, ScreensaverPage::_nspm_config_event_handler, NULL);
+  esp_event_handler_register(STATUSUPDATEMANAGER_EVENT, statusupdatemanagerevent_t::AVERAGE_TEMP_UPDATE, ScreensaverPage::_new_temperature_event, NULL);
 
   // This is the first time showing the screensaver page.
   if (ScreensaverPage::_weather_update_data_mutex == NULL) {
@@ -134,6 +136,23 @@ void ScreensaverPage::_nspm_config_event_handler(void *arg, esp_event_base_t eve
     ScreensaverPage::_update_displayed_date();
     ScreensaverPage::_update_displayed_time();
     ScreensaverPage::_update_displayed_weather_data();
+    break;
+  }
+
+  default:
+    break;
+  }
+}
+
+void ScreensaverPage::_new_temperature_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
+  switch (event_id) {
+  case statusupdatemanagerevent_t::AVERAGE_TEMP_UPDATE: {
+    ScreensaverPage::_current_temperature.set(*((double *)event_data));
+    // Got new temp, are we currently showing? If so, update the shown temperature
+    if (ScreensaverPage::_currently_shown.get()) {
+      std::string temperature_string = std::to_string(*((double *)event_data));
+      Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_room_temperature_name, temperature_string.c_str(), 1000);
+    }
     break;
   }
 
