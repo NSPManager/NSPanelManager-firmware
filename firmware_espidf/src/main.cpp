@@ -11,7 +11,44 @@
 #include <WebManager.hpp>
 #include <WiFiManager.hpp>
 #include <esp_log.h>
+#include <format>
 #include <nvs_flash.h>
+
+// Topic on MQTT to send log messages to
+std::string mqtt_log_topic;
+TaskHandle_t task_publish_mqtt_log_message_handle = NULL;
+QueueHandle_t publish_mqtt_log_messages_queue = NULL;
+
+void task_publish_mqtt_log_message(void *param) {
+  char *log_message;
+  for (;;) {
+    if (xQueueReceive(publish_mqtt_log_messages_queue, &log_message, portMAX_DELAY) == pdTRUE) {
+      MqttManager::publish(mqtt_log_topic, log_message, strlen(log_message), false);
+      free(log_message);
+    }
+  }
+}
+
+int custom_log_vprintf(const char *fmt, va_list args) {
+  // vprintf(fmt, args); // Keep default behavior, print to UART
+
+  char *buffer;
+  int len = vasprintf(&buffer, fmt, args);
+  if (len != -1) {
+    printf(buffer);
+    // Wait a maximum of 100ms to get mutex to add message to queue
+    if (publish_mqtt_log_messages_queue != NULL && task_publish_mqtt_log_message_handle != NULL) {
+      // TODO: Is it really necessary to have a separate task for sending logs over MQTT?
+      if (xQueueSend(publish_mqtt_log_messages_queue, &buffer, pdMS_TO_TICKS(100)) != pdTRUE) {
+        free(buffer);
+      }
+    } else {
+      free(buffer);
+    }
+  }
+
+  return len;
+}
 
 extern "C" void app_main() {
   // Set global log level initially. This is later set from saved config.
@@ -54,6 +91,12 @@ extern "C" void app_main() {
   if (!ConfigManager::mqtt_server.empty()) {
     // Start task that handles MQTT connection
     MqttManager::start(&ConfigManager::mqtt_server, &ConfigManager::mqtt_port, &ConfigManager::mqtt_username, &ConfigManager::mqtt_password);
+
+    // MQTT is now setup, enable custom logging through MQTT
+    publish_mqtt_log_messages_queue = xQueueCreate(16, sizeof(char *));
+    xTaskCreatePinnedToCore(task_publish_mqtt_log_message, "pub_mqtt_log", 4096, NULL, 3, &task_publish_mqtt_log_message_handle, 1);
+    mqtt_log_topic = std::format("nspanel/{}/log", WiFiManager::mac_string());
+    esp_log_set_vprintf(custom_log_vprintf);
 
     // Start RoomManager
     RoomManager::init();

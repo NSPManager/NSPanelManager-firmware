@@ -196,7 +196,7 @@ esp_err_t MqttManager::publish(std::string topic, const char *data, size_t lengt
       ESP_LOGE("MqttManager", "Failed to publish to '%s'. Got return code: %d", topic.c_str(), result_code);
     }
   } else {
-    ESP_LOGE("MqttManager", "Failed to public to MQTT topic. Not connected to MQTT server.");
+    ESP_LOGE("MqttManager", "Failed to publish to MQTT topic. Not connected to MQTT server.");
   }
   return ESP_ERR_NOT_FINISHED;
 }
