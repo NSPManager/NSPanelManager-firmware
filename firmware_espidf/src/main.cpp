@@ -23,7 +23,9 @@ void task_publish_mqtt_log_message(void *param) {
   char *log_message;
   for (;;) {
     if (xQueueReceive(publish_mqtt_log_messages_queue, &log_message, portMAX_DELAY) == pdTRUE) {
-      MqttManager::publish(mqtt_log_topic, log_message, strlen(log_message), false);
+      if (MqttManager::connected()) {
+        MqttManager::publish(mqtt_log_topic, log_message, strlen(log_message), false);
+      }
       free(log_message);
     }
   }

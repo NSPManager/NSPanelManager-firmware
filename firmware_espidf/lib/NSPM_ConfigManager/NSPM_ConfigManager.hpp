@@ -2,6 +2,7 @@
 
 #include <esp_event_base.h>
 #include <esp_task.h>
+#include <memory>
 #include <protobuf_nspanel.pb-c.h>
 #include <string>
 
@@ -24,7 +25,7 @@ public:
    * @param config: The place to copy the NSPanelConfig object to
    * @return ESP_OK if everything was done correctly, otherwise ESP_ERR_NOT_FINISHED
    */
-  static esp_err_t get_config(NSPanelConfig *config);
+  static esp_err_t get_config(std::shared_ptr<NSPanelConfig> *config);
 
   /**
    * @brief Get the manager IP address
@@ -66,6 +67,11 @@ private:
    */
   static void _handle_new_config_data(const char *data, size_t data_length);
 
+  /**
+   * When the shared_ptr for the NSPanelConfig goes out of scope and will delete itself, call this to clean up the underlying pointer
+   */
+  static void _delete_nspanelconfig_object_from_shared_ptr(NSPanelConfig *config);
+
   // Vars:
   // Task handle for the task responsible for sending all register requests to the manager. This is used to stop the task once a register_accept has been received.
   static inline TaskHandle_t _task_send_register_request_handle;
@@ -92,5 +98,5 @@ private:
   static inline SemaphoreHandle_t _config_mutex;
 
   // The protobuf NSPanelConfig object decoded from MQTT.
-  static inline NSPanelConfig *_config = NULL;
+  static inline std::shared_ptr<NSPanelConfig> _config = NULL;
 };

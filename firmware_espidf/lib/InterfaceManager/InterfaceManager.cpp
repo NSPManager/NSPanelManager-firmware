@@ -128,13 +128,13 @@ void InterfaceManager::_nextion_event_handler(void *arg, esp_event_base_t event_
 
   case nextion_event_t::WAKE_EVENT: {
     // Someone touched the screensaver, unshow it and go to the default page, whatever is selected in the manager
-    NSPanelConfig config;
+    std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-      Nextion::set_brightness_level(config.screen_dim_level, 1000);
-      if (config.default_page == 0) { // TODO: Convert to protobuf ENUM for clarity
-        HomePage::show();             // TODO: Show the user selected first page
+      Nextion::set_brightness_level(config->screen_dim_level, 1000);
+      if (config->default_page == 0) { // TODO: Convert to protobuf ENUM for clarity
+        HomePage::show();              // TODO: Show the user selected first page
       } else {
-        ESP_LOGE("ScreensaverPage", "Unknown default page %ld, will default to home page!", config.default_page);
+        ESP_LOGE("ScreensaverPage", "Unknown default page %ld, will default to home page!", config->default_page);
         HomePage::show();
       }
     } else {
@@ -151,9 +151,9 @@ void InterfaceManager::_nextion_event_handler(void *arg, esp_event_base_t event_
 void InterfaceManager::_update_manager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
   switch (event_id) {
   case updatemanager_event_t::FIRMWARE_UPDATE_STARTED: {
-    NSPanelConfig config;
+    std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-      Nextion::set_brightness_level(config.screen_dim_level, 1000);
+      Nextion::set_brightness_level(config->screen_dim_level, 1000);
     }
     // If screensaver blocked is false we are currently not showing loading page. Show it.
     if (!InterfaceManager::_screensaver_blocked.get()) {
@@ -166,9 +166,9 @@ void InterfaceManager::_update_manager_event_handler(void *arg, esp_event_base_t
   }
 
   case updatemanager_event_t::LITTLEFS_UPDATE_STARTED: {
-    NSPanelConfig config;
+    std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-      Nextion::set_brightness_level(config.screen_dim_level, 1000);
+      Nextion::set_brightness_level(config->screen_dim_level, 1000);
     }
     // If screensaver blocked is false we are currently not showing loading page. Show it.
     if (!InterfaceManager::_screensaver_blocked.get()) {

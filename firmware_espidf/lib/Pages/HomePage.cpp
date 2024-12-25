@@ -154,11 +154,11 @@ void HomePage::_update_display() {
     uint32_t average_light_level = 0;
     uint32_t average_color_temperature = 0;
 
-    NSPanelConfig config;
+    std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
       std::shared_ptr<NSPanelRoomStatus> status;
-      for (int i = 0; i < config.n_room_ids; i++) {
-        if (RoomManager::get_room_status(&status, config.room_ids[i]) == ESP_OK) {
+      for (int i = 0; i < config->n_room_ids; i++) {
+        if (RoomManager::get_room_status(&status, config->room_ids[i]) == ESP_OK) {
           total_num_ceiling_lights += status->number_of_ceiling_lights_on;
           total_num_table_lights += status->number_of_table_lights_on;
           total_ceiling_lights_brightness += status->ceiling_lights_dim_level;
@@ -173,7 +173,7 @@ void HomePage::_update_display() {
           total_color_temperature += status->ceiling_lights_color_temperature_value;
           total_color_temperature += status->table_lights_color_temperature_value;
         } else {
-          ESP_LOGE("HomePage", "Failed to get NSPanel room status for room id %ld from RoomManager while calculating all lights average light level.", config.room_ids[i]);
+          ESP_LOGE("HomePage", "Failed to get NSPanel room status for room id %ld from RoomManager while calculating all lights average light level.", config->room_ids[i]);
         }
       }
 
@@ -322,11 +322,11 @@ void HomePage::_handle_nextion_event_master_ceiling_lights_button(bool pressed) 
     if (HomePage::_current_edit_mode == HomePageEditMode::ALL_LIGHTS) {
       // We are currently pressing the "Ceiling lights master button", start timer for special mode. Only activate special mode if
       // we are currently not already in special mode.
-      NSPanelConfig config;
+      std::shared_ptr<NSPanelConfig> config;
       if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
         esp_timer_stop(HomePage::_special_mode_timer_handle); // Stop special mode timer in case it's running even though it shouldn't be.
         HomePage::_special_mode_timer_activation_mode = HomePageEditMode::CEILING_LIGHTS;
-        esp_timer_start_once(HomePage::_special_mode_timer_handle, config.special_mode_trigger_time * 1000);
+        esp_timer_start_once(HomePage::_special_mode_timer_handle, config->special_mode_trigger_time * 1000);
       } else {
         ESP_LOGE("HomePage", "Failed to get NSPanel Config from NSPM_ConfigManager!");
       }
@@ -375,11 +375,11 @@ void HomePage::_handle_nextion_event_master_table_lights_button(bool pressed) {
     if (HomePage::_current_edit_mode == HomePageEditMode::ALL_LIGHTS) {
       // We are currently pressing the "Table lights master button", start timer for special mode. Only activate special mode if
       // we are currently not already in special mode.
-      NSPanelConfig config;
+      std::shared_ptr<NSPanelConfig> config;
       if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
         esp_timer_stop(HomePage::_special_mode_timer_handle); // Stop special mode timer in case it's running even though it shouldn't be.
         HomePage::_special_mode_timer_activation_mode = HomePageEditMode::TABLE_LIGHTS;
-        esp_timer_start_once(HomePage::_special_mode_timer_handle, config.special_mode_trigger_time * 1000);
+        esp_timer_start_once(HomePage::_special_mode_timer_handle, config->special_mode_trigger_time * 1000);
       } else {
         ESP_LOGE("HomePage", "Failed to get NSPanel Config from NSPM_ConfigManager!");
       }
@@ -448,9 +448,9 @@ void HomePage::_send_ceiling_master_button_command_to_manager() {
             buffer.clear(); // Empty buffer
             buffer.resize(0);
 
-            NSPanelConfig config;
+            std::shared_ptr<NSPanelConfig> config;
             if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-              if (config.optimistic_mode) {
+              if (config->optimistic_mode) {
                 NSPanelRoomStatus *mutable_status;
                 if (RoomManager::get_current_room_status_mutable(&mutable_status) == ESP_OK) {
                   // Does room contain ceiling lights?
@@ -514,11 +514,11 @@ void HomePage::_send_ceiling_master_button_command_to_manager() {
     uint32_t average_light_level = 0;
     uint32_t average_color_temperature = 0;
 
-    NSPanelConfig config;
+    std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
       std::shared_ptr<NSPanelRoomStatus> status;
-      for (int i = 0; i < config.n_room_ids; i++) {
-        if (RoomManager::get_room_status(&status, config.room_ids[i]) == ESP_OK) {
+      for (int i = 0; i < config->n_room_ids; i++) {
+        if (RoomManager::get_room_status(&status, config->room_ids[i]) == ESP_OK) {
           total_num_ceiling_lights += status->number_of_ceiling_lights_on;
           total_num_table_lights += status->number_of_table_lights_on;
           total_ceiling_lights_brightness += status->ceiling_lights_dim_level;
@@ -533,7 +533,7 @@ void HomePage::_send_ceiling_master_button_command_to_manager() {
           total_color_temperature += status->ceiling_lights_color_temperature_value;
           total_color_temperature += status->table_lights_color_temperature_value;
         } else {
-          ESP_LOGE("HomePage", "Failed to get NSPanel room status for room id %ld from RoomManager while calculating all lights average light level.", config.room_ids[i]);
+          ESP_LOGE("HomePage", "Failed to get NSPanel room status for room id %ld from RoomManager while calculating all lights average light level.", config->room_ids[i]);
         }
       }
 
@@ -568,14 +568,14 @@ void HomePage::_send_ceiling_master_button_command_to_manager() {
       size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
       if (packed_data_size == packed_length) {
         if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) {
-          NSPanelConfig config;
+          std::shared_ptr<NSPanelConfig> config;
           if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-            if (config.optimistic_mode) {
+            if (config->optimistic_mode) {
               NSPanelRoomStatus *mutable_status;
 
               // We are in optimistic mode, update all rooms with new values
-              for (int i = 0; i < config.n_room_ids; i++) {
-                if (RoomManager::get_room_status_mutable(&mutable_status, config.room_ids[i]) == ESP_OK) {
+              for (int i = 0; i < config->n_room_ids; i++) {
+                if (RoomManager::get_room_status_mutable(&mutable_status, config->room_ids[i]) == ESP_OK) {
                   if (average_ceiling_light_level == 0) {
                     mutable_status->ceiling_lights_dim_level = HomePage::_cache_brightness_slider.get();
                     mutable_status->number_of_ceiling_lights_on = mutable_status->number_of_ceiling_lights;
@@ -627,10 +627,10 @@ void HomePage::_send_table_master_button_command_to_manager() {
         size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
         if (packed_data_size == packed_length) {
           if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) {
-            NSPanelConfig config;
+            std::shared_ptr<NSPanelConfig> config;
             if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
               // Panel is running in optimistic mode,
-              if (config.optimistic_mode) {
+              if (config->optimistic_mode) {
                 NSPanelRoomStatus *mutable_status;
                 if (RoomManager::get_current_room_status_mutable(&mutable_status) == ESP_OK) {
                   // Does room contain table lights?
@@ -697,11 +697,11 @@ void HomePage::_send_table_master_button_command_to_manager() {
     uint32_t average_light_level = 0;
     uint32_t average_color_temperature = 0;
 
-    NSPanelConfig config;
+    std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
       std::shared_ptr<NSPanelRoomStatus> status;
-      for (int i = 0; i < config.n_room_ids; i++) {
-        if (RoomManager::get_room_status(&status, config.room_ids[i]) == ESP_OK) {
+      for (int i = 0; i < config->n_room_ids; i++) {
+        if (RoomManager::get_room_status(&status, config->room_ids[i]) == ESP_OK) {
           total_num_ceiling_lights += status->number_of_ceiling_lights_on;
           total_num_table_lights += status->number_of_table_lights_on;
           total_ceiling_lights_brightness += status->ceiling_lights_dim_level;
@@ -716,7 +716,7 @@ void HomePage::_send_table_master_button_command_to_manager() {
           total_color_temperature += status->ceiling_lights_color_temperature_value;
           total_color_temperature += status->table_lights_color_temperature_value;
         } else {
-          ESP_LOGE("HomePage", "Failed to get NSPanel room status for room id %ld from RoomManager while calculating all lights average light level.", config.room_ids[i]);
+          ESP_LOGE("HomePage", "Failed to get NSPanel room status for room id %ld from RoomManager while calculating all lights average light level.", config->room_ids[i]);
         }
       }
 
@@ -751,14 +751,14 @@ void HomePage::_send_table_master_button_command_to_manager() {
       size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
       if (packed_data_size == packed_length) {
         if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) {
-          NSPanelConfig config;
+          std::shared_ptr<NSPanelConfig> config;
           if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-            if (config.optimistic_mode) {
+            if (config->optimistic_mode) {
               NSPanelRoomStatus *mutable_status;
 
               // We are in optimistic mode, update all rooms with new values
-              for (int i = 0; i < config.n_room_ids; i++) {
-                if (RoomManager::get_room_status_mutable(&mutable_status, config.room_ids[i]) == ESP_OK) {
+              for (int i = 0; i < config->n_room_ids; i++) {
+                if (RoomManager::get_room_status_mutable(&mutable_status, config->room_ids[i]) == ESP_OK) {
                   if (average_ceiling_light_level == 0) {
                     mutable_status->ceiling_lights_dim_level = HomePage::_cache_brightness_slider.get();
                     mutable_status->number_of_ceiling_lights_on = mutable_status->number_of_ceiling_lights;
@@ -789,9 +789,9 @@ void HomePage::_send_table_master_button_command_to_manager() {
 void HomePage::_update_brightness_slider_cache() {
   int32_t dimmer_slider_value;
   if (Nextion::get_component_integer_value(GUI_HOME_PAGE::dimmer_slider_name, &dimmer_slider_value, 1000, 250) == ESP_OK) {
-    NSPanelConfig config;
+    std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-      if (dimmer_slider_value >= config.raise_light_level_to_100_above) {
+      if (dimmer_slider_value >= config->raise_light_level_to_100_above) {
         HomePage::_cache_brightness_slider.set(100);
 
         // In the case were we actually raise light level while reading it, update the slider to new value:
@@ -846,10 +846,10 @@ void HomePage::_special_mode_timer_callback(void *arg) {
     ESP_LOGE("HomePage", "Unknown EditMode when processing special mode timer callback.");
   }
 
-  NSPanelConfig config;
+  std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
     esp_timer_stop(HomePage::_special_mode_timeout_timer_handle);
-    esp_err_t result = esp_timer_start_once(HomePage::_special_mode_timeout_timer_handle, config.special_mode_release_time * 1000);
+    esp_err_t result = esp_timer_start_once(HomePage::_special_mode_timeout_timer_handle, config->special_mode_release_time * 1000);
     if (result != ESP_OK) {
       ESP_LOGE("HomePage", "Error while starting timer to exit special mode! Got error: %s", esp_err_to_name(result));
     }
@@ -919,9 +919,9 @@ void HomePage::_handle_brightness_slider_event() {
   if (packed_data_size == packed_length) {
     if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) {
       // TODO: This needs to be pointer to mutable room status in order for this to work.
-      NSPanelConfig config;
+      std::shared_ptr<NSPanelConfig> config;
       if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-        if (config.optimistic_mode) {
+        if (config->optimistic_mode) {
           NSPanelRoomStatus *mutable_status;
           if (RoomManager::get_current_room_status_mutable(&mutable_status) == ESP_OK) {
 

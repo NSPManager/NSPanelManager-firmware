@@ -110,10 +110,7 @@ void NSPM_ConfigManager::_handle_new_config_data(const char *data, size_t data_l
   ESP_LOGI("NSPM_ConfigManager", "Received new config data from MQTT.");
 
   if (xSemaphoreTake(NSPM_ConfigManager::_config_mutex, pdMS_TO_TICKS(5000))) {
-    if (NSPM_ConfigManager::_config != NULL) {
-      nspanel_config__free_unpacked(NSPM_ConfigManager::_config, NULL);
-    }
-    NSPM_ConfigManager::_config = nspanel_config__unpack(NULL, data_length, (const uint8_t *)data);
+    NSPM_ConfigManager::_config = std::shared_ptr<NSPanelConfig>(nspanel_config__unpack(NULL, data_length, (const uint8_t *)data), &NSPM_ConfigManager::_delete_nspanelconfig_object_from_shared_ptr);
     xSemaphoreGive(NSPM_ConfigManager::_config_mutex);
 
     esp_event_post(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, NULL, 0, pdMS_TO_TICKS(250));
@@ -122,10 +119,14 @@ void NSPM_ConfigManager::_handle_new_config_data(const char *data, size_t data_l
   }
 }
 
-esp_err_t NSPM_ConfigManager::get_config(NSPanelConfig *config) {
+void NSPM_ConfigManager::_delete_nspanelconfig_object_from_shared_ptr(NSPanelConfig *config) {
+  nspanel_config__free_unpacked(config, NULL);
+}
+
+esp_err_t NSPM_ConfigManager::get_config(std::shared_ptr<NSPanelConfig> *config) {
   if (NSPM_ConfigManager::_config != NULL) {
     if (xSemaphoreTake(NSPM_ConfigManager::_config_mutex, pdMS_TO_TICKS(5000))) {
-      *config = *NSPM_ConfigManager::_config;
+      *config = NSPM_ConfigManager::_config;
       xSemaphoreGive(NSPM_ConfigManager::_config_mutex);
       return ESP_OK;
     } else {

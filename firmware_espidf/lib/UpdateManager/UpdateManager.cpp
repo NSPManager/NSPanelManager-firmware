@@ -30,7 +30,7 @@ void UpdateManager::init() {
 }
 
 void UpdateManager::update_gui(void *param) {
-  NSPanelConfig config;
+  std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
     esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, UpdateManager::_nextion_event_handler, NULL);
 
@@ -38,7 +38,7 @@ void UpdateManager::update_gui(void *param) {
     tft_file_url.append(NSPM_ConfigManager::get_manager_address());
     tft_file_url.append(":");
     tft_file_url.append(std::to_string(NSPM_ConfigManager::get_manager_port()));
-    tft_file_url.append(config.is_us_panel ? "/download_tft_us" : "/download_tft_eu");
+    tft_file_url.append(config->is_us_panel ? "/download_tft_us" : "/download_tft_eu");
 
     size_t remote_tft_file_size;
     while (UpdateManager::_get_remote_file_size(tft_file_url, &remote_tft_file_size) != ESP_OK) {
@@ -100,8 +100,28 @@ void UpdateManager::update_gui(void *param) {
     }
 
     esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::NEXTION_UPDATE_FINISHED, NULL, 0, pdMS_TO_TICKS(500));
-    ESP_LOGI("UpdateManager", "Nextion GUI update complete. Will restart in 10 seconds.");
-    vTaskDelay(pdMS_TO_TICKS(10000));
+    ESP_LOGI("UpdateManager", "Nextion GUI update complete. Updating stored GUI md5 checksum.");
+
+    std::string gui_md5_checksum_url = "http://";
+    gui_md5_checksum_url.append(NSPM_ConfigManager::get_manager_address());
+    gui_md5_checksum_url.append(":");
+    gui_md5_checksum_url.append(std::to_string(NSPM_ConfigManager::get_manager_port()));
+    gui_md5_checksum_url.append(config->is_us_panel ? "/checksum_tft_file_us" : "/checksum_tft_file_eu");
+
+    ESP_LOGD("UpdateManager", "Will download md5 checksum from URL: %s", gui_md5_checksum_url.c_str());
+    std::vector<uint8_t> data;
+    while (UpdateManager::_download_data(&data, gui_md5_checksum_url.c_str(), -1, -1) != ESP_OK) {
+      ESP_LOGE("UpdateManager", "Failed to get MD5 checksum from manager. Will try again in 1 second.");
+      vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
+    std::string gui_md5 = std::string((char *)data.data(), data.size());
+    ESP_LOGI("UpdateManager", "Got new GUI md5 checksum from manager: %s", gui_md5.c_str());
+    ConfigManager::md5_gui = gui_md5;
+    ConfigManager::save_config();
+
+    ESP_LOGI("UpdateManager", "GUI file successfully updated and new md5 checksum stored. Will reboot in 5 seconds.");
+    vTaskDelay(pdMS_TO_TICKS(5000));
 
     esp_restart();
     vTaskDelete(NULL);
