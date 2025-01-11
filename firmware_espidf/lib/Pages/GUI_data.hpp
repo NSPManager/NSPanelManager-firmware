@@ -130,176 +130,223 @@ public:
 
 class GUI_DROPDOWN_PAGE {
 public:
-/*
-Dropdown page has 2 rows with 3 buttons each
-Each "button" consists of 3 Nextion devices: 
-1 Dual state button (val=0/1 for OFF/ON, txt=is used to choose icon in font
-2 Text Label and 
-3 Hotspot. 
-Hotspot is covering both label and button and is what the user is pressing. 
-Press and release event is activated on hotspots.
-*/
-  static inline const char *page_name = "dropdown";
-  static inline const char *page_header_label = "current";
-  
-  static inline const char *item1_button_name = "i1_button";
-  static inline const char *item1_label_name = "i1_label";
-  static inline const char *item1_hotspot_name = "i1_hotspot";
-  static inline const uint8_t item1_hotspot_id = 13;
-  
-  static inline const char *item2_button_name = "i2_button";
-  static inline const char *item2_label_name = "i2_label";
-  static inline const char *item2_hotspot_name = "i2_hotspot";
-  static inline const uint8_t item2_hotspot_id = 14;
+  /*
+  Dropdown page has 2 rows with 3 buttons each
+  Each "button" consists of 3 Nextion devices:
+  1 Dual state button (val=0/1 for OFF/ON, txt=is used to choose icon in font
+  2 Text Label and
+  3 Hotspot.
+  Hotspot is covering both label and button and is what the user is pressing.
+  Press and release event is activated on hotspots.
+  */
+  static inline constexpr char *page_name = "dropdown";
+  static inline constexpr char *page_header_label = "current";
 
-  static inline const char *item3_button_name = "i3_button";
-  static inline const char *item3_label_name = "i3_label";
-  static inline const char *item3_hotspot_name = "i3_hotspot";
-  static inline const uint8_t item3_hotspot_id = 15;
-  
-  static inline const char *item4_button_name = "i4_button";
-  static inline const char *item4_label_name = "i4_label";
-  static inline const char *item4_hotspot_name = "i4_hotspot";
-  static inline const uint8_t item4_hotspot_id = 16;
-  
-  static inline const char *item5_button_name = "i5_button";
-  static inline const char *item5_label_name = "i5_label";
-  static inline const char *item5_hotspot_name = "i5_hotspot";
-  static inline const uint8_t item5_hotspot_id = 17;
-  
-  static inline const char *item6_button_name = "i6_button";
-  static inline const char *item6_label_name = "i6_label";
-  static inline const char *item6_hotspot_name = "i6_hotspot";
-  static inline const uint8_t item6_hotspot_id = 18;
-  
+  static inline constexpr char *item1_button_name = "i1_button";
+  static inline constexpr char *item1_label_name = "i1_label";
+  static inline constexpr char *item1_hotspot_name = "i1_hotspot";
+  static inline constexpr uint8_t item1_hotspot_id = 13;
+
+  static inline constexpr char *item2_button_name = "i2_button";
+  static inline constexpr char *item2_label_name = "i2_label";
+  static inline constexpr char *item2_hotspot_name = "i2_hotspot";
+  static inline constexpr uint8_t item2_hotspot_id = 14;
+
+  static inline constexpr char *item3_button_name = "i3_button";
+  static inline constexpr char *item3_label_name = "i3_label";
+  static inline constexpr char *item3_hotspot_name = "i3_hotspot";
+  static inline constexpr uint8_t item3_hotspot_id = 15;
+
+  static inline constexpr char *item4_button_name = "i4_button";
+  static inline constexpr char *item4_label_name = "i4_label";
+  static inline constexpr char *item4_hotspot_name = "i4_hotspot";
+  static inline constexpr uint8_t item4_hotspot_id = 16;
+
+  static inline constexpr char *item5_button_name = "i5_button";
+  static inline constexpr char *item5_label_name = "i5_label";
+  static inline constexpr char *item5_hotspot_name = "i5_hotspot";
+  static inline constexpr uint8_t item5_hotspot_id = 17;
+
+  static inline constexpr char *item6_button_name = "i6_button";
+  static inline constexpr char *item6_label_name = "i6_label";
+  static inline constexpr char *item6_hotspot_name = "i6_hotspot";
+  static inline constexpr uint8_t item6_hotspot_id = 18;
 };
-//GUI_ITEMS 4 8 and 12 pages used to display both room items and scene items
 
+// Struct to contain all data relevant for an item slot on en "itemsX" page.
+// This is used to better be able to loop over item slots instead of copy-paste lots
+// of code.
+struct GUI_ITEMS_PAGE_ITEM_DATA {
+  uint8_t item_id;
+  const char *label_name;
+  const char *button_name;
+};
+
+class GUI_ITEMS_PAGE_COMMON {
+public:
+  // color should only be changed when using the switch icon
+  // when using the scene icon color should always be white
+  static inline constexpr uint16_t items_button_off_pco = 65535;  // color when off
+  static inline constexpr uint16_t items_button_off_pco2 = 65535; // color when off
+  static inline constexpr uint16_t items_button_on_pco = 65024;   // color when on
+  static inline constexpr uint16_t items_button_on_pco2 = 65024;  // color when on
+  static inline constexpr char *items_button_switch_on_txt = "u";
+  static inline constexpr char *items_button_switch_off_txt = "v";
+  static inline constexpr char *items_button_saveicon_txt = "w";
+
+  static inline constexpr char *page_header_label = "current";
+  static inline constexpr char *slider_save_name = "slider_save";
+};
+
+// GUI_ITEMS 4, 8 and 12 pages used to display both room items and scene items
 class GUI_ITEMS4_PAGE {
 public:
-  //color should only be changed when using the switch icon
-  //when using the scene icon color should always be white
-  static inline const uint16_t items_button_off_pco = 65535; //color when off
-  static inline const uint16_t items_button_off_pco2 = 65535; //color when off
-  static inline const uint16_t items_button_on_pco = 65024; //color when on
-  static inline const uint16_t items_button_on_pco2 = 65024; //color when on
-  static inline const char *items_button_switch_on_txt = "u";
-  static inline const char *items_button_switch_off_txt = "v";
-  static inline const char *items_button_saveicon_txt = "w";  
-  
-  static inline const char *page_name = "items4";
-  static inline const char *page_header_label = "current";
-  static inline const uint8_t slider_save_id = 9;
-  static inline const char *slider_save_name = "slider_save";
+  static inline constexpr char *page_name = "items4";
+  static inline constexpr uint8_t slider_save_id = 9;
 
-  static inline const uint8_t item1_id = 1;
-  static inline const char *item1_label_name = "i1_label";
-  static inline const char *item1_button_name = "i1_button";
-  static inline const uint8_t item2_id = 2;
-  static inline const char *item2_label_name = "i2_label";
-  static inline const char *item2_button_name = "i2_button";
-  static inline const uint8_t item3_id = 3;
-  static inline const char *item3_label_name = "i3_label";
-  static inline const char *item3_button_name = "i3_button";
-  static inline const uint8_t item4_id = 4;
-  static inline const char *item4_label_name = "i4_label";
-  static inline const char *item4_button_name = "i4_button";
+  // Buttons
+  static inline constexpr uint8_t button_back_id = 10;
+  static inline constexpr uint8_t button_previous_page_id = 11;
+  static inline constexpr uint8_t button_next_page_id = 13;
+
+  static inline constexpr GUI_ITEMS_PAGE_ITEM_DATA item_slots[] = {
+      {
+          .item_id = 1,
+          .label_name = "i1_label",
+          .button_name = "i1_button",
+      },
+      {
+          .item_id = 2,
+          .label_name = "i2_label",
+          .button_name = "i2_button",
+      },
+      {
+          .item_id = 3,
+          .label_name = "i3_label",
+          .button_name = "i3_button",
+      },
+      {
+          .item_id = 4,
+          .label_name = "i4_label",
+          .button_name = "i4_button",
+      },
+  };
 };
 
 class GUI_ITEMS8_PAGE {
 public:
-  //color should only be changed when using the switch icon
-  //when using the scene icon color should always be white
-  static inline const uint16_t items_button_off_pco = 65535; //color when off
-  static inline const uint16_t items_button_off_pco2 = 65535; //color when off
-  static inline const uint16_t items_button_on_pco = 65024; //color when on
-  static inline const uint16_t items_button_on_pco2 = 65024; //color when on
-  static inline const char *items_button_switch_on_txt = "u";
-  static inline const char *items_button_switch_off_txt = "v";
-  static inline const char *items_button_saveicon_txt = "w";
+  static inline constexpr char *page_name = "items8";
+  static inline constexpr uint8_t slider_save_id = 17;
 
-  static inline const char *page_name = "items8";
-  static inline const char *page_header_label = "current";
-  static inline const uint8_t slider_save_id = 17;
-  static inline const char *slider_save_name = "slider_save";
-
-  static inline const uint8_t item1_id = 1;
-  static inline const char *item1_label_name = "i1_label";
-  static inline const char *item1_button_name = "i1_button";
-  static inline const uint8_t item2_id = 2;
-  static inline const char *item2_label_name = "i2_label";
-  static inline const char *item2_button_name = "i2_button";
-  static inline const uint8_t item3_id = 3;
-  static inline const char *item3_label_name = "i3_label";
-  static inline const char *item3_button_name = "i3_button";
-  static inline const uint8_t item4_id = 4;
-  static inline const char *item4_label_name = "i4_label";
-  static inline const char *item4_button_name = "i4_button";
-  static inline const uint8_t item5_id = 5;
-  static inline const char *item5_label_name = "i5_label";
-  static inline const char *item5_button_name = "i5_button";
-  static inline const uint8_t item6_id = 6;
-  static inline const char *item6_label_name = "i6_label";
-  static inline const char *item6_button_name = "i6_button";
-  static inline const uint8_t item7_id = 7;
-  static inline const char *item7_label_name = "i7_label";
-  static inline const char *item7_button_name = "i7_button";
-  static inline const uint8_t item8_id = 8;
-  static inline const char *item8_label_name = "i8_label";
-  static inline const char *item8_button_name = "i8_button";
+  static inline constexpr GUI_ITEMS_PAGE_ITEM_DATA item_slots[] = {
+      {
+          .item_id = 1,
+          .label_name = "i1_label",
+          .button_name = "i1_button",
+      },
+      {
+          .item_id = 2,
+          .label_name = "i2_label",
+          .button_name = "i2_button",
+      },
+      {
+          .item_id = 3,
+          .label_name = "i3_label",
+          .button_name = "i3_button",
+      },
+      {
+          .item_id = 4,
+          .label_name = "i4_label",
+          .button_name = "i4_button",
+      },
+      {
+          .item_id = 5,
+          .label_name = "i5_label",
+          .button_name = "i5_button",
+      },
+      {
+          .item_id = 6,
+          .label_name = "i6_label",
+          .button_name = "i6_button",
+      },
+      {
+          .item_id = 7,
+          .label_name = "i7_label",
+          .button_name = "i7_button",
+      },
+      {
+          .item_id = 8,
+          .label_name = "i8_label",
+          .button_name = "i8_button",
+      },
+  };
 };
 
 class GUI_ITEMS12_PAGE {
 public:
-  //color should only be changed when using the switch icon
-  //when using the scene icon color should always be white
-  static inline const uint16_t items_button_off_pco = 65535; //color when off
-  static inline const uint16_t items_button_off_pco2 = 65535; //color when off
-  static inline const uint16_t items_button_on_pco = 65024; //color when on
-  static inline const uint16_t items_button_on_pco2 = 65024; //color when on
-  static inline const char *items_button_switch_on_txt = "s";
-  static inline const char *items_button_switch_off_txt = "t";
-  static inline const char *items_button_saveicon_txt = "w";  
+  static inline constexpr char *page_name = "items12";
+  static inline constexpr uint8_t slider_save_id = 30;
 
-  static inline const char *page_name = "items12";
-  static inline const char *page_header_label = "current";
-  static inline const uint8_t slider_save_id = 30;
-  static inline const char *slider_save_name = "slider_save";
-
-  static inline const uint8_t item1_id = 1;
-  static inline const char *item1_label_name = "i1_label";
-  static inline const char *item1_button_name = "i1_button";
-  static inline const uint8_t item2_id = 2;
-  static inline const char *item2_label_name = "i2_label";
-  static inline const char *item2_button_name = "i2_button";
-  static inline const uint8_t item3_id = 3;
-  static inline const char *item3_label_name = "i3_label";
-  static inline const char *item3_button_name = "i3_button";
-  static inline const uint8_t item4_id = 4;
-  static inline const char *item4_label_name = "i4_label";
-  static inline const char *item4_button_name = "i4_button";
-  static inline const uint8_t item5_id = 5;
-  static inline const char *item5_label_name = "i5_label";
-  static inline const char *item5_button_name = "i5_button";
-  static inline const uint8_t item6_id = 6;
-  static inline const char *item6_label_name = "i6_label";
-  static inline const char *item6_button_name = "i6_button";
-  static inline const uint8_t item7_id = 7;
-  static inline const char *item7_label_name = "i7_label";
-  static inline const char *item7_button_name = "i7_button";
-  static inline const uint8_t item8_id = 8;
-  static inline const char *item8_label_name = "i8_label";
-  static inline const char *item8_button_name = "i8_button";
-  static inline const uint8_t item9_id = 9;
-  static inline const char *item9_label_name = "i9_label";
-  static inline const char *item9_button_name = "i9_button";
-  static inline const uint8_t item10_id = 10;
-  static inline const char *item10_label_name = "i10_label";
-  static inline const char *item10_button_name = "i10_button";
-  static inline const uint8_t item11_id = 11;
-  static inline const char *item11_label_name = "i11_label";
-  static inline const char *item11_button_name = "i11_button";
-  static inline const uint8_t item12_id = 12;
-  static inline const char *item12_label_name = "i12_label";
-  static inline const char *item12_button_name = "i12_button";
+  static inline constexpr GUI_ITEMS_PAGE_ITEM_DATA item_slots[] = {
+      {
+          .item_id = 1,
+          .label_name = "i1_label",
+          .button_name = "i1_button",
+      },
+      {
+          .item_id = 2,
+          .label_name = "i2_label",
+          .button_name = "i2_button",
+      },
+      {
+          .item_id = 3,
+          .label_name = "i3_label",
+          .button_name = "i3_button",
+      },
+      {
+          .item_id = 4,
+          .label_name = "i4_label",
+          .button_name = "i4_button",
+      },
+      {
+          .item_id = 5,
+          .label_name = "i5_label",
+          .button_name = "i5_button",
+      },
+      {
+          .item_id = 6,
+          .label_name = "i6_label",
+          .button_name = "i6_button",
+      },
+      {
+          .item_id = 7,
+          .label_name = "i7_label",
+          .button_name = "i7_button",
+      },
+      {
+          .item_id = 8,
+          .label_name = "i8_label",
+          .button_name = "i8_button",
+      },
+      {
+          .item_id = 9,
+          .label_name = "i9_label",
+          .button_name = "i9_button",
+      },
+      {
+          .item_id = 10,
+          .label_name = "i10_label",
+          .button_name = "i10_button",
+      },
+      {
+          .item_id = 11,
+          .label_name = "i11_label",
+          .button_name = "i11_button",
+      },
+      {
+          .item_id = 12,
+          .label_name = "i12_label",
+          .button_name = "i12_button",
+      },
+  };
 };
