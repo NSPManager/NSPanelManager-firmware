@@ -30,12 +30,14 @@ void WiFiManager::start_client(std::string *ssid, std::string *psk, std::string 
     ESP_LOGW("WiFiManager", "Failed to set hostname!");
   }
 
-  esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &WiFiManager::_event_handler, NULL);
-  esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &WiFiManager::_event_handler, NULL);
+  esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_START, &WiFiManager::_event_handler, NULL);
+  esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &WiFiManager::_event_handler, NULL);
+  esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_CONNECTED, &WiFiManager::_event_handler, NULL);
+  esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &WiFiManager::_event_handler, NULL);
 
   // Set SSID
   if (ssid->size() > sizeof(WiFiManager::_config.sta.ssid)) {
-    ESP_LOGE("WiFiManager", "SSID To long, max length: %d", sizeof(WiFiManager::_config.sta.ssid));
+    ESP_LOGE("WiFiManager", "SSID too long, max length: %d", sizeof(WiFiManager::_config.sta.ssid));
     return;
   }
   ssid->copy((char *)WiFiManager::_config.sta.ssid, ssid->size(), 0); // Set WiFi SSID

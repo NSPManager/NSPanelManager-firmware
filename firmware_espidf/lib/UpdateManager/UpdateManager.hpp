@@ -52,6 +52,17 @@ private:
   static esp_err_t _update_littlefs_ota();
 
   /**
+   * Setup an HTTP Client with the correct headers. esp_http_client_cleanup is handled in case of errors but not in case of ESP_OK.
+   * @param client: Pointer to HTTP Client handle to use
+   * @param return_data: Where to save received data. Mutex for _download_data_store has to be manually handled.
+   * @param download_url: The URL to try to download data from
+   * @param offset: Start downloading data from an offset from the remote file. -1 will not set header.
+   * @param length: Number of bytes to download from the remote file. -1 will not set header.
+   * @return Will return ESP_OK in case everything was OK, otherwise ESP_ERR_NOT_FINISHED.
+   */
+  static esp_err_t _setup_http_client(esp_http_client_handle_t *client, std::vector<uint8_t> *return_data, const char *download_url, int64_t offset, int64_t length);
+
+  /**
    * Attempt to download data from a URL into a vector.
    * @param return_data: Where to save received data.
    * @param download_url: The URL to try to download data from
@@ -78,6 +89,9 @@ private:
   // Pointer to where to save downloaded data.
   static inline std::vector<uint8_t> *_download_data_store = nullptr;
 
+  // Max number of bytes to download from remote source. Set to 0 for no limit.
+  static inline uint64_t _download_data_max_bytes = 0;
+
   // Mutex so that _download_data_store is only accessed from one task at the time.
   static inline SemaphoreHandle_t _download_data_store_mutex;
 
@@ -88,5 +102,8 @@ private:
   static inline uint64_t _nextion_update_current_offset = 0;
 
   // How many bytes were last written to the Nextion display
-  static inline uint64_t _nextion_update_last_written_bytes = 0;
+  static inline uint64_t _nextion_update_next_chunk_size = 0;
+
+  // After the next interrupt, should we reset the HTTP client?
+  static inline bool _nextion_update_reset_http_client = false;
 };

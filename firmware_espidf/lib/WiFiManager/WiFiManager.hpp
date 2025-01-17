@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <esp_wifi.h>
 #include <string>
 #include <vector>
@@ -63,7 +64,7 @@ private:
   static inline wifi_config_t _config;
 
   // Is the WiFi connected?
-  static inline bool _connected = false;
+  static inline std::atomic<bool> _connected = false;
 
   // Current IP address
   static inline esp_netif_ip_info_t _ip_info;

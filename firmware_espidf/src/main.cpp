@@ -19,6 +19,34 @@ std::string mqtt_log_topic;
 TaskHandle_t task_publish_mqtt_log_message_handle = NULL;
 QueueHandle_t publish_mqtt_log_messages_queue = NULL;
 
+void task_print_mem_usage(void *param) {
+  TaskStatus_t *taskStatusArray;
+  UBaseType_t taskCount = 0;
+  uint32_t totalRAM = 0;
+
+  for (;;) {
+    taskCount = uxTaskGetNumberOfTasks();
+    taskStatusArray = (TaskStatus_t *)pvPortMalloc(taskCount * sizeof(TaskStatus_t));
+
+    if (taskStatusArray != NULL) {
+      taskCount = uxTaskGetSystemState(taskStatusArray, taskCount, NULL);
+      printf("Task Name\t\t\tRAM Usage\n");
+      printf("----------------------------------------\n");
+
+      for (int i = 0; i < taskCount; i++) {
+        printf("%s\t\t\t%lu bytes\n", taskStatusArray[i].pcTaskName,
+               (taskStatusArray[i].usStackHighWaterMark * sizeof(StackType_t)));
+        totalRAM += (taskStatusArray[i].usStackHighWaterMark * sizeof(StackType_t));
+      }
+
+      printf("Total RAM used by tasks: %lu bytes\n", totalRAM);
+      vPortFree(taskStatusArray);
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(5000));
+  }
+}
+
 void task_publish_mqtt_log_message(void *param) {
   char *log_message;
   for (;;) {
@@ -59,6 +87,8 @@ extern "C" void app_main() {
   ESP_LOGI("Main", "Starting NSPanel Manager firmware. Version " NSPM_VERSION ".");
 
   esp_event_loop_create_default();
+
+  // xTaskCreatePinnedToCore(task_print_mem_usage, "task_mem_debug", 4096, NULL, 3, NULL, 1);
 
   nvs_flash_init();
   if (LittleFS::mount() != ESP_OK) {

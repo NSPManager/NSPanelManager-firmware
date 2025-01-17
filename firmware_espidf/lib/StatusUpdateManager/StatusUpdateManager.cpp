@@ -9,6 +9,7 @@
 #include <cmath>
 #include <driver/adc.h>
 #include <esp_adc_cal.h>
+#include <esp_heap_caps.h>
 #include <esp_log.h>
 #include <esp_mac.h>
 #include <esp_timer.h>
@@ -71,11 +72,10 @@ void StatusUpdateManager::_send_status_update(void *arg) {
   size_t packed_data_size = 0;
   std::vector<uint8_t> buffer;
   if (xSemaphoreTake(StatusUpdateManager::_status_report_mutex, pdMS_TO_TICKS(5000)) == pdTRUE) {
-    multi_heap_info_t heap_info;
-    heap_caps_get_info(&heap_info, MALLOC_CAP_INTERNAL);
-    float heap_size = heap_info.total_free_bytes + heap_info.total_allocated_bytes;
+    float total_heap_size = heap_caps_get_total_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
+    float total_heap_used = total_heap_size - heap_caps_get_free_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
 
-    size_t heap_used_pct = (heap_info.total_allocated_bytes / heap_size) * 100;
+    size_t heap_used_pct = (total_heap_used / total_heap_size) * 100;
     StatusUpdateManager::_status_report.heap_used_pct = heap_used_pct;
     StatusUpdateManager::_status_report.ip_address = (char *)WiFiManager::ip_string().c_str();
     StatusUpdateManager::_status_report.temperature = StatusUpdateManager::_measured_average_temperature.get();

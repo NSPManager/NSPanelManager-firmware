@@ -190,9 +190,9 @@ public:
   static inline constexpr uint16_t items_button_off_pco2 = 65535; // color when off
   static inline constexpr uint16_t items_button_on_pco = 65024;   // color when on
   static inline constexpr uint16_t items_button_on_pco2 = 65024;  // color when on
-  static inline constexpr char *items_button_switch_on_txt = "u";
-  static inline constexpr char *items_button_switch_off_txt = "v";
-  static inline constexpr char *items_button_saveicon_txt = "w";
+  static inline constexpr char *items_button_switch_on_icon = "s";
+  static inline constexpr char *items_button_switch_off_icon = "t";
+  static inline constexpr char *items_button_saveicon_icon = "w";
 
   static inline constexpr char *page_header_label = "current";
   static inline constexpr char *slider_save_name = "slider_save";
@@ -237,6 +237,10 @@ class GUI_ITEMS8_PAGE {
 public:
   static inline constexpr char *page_name = "items8";
   static inline constexpr uint8_t slider_save_id = 17;
+
+  static inline constexpr uint8_t button_back_id = 18;
+  static inline constexpr uint8_t button_previous_page_id = 19;
+  static inline constexpr uint8_t button_next_page_id = 21;
 
   static inline constexpr GUI_ITEMS_PAGE_ITEM_DATA item_slots[] = {
       {
@@ -286,6 +290,10 @@ class GUI_ITEMS12_PAGE {
 public:
   static inline constexpr char *page_name = "items12";
   static inline constexpr uint8_t slider_save_id = 30;
+
+  static inline constexpr uint8_t button_back_id = 25;
+  static inline constexpr uint8_t button_previous_page_id = 26;
+  static inline constexpr uint8_t button_next_page_id = 27;
 
   static inline constexpr GUI_ITEMS_PAGE_ITEM_DATA item_slots[] = {
       {

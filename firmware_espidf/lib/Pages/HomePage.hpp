@@ -1,5 +1,6 @@
 #pragma once
 #include <MutexWrapper.hpp>
+#include <atomic>
 #include <cstdint>
 #include <esp_event.h>
 #include <esp_timer.h>
@@ -112,16 +113,16 @@ private:
   static inline HomePageEditMode _current_edit_mode = HomePageEditMode::ALL_LIGHTS;
 
   // The cached value for the "Brightness"-slider
-  static inline MutexWrapped<int32_t> _cache_brightness_slider;
+  static inline std::atomic<int32_t> _cache_brightness_slider;
 
   // The cached value for the "Color temperature"-slider
-  static inline MutexWrapped<int32_t> _cache_color_temperature_slider;
+  static inline std::atomic<int32_t> _cache_color_temperature_slider;
 
   // The cached value for the "Ceiling lights" brightness label
-  static inline MutexWrapped<int32_t> _cache_ceiling_light_brightness;
+  static inline std::atomic<int32_t> _cache_ceiling_light_brightness;
 
   // The cached value for the "Table lights" brightness label
-  static inline MutexWrapped<int32_t> _cache_table_light_brightness;
+  static inline std::atomic<int32_t> _cache_table_light_brightness;
 
   // Should we ignore the next release of the ceiling button? This is used to
   // ignore the touch up that happens after special mode is activated

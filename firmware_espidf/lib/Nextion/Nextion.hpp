@@ -96,6 +96,15 @@ public:
   static esp_err_t set_component_foreground(const char *component_id, uint16_t value, uint16_t mutex_timeout);
 
   /**
+   * @brief Set the component pco2 color
+   * @param component_id: The component to change
+   * @param value: The new pco2 color
+   * @param mutex_timeout: Timeout (in ms) of how long to wait for UART mutex
+   * @return ESP_OK or ESP_ERR_TIMEOUT
+   */
+  static esp_err_t set_component_pco2(const char *component_id, uint16_t value, uint16_t mutex_timeout);
+
+  /**
    * @brief Set a component visibility
    * @param component_id: The component to show or hide
    * @param visible: "true" for shown, "false" for hidden

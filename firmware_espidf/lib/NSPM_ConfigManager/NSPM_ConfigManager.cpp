@@ -29,7 +29,7 @@ void NSPM_ConfigManager::init() {
 
   // We have now subscribed to MQTT command topic, start the task to send MQTT register_requests for managers to answer to
   NSPM_ConfigManager::_send_register_requests = true;
-  xTaskCreate(NSPM_ConfigManager::_task_send_register_request, "register_request_task", 4096, NULL, 2, &NSPM_ConfigManager::_task_send_register_request_handle);
+  xTaskCreatePinnedToCore(NSPM_ConfigManager::_task_send_register_request, "register_request_task", 4096, NULL, 2, &NSPM_ConfigManager::_task_send_register_request_handle, 1);
 }
 
 void NSPM_ConfigManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {

@@ -5,6 +5,7 @@
 #include <LoadingPage.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
+#include <NSPM_ConfigManager_event.hpp>
 #include <Nextion.hpp>
 #include <Nextion_event.hpp>
 #include <RoomManager.hpp>
@@ -27,6 +28,7 @@ void InterfaceManager::init() {
 
   esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_nextion_event_handler, NULL);
   esp_event_handler_register(UPDATEMANAGER_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_update_manager_event_handler, NULL);
+  esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_nspm_configmanager_event_handler, NULL);
   RoomManager::register_handler(ESP_EVENT_ANY_ID, InterfaceManager::_room_manager_event_handler, NULL);
 
   // Show boot page
@@ -91,10 +93,10 @@ void InterfaceManager::init() {
     vTaskDelay(pdMS_TO_TICKS(250));
   }
 
-  LoadingPage::set_loading_text("Loading config");
+  LoadingPage::set_loading_text("Loading config and status");
   NSPM_ConfigManager::init(); // Register to manager and load all config
 
-  ESP_LOGI("InterfaceManager", "Interface manager init complete. Waiting for rooms to load.");
+  ESP_LOGI("InterfaceManager", "Interface manager init complete. Waiting for config and status to load.");
 
   // WiFi and MQTT connected.
   // RoomManager will take over and load the config, once the config has been
@@ -213,11 +215,30 @@ void InterfaceManager::_update_manager_event_handler(void *arg, esp_event_base_t
   }
 }
 
+void InterfaceManager::_nspm_configmanager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
+  switch (event_id) {
+  case nspm_configmanager_event::CONFIG_LOADED: {
+    InterfaceManager::_nspm_config_loaded = true;
+    if (InterfaceManager::_home_page_status_loaded && InterfaceManager::_nspm_config_loaded && LoadingPage::showing()) {
+      ESP_LOGI("InterfaceManager", "Home page status and base config loaded. Will go to home page.");
+      HomePage::show(); // TODO: Show the user selected first page.
+    }
+    break;
+  }
+
+  default:
+    break;
+  }
+}
+
 void InterfaceManager::_room_manager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
   // Received event that all rooms has been loaded AND we are currently on the loading page.
   // This should only happen on first boot of panel, force navigate to Home page.
-  if (event_id == roommanager_event_t::ALL_ROOMS_LOADED && LoadingPage::showing()) {
-    ESP_LOGI("InterfaceManager", "Loaded all rooms and currently showing loading page. Will show HomePage.");
-    HomePage::show(); // TODO: Show the user selected first page.
+  if (event_id == roommanager_event_t::HOME_PAGE_UPDATED) {
+    InterfaceManager::_home_page_status_loaded = true;
+    if (InterfaceManager::_home_page_status_loaded && InterfaceManager::_nspm_config_loaded && LoadingPage::showing()) {
+      ESP_LOGI("InterfaceManager", "Home page status and base config loaded. Will go to home page.");
+      HomePage::show(); // TODO: Show the user selected first page.
+    }
   }
 }

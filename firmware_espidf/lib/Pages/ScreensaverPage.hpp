@@ -1,5 +1,6 @@
 #pragma once
 #include <MutexWrapper.hpp>
+#include <atomic>
 #include <esp_event.h>
 #include <protobuf_nspanel.pb-c.h>
 
@@ -29,7 +30,7 @@ private:
   /**
    * Update the display with new weather forecast and current data
    */
-  static void _update_displayed_weather_data();
+  static void _task_update_displayed_weather_data(void *param);
 
   /**
    * Set the relevant screensaver brightness
@@ -56,9 +57,15 @@ private:
    */
   static void _new_temperature_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
+  /**
+   * Used by std::shared_ptr to delete protobuf object once pointer goes out of scope
+   */
+  static void _shared_ptr_weather_update_cleanup(NSPanelWeatherUpdate *data);
+
   // Vars:
   // The most current weather data for forecast and current weather
-  static inline NSPanelWeatherUpdate *_weather_update_data = nullptr;
+  static inline std::shared_ptr<NSPanelWeatherUpdate> _weather_update_data = nullptr;
+  static inline std::vector<uint8_t> _weather_update_mqtt_data; // Raw data received from MQTT
 
   // Mutex to only allow one task at the time access to _weather_update_data
   static inline SemaphoreHandle_t _weather_update_data_mutex = NULL;
@@ -73,13 +80,13 @@ private:
   static inline MutexWrapped<std::string> _am_pm_string;
 
   // What brightness show the screensaver show. Default to 50%
-  static inline MutexWrapped<uint8_t> _screensaver_brightness;
+  static inline std::atomic<uint8_t> _screensaver_brightness;
 
   // Is the screensaver page currently show?
-  static inline MutexWrapped<bool> _currently_shown;
+  static inline std::atomic<bool> _currently_shown;
 
   // The temperature currently being shown on the screensaver
-  static inline MutexWrapped<double> _current_temperature;
+  static inline std::atomic<double> _current_temperature;
 
   // What screensaver mode is currently active.
   static inline MutexWrapped<NSPanelConfig__NSPanelScreensaverMode> _current_screensaver_mode;

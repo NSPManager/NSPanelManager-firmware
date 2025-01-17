@@ -10,7 +10,7 @@
 #include <esp_log.h>
 
 void ScreensaverPage::show() {
-  if (ScreensaverPage::_currently_shown.get()) {
+  if (ScreensaverPage::_currently_shown) {
     // Do not "show" page again when it's already showing.
     return;
   }
@@ -65,11 +65,11 @@ void ScreensaverPage::show() {
   ScreensaverPage::_go_to_nextion_page();
   ScreensaverPage::_update_displayed_date();
   ScreensaverPage::_update_displayed_time();
-  ScreensaverPage::_update_displayed_weather_data();
+  xTaskCreatePinnedToCore(ScreensaverPage::_task_update_displayed_weather_data, "update_weather_data", 4096, NULL, 2, NULL, 1);
 }
 
 void ScreensaverPage::unshow() {
-  ScreensaverPage::_currently_shown.set(false);
+  ScreensaverPage::_currently_shown = false;
   MqttManager::unregister_handler(MQTT_EVENT_DATA, ScreensaverPage::_mqtt_event_handler);
   esp_event_handler_unregister(NSPM_CONFIGMANAGER_EVENT, ESP_EVENT_ANY_ID, ScreensaverPage::_nspm_config_event_handler);
 }
@@ -92,39 +92,28 @@ void ScreensaverPage::_mqtt_event_handler(void *arg, esp_event_base_t event_base
   weather_topic.append("/status/weather");
 
   if (topic_string.compare(time_topic) == 0) {
-    ScreensaverPage::_current_time.set(std::string(event->data, event->data_len));
+    ScreensaverPage::_current_time = std::string(event->data, event->data_len);
     ScreensaverPage::_update_displayed_time();
   } else if (topic_string.compare(date_topic) == 0) {
     // We got new date, update display:
-    ScreensaverPage::_current_date.set(std::string(event->data, event->data_len));
+    ScreensaverPage::_current_date = std::string(event->data, event->data_len);
     ScreensaverPage::_update_displayed_date();
   } else if (topic_string.compare(ampm_topic) == 0) {
     // We got new AM/PM, update display:
-    ScreensaverPage::_am_pm_string.set(std::string(event->data, event->data_len));
+    ScreensaverPage::_am_pm_string = std::string(event->data, event->data_len);
     ScreensaverPage::_update_displayed_time();
   } else if (topic_string.compare(weather_topic) == 0) {
-    NSPanelWeatherUpdate *new_weather_data = nspanel_weather_update__unpack(NULL, event->data_len, (const uint8_t *)event->data);
-    if (new_weather_data != NULL) {
-      if (ScreensaverPage::_weather_update_data_mutex != NULL) {
-        if (xSemaphoreTake(ScreensaverPage::_weather_update_data_mutex, pdMS_TO_TICKS(500)) == pdPASS) {
-          if (ScreensaverPage::_weather_update_data != nullptr) {
-            nspanel_weather_update__free_unpacked(ScreensaverPage::_weather_update_data, NULL);
-          }
-          ScreensaverPage::_weather_update_data = new_weather_data;
-          xSemaphoreGive(ScreensaverPage::_weather_update_data_mutex);
-
-          // New weather data loaded, update display.
-          ScreensaverPage::_update_displayed_weather_data();
-        } else {
-          ESP_LOGW("ScreensaverPage", "Failed to take weather data mutex while processing new data from MQTT. Will wait for next forecast.");
-          nspanel_weather_update__free_unpacked(new_weather_data, NULL);
-        }
+    if (ScreensaverPage::_weather_update_data_mutex != NULL) {
+      if (xSemaphoreTake(ScreensaverPage::_weather_update_data_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
+        ScreensaverPage::_weather_update_mqtt_data.insert(ScreensaverPage::_weather_update_mqtt_data.end(), event->data, event->data + event->data_len);
+        xSemaphoreGive(ScreensaverPage::_weather_update_data_mutex);
+        // New weather data loaded, update display.
+        xTaskCreatePinnedToCore(ScreensaverPage::_task_update_displayed_weather_data, "update_weather_data", 4096, NULL, 2, NULL, 1);
       } else {
-        ESP_LOGW("ScreensaverPage", "Weather update data mutex is NULL. Will wait for next forecast.");
-        nspanel_weather_update__free_unpacked(new_weather_data, NULL);
+        ESP_LOGW("ScreensaverPage", "Failed to take weather data mutex while processing new data from MQTT. Will wait for next forecast.");
       }
     } else {
-      ESP_LOGE("ScreensaverPage", "Got new weather data on topic but couldn't decode!");
+      ESP_LOGW("ScreensaverPage", "Weather update data mutex is NULL. Will wait for next forecast.");
     }
   }
 }
@@ -135,7 +124,7 @@ void ScreensaverPage::_nspm_config_event_handler(void *arg, esp_event_base_t eve
     ScreensaverPage::_go_to_nextion_page();
     ScreensaverPage::_update_displayed_date();
     ScreensaverPage::_update_displayed_time();
-    ScreensaverPage::_update_displayed_weather_data();
+    xTaskCreatePinnedToCore(ScreensaverPage::_task_update_displayed_weather_data, "update_weather_data", 4096, NULL, 2, NULL, 1);
     break;
   }
 
@@ -147,9 +136,9 @@ void ScreensaverPage::_nspm_config_event_handler(void *arg, esp_event_base_t eve
 void ScreensaverPage::_new_temperature_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
   switch (event_id) {
   case statusupdatemanagerevent_t::AVERAGE_TEMP_UPDATE: {
-    ScreensaverPage::_current_temperature.set(*((double *)event_data));
+    ScreensaverPage::_current_temperature = *((double *)event_data);
     // Got new temp, are we currently showing? If so, update the shown temperature
-    if (ScreensaverPage::_currently_shown.get()) {
+    if (ScreensaverPage::_currently_shown) {
       std::string temperature_string = std::to_string(*((double *)event_data));
       Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_room_temperature_name, temperature_string.c_str(), 1000);
     }
@@ -159,6 +148,10 @@ void ScreensaverPage::_new_temperature_event(void *arg, esp_event_base_t event_b
   default:
     break;
   }
+}
+
+void ScreensaverPage::_shared_ptr_weather_update_cleanup(NSPanelWeatherUpdate *data) {
+  nspanel_weather_update__free_unpacked(data, NULL);
 }
 
 void ScreensaverPage::_update_displayed_time() {
@@ -183,41 +176,53 @@ void ScreensaverPage::_update_displayed_date() {
   }
 }
 
-void ScreensaverPage::_update_displayed_weather_data() {
-  if (xSemaphoreTake(ScreensaverPage::_weather_update_data_mutex, pdMS_TO_TICKS(1000)) == pdPASS) {
-    if (ScreensaverPage::_weather_update_data != nullptr) {
-      Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_weather_icon_name, ScreensaverPage::_weather_update_data->current_weather_icon, 250);
-      Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_temperature_name, ScreensaverPage::_weather_update_data->current_temperature_string, 250);
-      Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_wind_name, ScreensaverPage::_weather_update_data->current_wind_string, 250);
-      Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_sunrise_name, ScreensaverPage::_weather_update_data->sunrise_string, 250);
-      Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_sunset_name, ScreensaverPage::_weather_update_data->sunset_string, 250);
-      Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_max_min_temperature_name, ScreensaverPage::_weather_update_data->current_maxmin_temperature, 250);
-      Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_rain_name, ScreensaverPage::_weather_update_data->current_precipitation_string, 250);
+void ScreensaverPage::_task_update_displayed_weather_data(void *param) {
+  if (xSemaphoreTake(ScreensaverPage::_weather_update_data_mutex, pdMS_TO_TICKS(1000)) == pdPASS) [[likely]] {
+    if (ScreensaverPage::_weather_update_mqtt_data.size() > 0) [[likely]] {
+      NSPanelWeatherUpdate *new_weather_data = nspanel_weather_update__unpack(NULL, ScreensaverPage::_weather_update_mqtt_data.size(), ScreensaverPage::_weather_update_mqtt_data.data());
+      if (new_weather_data != NULL) [[likely]] {
+        ScreensaverPage::_weather_update_data = std::shared_ptr<NSPanelWeatherUpdate>(new_weather_data, &ScreensaverPage::_shared_ptr_weather_update_cleanup);
+        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_weather_icon_name, ScreensaverPage::_weather_update_data->current_weather_icon, 250);
+        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_temperature_name, ScreensaverPage::_weather_update_data->current_temperature_string, 250);
+        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_wind_name, ScreensaverPage::_weather_update_data->current_wind_string, 250);
+        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_sunrise_name, ScreensaverPage::_weather_update_data->sunrise_string, 250);
+        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_sunset_name, ScreensaverPage::_weather_update_data->sunset_string, 250);
+        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_max_min_temperature_name, ScreensaverPage::_weather_update_data->current_maxmin_temperature, 250);
+        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_rain_name, ScreensaverPage::_weather_update_data->current_precipitation_string, 250);
 
-      for (int i = 0; i < ScreensaverPage::_weather_update_data->n_forecast_items && i < 5; i++) { // Update all available forecasts but no more than 5 as that's how many forecasts are displayed on the page
-        auto item = ScreensaverPage::_weather_update_data->forecast_items[i];
-        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_names[i], item->display_string, 250);
-        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_icon_names[i], item->weather_icon, 250);
-        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_max_min_names[i], item->temperature_maxmin_string, 250);
-        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_rain_names[i], item->precipitation_string, 250);
-        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_wind_names[i], item->wind_string, 250);
+        for (int i = 0; i < ScreensaverPage::_weather_update_data->n_forecast_items && i < 5; i++) { // Update all available forecasts but no more than 5 as that's how many forecasts are displayed on the page
+          auto item = ScreensaverPage::_weather_update_data->forecast_items[i];
+          Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_names[i], item->display_string, 250);
+          Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_icon_names[i], item->weather_icon, 250);
+          Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_max_min_names[i], item->temperature_maxmin_string, 250);
+          Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_rain_names[i], item->precipitation_string, 250);
+          Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_wind_names[i], item->wind_string, 250);
+        }
+      } else {
+        ESP_LOGE("ScreensaverPage", "Got new weather data but failed to decode it into protobuf object.");
       }
+    } else {
+      ESP_LOGE("ScreensaverPage", "Trying to update screensaver page but not data to decode protobuf is available.");
     }
+
     xSemaphoreGive(ScreensaverPage::_weather_update_data_mutex);
   } else {
     ESP_LOGE("ScreensaverPage", "Failed to get _weather_update_data_mutex when updating display.");
   }
+
+  vTaskDelete(NULL);         // Stop this task without causing about.
+  vTaskDelay(portMAX_DELAY); // Wait for task to be deleted.
 }
 
 void ScreensaverPage::_update_display_brightness() {
-  Nextion::set_brightness_level(ScreensaverPage::_screensaver_brightness.get(), 1000);
+  Nextion::set_brightness_level(ScreensaverPage::_screensaver_brightness, 1000);
 }
 
 void ScreensaverPage::_go_to_nextion_page() {
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
     ScreensaverPage::_current_screensaver_mode.set(config->screensaver_mode);
-    ScreensaverPage::_screensaver_brightness.set(config->screensaver_dim_level);
+    ScreensaverPage::_screensaver_brightness = config->screensaver_dim_level;
     ScreensaverPage::_update_display_brightness();
   } else {
     ESP_LOGE("ScreensaverPage", "Failed to get NSPanel Config when showing screensaver page! Will cancel operation.");
@@ -228,7 +233,7 @@ void ScreensaverPage::_go_to_nextion_page() {
   case NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITH_BACKGROUND: {
     Nextion::set_component_value(GUI_SCREENSAVER_PAGE::screensaver_background_control_variable_name, 1, 250);
     Nextion::go_to_page(GUI_SCREENSAVER_PAGE::page_name, 250);
-    ScreensaverPage::_currently_shown.set(true);
+    ScreensaverPage::_currently_shown = true;
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_am_pm_name_raw, config->clock_us_style, 250);
     break;
   }
@@ -236,7 +241,7 @@ void ScreensaverPage::_go_to_nextion_page() {
   case NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITHOUT_BACKGROUND: {
     Nextion::set_component_value(GUI_SCREENSAVER_PAGE::screensaver_background_control_variable_name, 0, 250);
     Nextion::go_to_page(GUI_SCREENSAVER_PAGE::page_name, 250);
-    ScreensaverPage::_currently_shown.set(true);
+    ScreensaverPage::_currently_shown = true;
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_am_pm_name_raw, config->clock_us_style, 250);
     break;
   }
@@ -244,7 +249,7 @@ void ScreensaverPage::_go_to_nextion_page() {
   case NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__DATETIME_WITH_BACKGROUND: {
     Nextion::set_component_value(GUI_SCREENSAVER_PAGE::screensaver_background_control_variable_name, 1, 250);
     Nextion::go_to_page(GUI_SCREENSAVER_PAGE::screensaver_minimal_page_name, 250);
-    ScreensaverPage::_currently_shown.set(true);
+    ScreensaverPage::_currently_shown = true;
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_screensaver_minmal_am_pm_name_raw, config->clock_us_style, 250);
     break;
   }
@@ -252,7 +257,7 @@ void ScreensaverPage::_go_to_nextion_page() {
   case NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__DATETIME_WITHOUT_BACKGROUND: {
     Nextion::set_component_value(GUI_SCREENSAVER_PAGE::screensaver_background_control_variable_name, 0, 250);
     Nextion::go_to_page(GUI_SCREENSAVER_PAGE::screensaver_minimal_page_name, 250);
-    ScreensaverPage::_currently_shown.set(true);
+    ScreensaverPage::_currently_shown = true;
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_screensaver_minmal_am_pm_name_raw, config->clock_us_style, 250);
     break;
 

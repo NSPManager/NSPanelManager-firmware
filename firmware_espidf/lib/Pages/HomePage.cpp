@@ -1,3 +1,4 @@
+#include <EntitiesPage.hpp>
 #include <GUI_data.hpp>
 #include <HomePage.hpp>
 #include <InterfaceManager.hpp>
@@ -62,215 +63,134 @@ void HomePage::set_current_edit_mode(HomePageEditMode mode) {
 
 void HomePage::_update_display() {
   // Update displayed data
+  std::shared_ptr<NSPanelRoomStatus> status;
   if (HomePage::_current_affect_mode == HomePageAffectMode::ROOM) {
-    std::shared_ptr<NSPanelRoomStatus> status;
-    if (RoomManager::get_current_room_status(&status) == ESP_OK) {
+    if (RoomManager::get_home_page_status(&status) == ESP_OK) [[likely]] {
       Nextion::set_component_text(GUI_HOME_PAGE::mode_label_name, "Room lights", 100);
       Nextion::set_component_text(GUI_HOME_PAGE::room_label_name, status->name, 100);
-
-      if (HomePage::_current_edit_mode == HomePageEditMode::ALL_LIGHTS) {
-        if (HomePage::_cache_ceiling_light_brightness.get() != status->ceiling_lights_dim_level) {
-          Nextion::set_component_value(GUI_HOME_PAGE::label_ceiling_name, status->ceiling_lights_dim_level, 100);
-          Nextion::set_component_value(GUI_HOME_PAGE::button_ceiling_name, status->ceiling_lights_dim_level > 0, 100);
-          HomePage::_cache_ceiling_light_brightness.set(status->ceiling_lights_dim_level);
-        }
-
-        if (HomePage::_cache_table_light_brightness.get() != status->table_lights_dim_level) {
-          Nextion::set_component_value(GUI_HOME_PAGE::label_table_name, status->table_lights_dim_level, 100);
-          Nextion::set_component_value(GUI_HOME_PAGE::button_table_name, status->table_lights_dim_level > 0, 100);
-          HomePage::_cache_table_light_brightness.set(status->table_lights_dim_level);
-        }
-
-        if (HomePage::_cache_brightness_slider.get() != status->average_dim_level) {
-          Nextion::set_component_value(GUI_HOME_PAGE::dimmer_slider_name, status->average_dim_level, 100);
-          HomePage::_cache_brightness_slider.set(status->average_dim_level);
-        }
-
-        if (HomePage::_cache_color_temperature_slider.get() != status->average_color_temperature) {
-          Nextion::set_component_value(GUI_HOME_PAGE::color_temperature_slider_name, status->average_color_temperature, 100);
-          HomePage::_cache_color_temperature_slider.set(status->average_color_temperature);
-        }
-      } else if (HomePage::_current_edit_mode == HomePageEditMode::CEILING_LIGHTS) {
-        if (HomePage::_cache_ceiling_light_brightness.get() != status->ceiling_lights_dim_level) {
-          Nextion::set_component_value(GUI_HOME_PAGE::label_ceiling_name, status->ceiling_lights_dim_level, 100);
-          Nextion::set_component_value(GUI_HOME_PAGE::button_ceiling_name, status->ceiling_lights_dim_level > 0, 100);
-          HomePage::_cache_ceiling_light_brightness.set(status->ceiling_lights_dim_level);
-        }
-
-        if (HomePage::_cache_brightness_slider.get() != status->ceiling_lights_dim_level) {
-          Nextion::set_component_value(GUI_HOME_PAGE::dimmer_slider_name, status->ceiling_lights_dim_level, 100);
-          HomePage::_cache_brightness_slider.set(status->ceiling_lights_dim_level);
-        }
-
-        if (HomePage::_cache_color_temperature_slider.get() != status->ceiling_lights_color_temperature_value) {
-          Nextion::set_component_value(GUI_HOME_PAGE::color_temperature_slider_name, status->ceiling_lights_color_temperature_value, 100);
-          HomePage::_cache_color_temperature_slider.set(status->ceiling_lights_color_temperature_value);
-        }
-      } else if (HomePage::_current_edit_mode == HomePageEditMode::TABLE_LIGHTS) {
-        if (HomePage::_cache_table_light_brightness.get() != status->table_lights_dim_level) {
-          Nextion::set_component_value(GUI_HOME_PAGE::label_table_name, status->table_lights_dim_level, 100);
-          Nextion::set_component_value(GUI_HOME_PAGE::button_table_name, status->table_lights_dim_level > 0, 100);
-          HomePage::_cache_table_light_brightness.set(status->table_lights_dim_level);
-        }
-
-        if (HomePage::_cache_brightness_slider.get() != status->table_lights_dim_level) {
-          Nextion::set_component_value(GUI_HOME_PAGE::dimmer_slider_name, status->table_lights_dim_level, 100);
-          HomePage::_cache_brightness_slider.set(status->table_lights_dim_level);
-        }
-
-        if (HomePage::_cache_color_temperature_slider.get() != status->table_lights_color_temperature_value) {
-          Nextion::set_component_value(GUI_HOME_PAGE::color_temperature_slider_name, status->table_lights_color_temperature_value, 100);
-          HomePage::_cache_color_temperature_slider.set(status->table_lights_color_temperature_value);
-        }
-      } else {
-        ESP_LOGE("HomePage", "Unknown HomePageEditMode!");
-      }
+      Nextion::set_component_pic(GUI_HOME_PAGE::button_scenes_name, GUI_HOME_PAGE::button_scenes_room_pic, 250);
     } else {
-      ESP_LOGE("HomePage", "Failed to get current NSPanelRoomStatus when trying to update home page display.");
+      ESP_LOGE("HomePage", "Failed to get status object for home page. Will abort update.");
+      return;
     }
   } else if (HomePage::_current_affect_mode == HomePageAffectMode::ALL) {
-    // TODO: Implement "Affect all rooms"-mode
-    Nextion::set_component_text(GUI_HOME_PAGE::room_label_name, "All", 100);
-    Nextion::set_component_text(GUI_HOME_PAGE::mode_label_name, "All lights", 100);
-
-    // Calculate average of ALL rooms
-    // TODO: Should all of this be calculated in the manager and then sent down to the panel?
-    // That may inflict some delay, especially when not using optimistic mode.
-    uint64_t total_num_ceiling_lights = 0;
-    uint64_t total_num_table_lights = 0;
-    uint64_t total_ceiling_lights_brightness = 0;
-    uint64_t total_table_lights_brightness = 0;
-    uint64_t total_ceiling_lights_color_temperature = 0;
-    uint64_t total_table_lights_color_temperature = 0;
-    uint64_t total_number_of_lights = 0;
-    uint64_t total_light_level = 0;
-    uint64_t total_color_temperature = 0;
-
-    // Results
-    uint32_t average_ceiling_light_level = 0;
-    uint32_t average_table_light_level = 0;
-    uint32_t average_ceiling_color_temperature = 0;
-    uint32_t average_table_color_temperature = 0;
-    uint32_t average_light_level = 0;
-    uint32_t average_color_temperature = 0;
-
-    std::shared_ptr<NSPanelConfig> config;
-    if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-      std::shared_ptr<NSPanelRoomStatus> status;
-      for (int i = 0; i < config->n_room_ids; i++) {
-        if (RoomManager::get_room_status(&status, config->room_ids[i]) == ESP_OK) {
-          total_num_ceiling_lights += status->number_of_ceiling_lights_on;
-          total_num_table_lights += status->number_of_table_lights_on;
-          total_ceiling_lights_brightness += status->ceiling_lights_dim_level;
-          total_table_lights_brightness += status->table_lights_dim_level;
-          total_ceiling_lights_color_temperature += status->ceiling_lights_color_temperature_value;
-          total_table_lights_color_temperature += status->table_lights_color_temperature_value;
-
-          total_number_of_lights += status->number_of_ceiling_lights_on;
-          total_number_of_lights += status->number_of_table_lights_on;
-          total_light_level += status->ceiling_lights_dim_level;
-          total_light_level += status->table_lights_dim_level;
-          total_color_temperature += status->ceiling_lights_color_temperature_value;
-          total_color_temperature += status->table_lights_color_temperature_value;
-        } else {
-          ESP_LOGE("HomePage", "Failed to get NSPanel room status for room id %ld from RoomManager while calculating all lights average light level.", config->room_ids[i]);
-        }
-      }
-
-      if (total_num_ceiling_lights > 0) {
-        average_ceiling_light_level = total_ceiling_lights_brightness / total_num_ceiling_lights;
-        average_ceiling_color_temperature = total_ceiling_lights_color_temperature / total_num_ceiling_lights;
-      }
-      if (total_num_table_lights > 0) {
-        average_table_light_level = total_table_lights_brightness / total_num_table_lights;
-        average_table_color_temperature = total_table_lights_color_temperature / total_num_table_lights;
-      }
-      if (total_number_of_lights > 0) {
-        average_light_level = total_light_level / total_number_of_lights;
-        average_color_temperature = total_color_temperature / total_number_of_lights;
-      }
+    if (RoomManager::get_home_page_status_all_rooms(&status) == ESP_OK) [[likely]] {
+      Nextion::set_component_text(GUI_HOME_PAGE::mode_label_name, "All lights", 100);
+      Nextion::set_component_text(GUI_HOME_PAGE::room_label_name, "All", 100);
+      Nextion::set_component_pic(GUI_HOME_PAGE::button_scenes_name, GUI_HOME_PAGE::button_scenes_all_rooms_pic, 250);
     } else {
-      ESP_LOGE("HomePage", "Failed to get NSPanelConfig from NSPM_ConfigManager while calculating all lights average light level.");
+      ESP_LOGE("HomePage", "Failed to get status object for home page (all rooms). Will abort update.");
+      return;
+    }
+  } else {
+    ESP_LOGE("HomePage", "Unknown HomePageAffectMode, will abort update!");
+    return;
+  }
+
+  if (HomePage::_current_edit_mode == HomePageEditMode::ALL_LIGHTS) [[likely]] {
+    if (HomePage::_cache_ceiling_light_brightness != status->ceiling_lights_dim_level) {
+      Nextion::set_component_value(GUI_HOME_PAGE::label_ceiling_name, status->ceiling_lights_dim_level, 100);
+      Nextion::set_component_value(GUI_HOME_PAGE::button_ceiling_name, status->ceiling_lights_dim_level > 0, 100);
+      HomePage::_cache_ceiling_light_brightness = status->ceiling_lights_dim_level;
     }
 
-    if (HomePage::_current_edit_mode == HomePageEditMode::ALL_LIGHTS) {
-      if (HomePage::_cache_ceiling_light_brightness.get() != average_ceiling_light_level) {
-        Nextion::set_component_value(GUI_HOME_PAGE::label_ceiling_name, average_ceiling_light_level, 100);
-        Nextion::set_component_value(GUI_HOME_PAGE::button_ceiling_name, average_ceiling_light_level > 0, 100);
-        HomePage::_cache_ceiling_light_brightness.set(average_ceiling_light_level);
-      }
-
-      if (HomePage::_cache_table_light_brightness.get() != average_table_light_level) {
-        Nextion::set_component_value(GUI_HOME_PAGE::label_table_name, average_table_light_level, 100);
-        Nextion::set_component_value(GUI_HOME_PAGE::button_table_name, average_table_light_level > 0, 100);
-        HomePage::_cache_table_light_brightness.set(average_table_light_level);
-      }
-
-      if (HomePage::_cache_brightness_slider.get() != average_light_level) {
-        Nextion::set_component_value(GUI_HOME_PAGE::dimmer_slider_name, average_light_level, 100);
-        HomePage::_cache_brightness_slider.set(average_light_level);
-      }
-
-      if (HomePage::_cache_color_temperature_slider.get() != average_color_temperature) {
-        Nextion::set_component_value(GUI_HOME_PAGE::color_temperature_slider_name, average_color_temperature, 100);
-        HomePage::_cache_color_temperature_slider.set(average_color_temperature);
-      }
-    } else if (HomePage::_current_edit_mode == HomePageEditMode::CEILING_LIGHTS) {
-      if (HomePage::_cache_ceiling_light_brightness.get() != average_ceiling_light_level) {
-        Nextion::set_component_value(GUI_HOME_PAGE::label_ceiling_name, average_ceiling_light_level, 100);
-        Nextion::set_component_value(GUI_HOME_PAGE::button_ceiling_name, average_ceiling_light_level > 0, 100);
-        HomePage::_cache_ceiling_light_brightness.set(average_ceiling_light_level);
-      }
-
-      if (HomePage::_cache_brightness_slider.get() != average_ceiling_light_level) {
-        Nextion::set_component_value(GUI_HOME_PAGE::dimmer_slider_name, average_ceiling_light_level, 100);
-        HomePage::_cache_brightness_slider.set(average_ceiling_light_level);
-      }
-
-      if (HomePage::_cache_color_temperature_slider.get() != average_ceiling_color_temperature) {
-        Nextion::set_component_value(GUI_HOME_PAGE::color_temperature_slider_name, average_ceiling_color_temperature, 100);
-        HomePage::_cache_color_temperature_slider.set(average_ceiling_color_temperature);
-      }
-    } else if (HomePage::_current_edit_mode == HomePageEditMode::TABLE_LIGHTS) {
-      if (HomePage::_cache_table_light_brightness.get() != average_table_light_level) {
-        Nextion::set_component_value(GUI_HOME_PAGE::label_table_name, average_table_light_level, 100);
-        Nextion::set_component_value(GUI_HOME_PAGE::button_table_name, average_table_light_level > 0, 100);
-        HomePage::_cache_table_light_brightness.set(average_table_light_level);
-      }
-
-      if (HomePage::_cache_brightness_slider.get() != average_table_light_level) {
-        Nextion::set_component_value(GUI_HOME_PAGE::dimmer_slider_name, average_table_light_level, 100);
-        HomePage::_cache_brightness_slider.set(average_table_light_level);
-      }
-
-      if (HomePage::_cache_color_temperature_slider.get() != average_table_color_temperature) {
-        Nextion::set_component_value(GUI_HOME_PAGE::color_temperature_slider_name, average_table_color_temperature, 100);
-        HomePage::_cache_color_temperature_slider.set(average_table_color_temperature);
-      }
-    } else {
-      ESP_LOGE("HomePage", "Unknown HomePageEditMode!");
+    if (HomePage::_cache_table_light_brightness != status->table_lights_dim_level) {
+      Nextion::set_component_value(GUI_HOME_PAGE::label_table_name, status->table_lights_dim_level, 100);
+      Nextion::set_component_value(GUI_HOME_PAGE::button_table_name, status->table_lights_dim_level > 0, 100);
+      HomePage::_cache_table_light_brightness = status->table_lights_dim_level;
     }
+
+    // Update brightness slider if it has changed and:
+    // * It is set to 0
+    // * It is set to the max of 100
+    // * It has changed by 3 or more
+    // The cases above is the only scenarios when we need to update the slider and we want to do so as little as possible.
+    // This is because when the slider is updated it flickers the screen.
+    uint8_t brightness_diff = abs(HomePage::_cache_brightness_slider - status->average_dim_level);
+    if ((status->average_dim_level == 100 && brightness_diff != 0) || (status->average_dim_level == 0 && brightness_diff != 0) || brightness_diff >= 3) {
+      Nextion::set_component_value(GUI_HOME_PAGE::dimmer_slider_name, status->average_dim_level, 100);
+      HomePage::_cache_brightness_slider = status->average_dim_level;
+    }
+
+    // Update color temp slider if it has changed and:
+    // * It is set to 0
+    // * It is set to the max of 100
+    // * It has changed by 3 or more
+    // The cases above is the only scenarios when we need to update the slider and we want to do so as little as possible.
+    // This is because when the slider is updated it flickers the screen.
+    uint8_t color_temp_diff = abs(HomePage::_cache_color_temperature_slider - status->average_color_temperature);
+    if ((status->average_color_temperature == 100 && color_temp_diff != 0) || (status->average_color_temperature == 0 && color_temp_diff != 0) || color_temp_diff >= 3) {
+      Nextion::set_component_value(GUI_HOME_PAGE::color_temperature_slider_name, status->average_color_temperature, 100);
+      HomePage::_cache_color_temperature_slider = status->average_color_temperature;
+    }
+  } else if (HomePage::_current_edit_mode == HomePageEditMode::CEILING_LIGHTS) {
+    if (HomePage::_cache_ceiling_light_brightness != status->ceiling_lights_dim_level) {
+      Nextion::set_component_value(GUI_HOME_PAGE::label_ceiling_name, status->ceiling_lights_dim_level, 100);
+      Nextion::set_component_value(GUI_HOME_PAGE::button_ceiling_name, status->ceiling_lights_dim_level > 0, 100);
+      HomePage::_cache_ceiling_light_brightness = status->ceiling_lights_dim_level;
+    }
+
+    // Update brightness slider if it has changed and:
+    // * It is set to 0
+    // * It is set to the max of 100
+    // * It has changed by 3 or more
+    // The cases above is the only scenarios when we need to update the slider and we want to do so as little as possible.
+    // This is because when the slider is updated it flickers the screen.
+    uint8_t brightness_diff = abs(HomePage::_cache_brightness_slider - status->ceiling_lights_dim_level);
+    if ((status->ceiling_lights_dim_level == 100 && brightness_diff != 0) || (status->ceiling_lights_dim_level == 0 && brightness_diff != 0) || brightness_diff >= 3) {
+      Nextion::set_component_value(GUI_HOME_PAGE::dimmer_slider_name, status->ceiling_lights_dim_level, 100);
+      HomePage::_cache_brightness_slider = status->ceiling_lights_dim_level;
+    }
+
+    // Update color temp slider if it has changed and:
+    // * It is set to 0
+    // * It is set to the max of 100
+    // * It has changed by 3 or more
+    // The cases above is the only scenarios when we need to update the slider and we want to do so as little as possible.
+    // This is because when the slider is updated it flickers the screen.
+    uint8_t color_temp_diff = abs(HomePage::_cache_color_temperature_slider - status->ceiling_lights_color_temperature_value);
+    if ((status->ceiling_lights_color_temperature_value == 100 && color_temp_diff != 0) || (status->ceiling_lights_color_temperature_value == 0 && color_temp_diff != 0) || color_temp_diff >= 3) {
+      Nextion::set_component_value(GUI_HOME_PAGE::color_temperature_slider_name, status->ceiling_lights_color_temperature_value, 100);
+      HomePage::_cache_color_temperature_slider = status->ceiling_lights_color_temperature_value;
+    }
+  } else if (HomePage::_current_edit_mode == HomePageEditMode::TABLE_LIGHTS) {
+    if (HomePage::_cache_table_light_brightness != status->table_lights_dim_level) {
+      Nextion::set_component_value(GUI_HOME_PAGE::label_table_name, status->table_lights_dim_level, 100);
+      Nextion::set_component_value(GUI_HOME_PAGE::button_table_name, status->table_lights_dim_level > 0, 100);
+      HomePage::_cache_table_light_brightness = status->table_lights_dim_level;
+    }
+
+    // Update brightness slider if it has changed and :
+    // * It is set to 0
+    // * It is set to the max of 100
+    // * It has changed by 3 or more
+    // The cases above is the only scenarios when we need to update the slider and we want to do so as little as possible.
+    // This is because when the slider is updated it flickers the screen.
+    uint8_t brightness_diff = abs(HomePage::_cache_brightness_slider - status->table_lights_dim_level);
+    if ((status->table_lights_dim_level == 100 && brightness_diff != 0) || (status->table_lights_dim_level == 0 && brightness_diff != 0) || brightness_diff >= 3) {
+      Nextion::set_component_value(GUI_HOME_PAGE::dimmer_slider_name, status->table_lights_dim_level, 100);
+      HomePage::_cache_brightness_slider = status->table_lights_dim_level;
+    }
+
+    // Update color temp slider if it has changed and:
+    // * It is set to 0
+    // * It is set to the max of 100
+    // * It has changed by 3 or more
+    // The cases above is the only scenarios when we need to update the slider and we want to do so as little as possible.
+    // This is because when the slider is updated it flickers the screen.
+    uint8_t color_temp_diff = abs(HomePage::_cache_color_temperature_slider - status->table_lights_color_temperature_value);
+    if ((status->table_lights_color_temperature_value == 100 && color_temp_diff != 0) || (status->table_lights_color_temperature_value == 0 && color_temp_diff != 0) || color_temp_diff >= 3) {
+      Nextion::set_component_value(GUI_HOME_PAGE::color_temperature_slider_name, status->table_lights_color_temperature_value, 100);
+      HomePage::_cache_color_temperature_slider = status->table_lights_color_temperature_value;
+    }
+  } else {
+    ESP_LOGE("HomePage", "Unknown HomePageEditMode!");
   }
 }
 
 void HomePage::_handle_roommanager_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-  switch (event_id) {
-  case roommanager_event_t::CURRENT_ROOM_UPDATED:
+  if (event_id == roommanager_event_t::HOME_PAGE_UPDATED) {
     HomePage::_update_display();
-    break;
-  case roommanager_event_t::ROOM_SWITCHED: {
-    // We pressed the button and we are currently in a special mode, exit special mode.
-    if (esp_timer_is_active(HomePage::_special_mode_timer_handle) == 1) {
-      esp_timer_stop(HomePage::_special_mode_timer_handle); // Stop special mode timer in case it's running even though it shouldn't be.
-    }
-    HomePage::_special_mode_timer_activation_mode = HomePageEditMode::ALL_LIGHTS;
-    HomePage::_special_mode_timeout_timer_callback(NULL); // Revert to "normal mode" in case we aren't already in normal mode
-    HomePage::_update_display();                          // Update display with new values.
-    break;
-  }
-
-  default:
-    break;
   }
 }
 
@@ -305,6 +225,10 @@ void HomePage::_handle_nextion_event(void *arg, esp_event_base_t event_base, int
       default:
         ESP_LOGE("HomePage", "Unknown affect mode when processing 'next mode button' event!");
         break;
+      }
+    } else if (data->component_id == GUI_HOME_PAGE::button_room_entities_id) {
+      if (HomePage::_current_affect_mode == HomePage::HomePageAffectMode::ROOM) {
+        EntitiesPage::show();
       }
     } else {
       ESP_LOGW("HomePage", "Got touch event from unknown ID: %d", data->component_id);
@@ -370,7 +294,6 @@ void HomePage::_handle_nextion_event_master_ceiling_lights_button(bool pressed) 
 }
 
 void HomePage::_handle_nextion_event_master_table_lights_button(bool pressed) {
-  ESP_LOGI("HomePage", "Handle master ceiling button event.");
   if (pressed) {
     if (HomePage::_current_edit_mode == HomePageEditMode::ALL_LIGHTS) {
       // We are currently pressing the "Table lights master button", start timer for special mode. Only activate special mode if
@@ -423,16 +346,21 @@ void HomePage::_handle_nextion_event_master_table_lights_button(bool pressed) {
 }
 
 void HomePage::_send_ceiling_master_button_command_to_manager() {
+  ESP_LOGD("HomePage", "Send table master button event.");
   if (HomePage::_current_affect_mode == HomePageAffectMode::ROOM) {
     std::shared_ptr<NSPanelRoomStatus> status;
-    if (RoomManager::get_current_room_status(&status) == ESP_OK) {
-      if (status->number_of_ceiling_lights > 0) {
+    if (RoomManager::get_home_page_status(&status) == ESP_OK) {
+      if (status->num_ceiling_lights > 0) {
         NSPanelMQTTManagerCommand__FirstPageTurnLightOn turn_light_on_cmd = NSPANEL_MQTTMANAGER_COMMAND__FIRST_PAGE_TURN_LIGHT_ON__INIT;
         turn_light_on_cmd.has_brightness_value = true;
-        turn_light_on_cmd.brightness_slider_value = status->ceiling_lights_dim_level > 0 ? 0 : HomePage::_cache_brightness_slider.get();
+        if (status->ceiling_lights_dim_level > 0) {
+          turn_light_on_cmd.brightness_slider_value = 0;
+        } else {
+          turn_light_on_cmd.brightness_slider_value = HomePage::_cache_brightness_slider;
+        }
         turn_light_on_cmd.affect_lights = NSPANEL_MQTTMANAGER_COMMAND__AFFECT_LIGHTS_OPTIONS__CEILING_LIGHTS;
         turn_light_on_cmd.has_kelvin_value = true;
-        turn_light_on_cmd.kelvin_slider_value = HomePage::_cache_color_temperature_slider.get();
+        turn_light_on_cmd.kelvin_slider_value = HomePage::_cache_color_temperature_slider;
         turn_light_on_cmd.global = false;
         turn_light_on_cmd.selected_room = status->id;
 
@@ -443,44 +371,37 @@ void HomePage::_send_ceiling_master_button_command_to_manager() {
         uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
         std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
         size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
-        if (packed_data_size == packed_length) {
-          if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) {
-            buffer.clear(); // Empty buffer
-            buffer.resize(0);
-
+        if (packed_data_size == packed_length) [[likely]] {
+          if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) [[likely]] {
             std::shared_ptr<NSPanelConfig> config;
-            if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-              if (config->optimistic_mode) {
-                NSPanelRoomStatus *mutable_status;
-                if (RoomManager::get_current_room_status_mutable(&mutable_status) == ESP_OK) {
-                  // Does room contain ceiling lights?
-                  // If all lights were off, they are now all on
-                  if (status->ceiling_lights_dim_level == 0) {
-                    status->ceiling_lights_dim_level = HomePage::_cache_brightness_slider.get();
-                    status->number_of_ceiling_lights_on = status->number_of_ceiling_lights;
-                  } else {
-                    status->ceiling_lights_dim_level = 0;
-                    status->number_of_ceiling_lights_on = 0;
-                  }
-                  // Calculate new average of total color temperature:
-                  uint64_t total_light_level = 0;
-                  uint16_t number_of_lights_on = 0;
-                  total_light_level = status->ceiling_lights_dim_level * status->number_of_ceiling_lights_on;
-                  number_of_lights_on += status->number_of_ceiling_lights_on;
-                  total_light_level += status->table_lights_dim_level * status->number_of_table_lights_on;
-                  number_of_lights_on += status->number_of_table_lights_on;
-
-                  if (number_of_lights_on > 0) {
-                    status->average_dim_level = total_light_level / number_of_lights_on;
-                  }
-                  RoomManager::replace_room_status(mutable_status);
-                  HomePage::_update_display();
+            if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+              std::shared_ptr<NSPanelRoomStatus> mut_status;
+              if (RoomManager::get_home_page_status_mutable(&mut_status) == ESP_OK) [[likely]] {
+                // Does room contain ceiling lights?
+                // If all lights were off, they are now all on
+                if (mut_status->ceiling_lights_dim_level == 0) {
+                  mut_status->ceiling_lights_dim_level = HomePage::_cache_brightness_slider;
+                  mut_status->num_ceiling_lights_on = mut_status->num_ceiling_lights;
                 } else {
-                  ESP_LOGW("HomePage", "Failed to get mutable room status. Will wait for return result instead.");
+                  mut_status->ceiling_lights_dim_level = 0;
+                  mut_status->num_ceiling_lights_on = 0;
                 }
+                // Calculate new average of total color temperature:
+                uint16_t total_light_level = mut_status->ceiling_lights_dim_level * mut_status->num_ceiling_lights_on;
+                uint16_t number_of_lights_on = mut_status->num_ceiling_lights_on;
+                total_light_level += mut_status->table_lights_dim_level * mut_status->num_table_lights_on;
+                number_of_lights_on += mut_status->num_table_lights_on;
+
+                if (number_of_lights_on > 0) {
+                  mut_status->average_dim_level = total_light_level / number_of_lights_on;
+                }
+                RoomManager::replace_home_page_status(mut_status);
+                HomePage::_update_display();
+              } else {
+                ESP_LOGW("HomePage", "Failed to get config when checking if optimistic mode is active. Will now update optimistically.");
               }
             } else {
-              ESP_LOGW("HomePage", "Failed to get NSPM config when checking if panel is optimistic. Will wait for return result instead.");
+              ESP_LOGW("HomePage", "Failed to get config when checking if optimistic mode is active. Will now update optimistically.");
             }
           } else {
             ESP_LOGE("HomePage", "Failed to publish data while sending command to manager from 'ceiling master button'!");
@@ -493,69 +414,18 @@ void HomePage::_send_ceiling_master_button_command_to_manager() {
       ESP_LOGE("HomePage", "Failed to get current page room status when trying to send 'ceiling master button' command to manager!");
     }
   } else if (HomePage::_current_affect_mode == HomePageAffectMode::ALL) {
-    // Calculate average of ALL rooms
-    // TODO: Should all of this be calculated in the manager and then sent down to the panel?
-    // That may inflict some delay, especially when not using optimistic mode.
-    uint64_t total_num_ceiling_lights = 0;
-    uint64_t total_num_table_lights = 0;
-    uint64_t total_ceiling_lights_brightness = 0;
-    uint64_t total_table_lights_brightness = 0;
-    uint64_t total_ceiling_lights_color_temperature = 0;
-    uint64_t total_table_lights_color_temperature = 0;
-    uint64_t total_number_of_lights = 0;
-    uint64_t total_light_level = 0;
-    uint64_t total_color_temperature = 0;
-
-    // Results
-    uint32_t average_ceiling_light_level = 0;
-    uint32_t average_table_light_level = 0;
-    uint32_t average_ceiling_color_temperature = 0;
-    uint32_t average_table_color_temperature = 0;
-    uint32_t average_light_level = 0;
-    uint32_t average_color_temperature = 0;
-
-    std::shared_ptr<NSPanelConfig> config;
-    if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-      std::shared_ptr<NSPanelRoomStatus> status;
-      for (int i = 0; i < config->n_room_ids; i++) {
-        if (RoomManager::get_room_status(&status, config->room_ids[i]) == ESP_OK) {
-          total_num_ceiling_lights += status->number_of_ceiling_lights_on;
-          total_num_table_lights += status->number_of_table_lights_on;
-          total_ceiling_lights_brightness += status->ceiling_lights_dim_level;
-          total_table_lights_brightness += status->table_lights_dim_level;
-          total_ceiling_lights_color_temperature += status->ceiling_lights_color_temperature_value;
-          total_table_lights_color_temperature += status->table_lights_color_temperature_value;
-
-          total_number_of_lights += status->number_of_ceiling_lights_on;
-          total_number_of_lights += status->number_of_table_lights_on;
-          total_light_level += status->ceiling_lights_dim_level;
-          total_light_level += status->table_lights_dim_level;
-          total_color_temperature += status->ceiling_lights_color_temperature_value;
-          total_color_temperature += status->table_lights_color_temperature_value;
-        } else {
-          ESP_LOGE("HomePage", "Failed to get NSPanel room status for room id %ld from RoomManager while calculating all lights average light level.", config->room_ids[i]);
-        }
-      }
-
-      if (total_num_ceiling_lights > 0) {
-        average_ceiling_light_level = total_ceiling_lights_brightness / total_num_ceiling_lights;
-        average_ceiling_color_temperature = total_ceiling_lights_color_temperature / total_num_ceiling_lights;
-      }
-      if (total_num_table_lights > 0) {
-        average_table_light_level = total_table_lights_brightness / total_num_table_lights;
-        average_table_color_temperature = total_table_lights_color_temperature / total_num_table_lights;
-      }
-      if (total_number_of_lights > 0) {
-        average_light_level = total_light_level / total_number_of_lights;
-        average_color_temperature = total_color_temperature / total_number_of_lights;
-      }
-
+    std::shared_ptr<NSPanelRoomStatus> status;
+    if (RoomManager::get_home_page_status_all_rooms(&status) == ESP_OK) [[likely]] {
       NSPanelMQTTManagerCommand__FirstPageTurnLightOn turn_light_on_cmd = NSPANEL_MQTTMANAGER_COMMAND__FIRST_PAGE_TURN_LIGHT_ON__INIT;
       turn_light_on_cmd.has_brightness_value = true;
-      turn_light_on_cmd.brightness_slider_value = average_ceiling_light_level > 0 ? 0 : HomePage::_cache_brightness_slider.get();
+      if (status->ceiling_lights_dim_level > 0) {
+        turn_light_on_cmd.brightness_slider_value = 0;
+      } else {
+        turn_light_on_cmd.brightness_slider_value = HomePage::_cache_brightness_slider;
+      }
       turn_light_on_cmd.affect_lights = NSPANEL_MQTTMANAGER_COMMAND__AFFECT_LIGHTS_OPTIONS__CEILING_LIGHTS;
       turn_light_on_cmd.has_kelvin_value = true;
-      turn_light_on_cmd.kelvin_slider_value = HomePage::_cache_color_temperature_slider.get();
+      turn_light_on_cmd.kelvin_slider_value = HomePage::_cache_color_temperature_slider;
       turn_light_on_cmd.global = true;     // Affect all rooms
       turn_light_on_cmd.selected_room = 0; // Set to 0 as it doesn't matter when "global" is set to true
 
@@ -566,29 +436,27 @@ void HomePage::_send_ceiling_master_button_command_to_manager() {
       uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
       std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
       size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
-      if (packed_data_size == packed_length) {
-        if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) {
+      if (packed_data_size == packed_length) [[likely]] {
+        if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) [[likely]] {
           std::shared_ptr<NSPanelConfig> config;
-          if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-            if (config->optimistic_mode) {
-              NSPanelRoomStatus *mutable_status;
+          if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+            if (config->optimistic_mode) [[likely]] {
+              std::shared_ptr<NSPanelRoomStatus> mutable_status;
 
               // We are in optimistic mode, update all rooms with new values
-              for (int i = 0; i < config->n_room_ids; i++) {
-                if (RoomManager::get_room_status_mutable(&mutable_status, config->room_ids[i]) == ESP_OK) {
-                  if (average_ceiling_light_level == 0) {
-                    mutable_status->ceiling_lights_dim_level = HomePage::_cache_brightness_slider.get();
-                    mutable_status->number_of_ceiling_lights_on = mutable_status->number_of_ceiling_lights;
-                  } else {
-                    mutable_status->ceiling_lights_dim_level = 0;
-                    mutable_status->number_of_ceiling_lights_on = 0;
-                  }
-                  RoomManager::replace_room_status(mutable_status);
+              if (RoomManager::get_home_page_status_mutable_all_rooms(&mutable_status) == ESP_OK) [[likely]] {
+                if (status->average_dim_level == 0) {
+                  mutable_status->ceiling_lights_dim_level = HomePage::_cache_brightness_slider;
+                  mutable_status->num_ceiling_lights_on = mutable_status->num_ceiling_lights;
+                } else {
+                  mutable_status->ceiling_lights_dim_level = 0;
+                  mutable_status->num_ceiling_lights_on = 0;
                 }
+                RoomManager::replace_home_page_status_all_rooms(mutable_status);
+                HomePage::_update_display();
+              } else {
+                ESP_LOGW("HomePage", "Failed to get mutable room status. Will wait for return result instead.");
               }
-              HomePage::_update_display();
-            } else {
-              ESP_LOGW("HomePage", "Failed to get mutable room status. Will wait for return result instead.");
             }
           }
         } else {
@@ -598,23 +466,30 @@ void HomePage::_send_ceiling_master_button_command_to_manager() {
         ESP_LOGE("HomePage", "Failed to publish data while sending command to manager from 'ceiling master button'!");
       }
     } else {
-      ESP_LOGE("HomePage", "Failed to pack data while sending command to manager from 'ceiling master button'!");
+      ESP_LOGE("HomePage", "Failed to get home page status for all rooms. Will abort!");
     }
+  } else {
+    ESP_LOGE("HomePage", "Failed to pack data while sending command to manager from 'ceiling master button'!");
   }
 }
 
 void HomePage::_send_table_master_button_command_to_manager() {
+  ESP_LOGD("HomePage", "Send table master button event.");
   if (HomePage::_current_affect_mode == HomePageAffectMode::ROOM) {
     std::shared_ptr<NSPanelRoomStatus> status;
-    if (RoomManager::get_current_room_status(&status) == ESP_OK) {
-      if (status->number_of_table_lights > 0) {
+    if (RoomManager::get_home_page_status(&status) == ESP_OK) {
+      if (status->num_table_lights > 0) {
         // Build and send command to turn on/off table lights
         NSPanelMQTTManagerCommand__FirstPageTurnLightOn turn_light_on_cmd = NSPANEL_MQTTMANAGER_COMMAND__FIRST_PAGE_TURN_LIGHT_ON__INIT;
         turn_light_on_cmd.has_brightness_value = true;
-        turn_light_on_cmd.brightness_slider_value = status->table_lights_dim_level > 0 ? 0 : HomePage::_cache_brightness_slider.get();
+        if (status->table_lights_dim_level > 0) {
+          turn_light_on_cmd.brightness_slider_value = 0;
+        } else {
+          turn_light_on_cmd.brightness_slider_value = HomePage::_cache_brightness_slider;
+        }
         turn_light_on_cmd.affect_lights = NSPANEL_MQTTMANAGER_COMMAND__AFFECT_LIGHTS_OPTIONS__TABLE_LIGHTS;
         turn_light_on_cmd.has_kelvin_value = true;
-        turn_light_on_cmd.kelvin_slider_value = HomePage::_cache_color_temperature_slider.get();
+        turn_light_on_cmd.kelvin_slider_value = HomePage::_cache_color_temperature_slider;
         turn_light_on_cmd.global = false;
         turn_light_on_cmd.selected_room = status->id;
 
@@ -625,45 +500,37 @@ void HomePage::_send_table_master_button_command_to_manager() {
         uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
         std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
         size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
-        if (packed_data_size == packed_length) {
-          if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) {
+        if (packed_data_size == packed_length) [[likely]] {
+          if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) [[likely]] {
             std::shared_ptr<NSPanelConfig> config;
-            if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-              // Panel is running in optimistic mode,
-              if (config->optimistic_mode) {
-                NSPanelRoomStatus *mutable_status;
-                if (RoomManager::get_current_room_status_mutable(&mutable_status) == ESP_OK) {
-                  // Does room contain table lights?
-                  // If all lights were off, they are now all on
-                  if (mutable_status->table_lights_dim_level == 0) {
-                    mutable_status->table_lights_dim_level = HomePage::_cache_brightness_slider.get();
-                    mutable_status->number_of_table_lights_on = mutable_status->number_of_table_lights;
-                  } else {
-                    mutable_status->table_lights_dim_level = 0;
-                    mutable_status->number_of_table_lights_on = 0;
-                  }
-                  // Calculate new average of total color temperature:
-                  uint64_t total_light_level = 0;
-                  uint16_t number_of_lights_on = 0;
-                  total_light_level = mutable_status->ceiling_lights_dim_level * mutable_status->number_of_ceiling_lights_on;
-                  number_of_lights_on += mutable_status->number_of_ceiling_lights_on;
-                  total_light_level += mutable_status->table_lights_dim_level * mutable_status->number_of_table_lights_on;
-                  number_of_lights_on += mutable_status->number_of_table_lights_on;
-
-                  if (number_of_lights_on > 0) {
-                    mutable_status->average_dim_level = total_light_level / number_of_lights_on;
-                  }
-
-                  // As we replace an existing room we do not need to free the *status pointer.
-                  // "Ownership" is handed over the RoomManager
-                  RoomManager::replace_room_status(mutable_status);
-                  HomePage::_update_display();
+            if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+              std::shared_ptr<NSPanelRoomStatus> mut_status;
+              if (RoomManager::get_home_page_status_mutable(&mut_status) == ESP_OK) [[likely]] {
+                // Does room contain table lights?
+                // If all lights were off, they are now all on
+                if (mut_status->table_lights_dim_level == 0) {
+                  mut_status->table_lights_dim_level = HomePage::_cache_brightness_slider;
+                  mut_status->num_table_lights_on = mut_status->num_table_lights;
                 } else {
-                  ESP_LOGW("HomePage", "Failed to get mutable room status object. Will wait fro return result instead.");
+                  mut_status->table_lights_dim_level = 0;
+                  mut_status->num_table_lights_on = 0;
                 }
+                // Calculate new average of total color temperature:
+                uint16_t total_light_level = mut_status->ceiling_lights_dim_level * mut_status->num_ceiling_lights_on;
+                uint16_t number_of_lights_on = mut_status->num_ceiling_lights_on;
+                total_light_level += mut_status->table_lights_dim_level * mut_status->num_table_lights_on;
+                number_of_lights_on += mut_status->num_table_lights_on;
+
+                if (number_of_lights_on > 0) {
+                  mut_status->average_dim_level = total_light_level / number_of_lights_on;
+                }
+                RoomManager::replace_home_page_status(mut_status);
+                HomePage::_update_display();
+              } else {
+                ESP_LOGW("HomePage", "Failed to get config when checking if optimistic mode is active. Will now update optimistically.");
               }
             } else {
-              ESP_LOGW("HomePage", "Failed to get NSPM config when checking if panel is optimistic. Will wait for return result instead.");
+              ESP_LOGW("HomePage", "Failed to get config when checking if optimistic mode is active. Will now update optimistically.");
             }
           } else {
             ESP_LOGE("HomePage", "Failed to publish data while sending command to manager from 'table master button'!");
@@ -676,69 +543,18 @@ void HomePage::_send_table_master_button_command_to_manager() {
       ESP_LOGE("HomePage", "Failed to get current page room status when trying to send 'table master button' command to manager!");
     }
   } else if (HomePage::_current_affect_mode == HomePageAffectMode::ALL) {
-    // Calculate average of ALL rooms
-    // TODO: Should all of this be calculated in the manager and then sent down to the panel?
-    // That may inflict some delay, especially when not using optimistic mode.
-    uint64_t total_num_ceiling_lights = 0;
-    uint64_t total_num_table_lights = 0;
-    uint64_t total_ceiling_lights_brightness = 0;
-    uint64_t total_table_lights_brightness = 0;
-    uint64_t total_ceiling_lights_color_temperature = 0;
-    uint64_t total_table_lights_color_temperature = 0;
-    uint64_t total_number_of_lights = 0;
-    uint64_t total_light_level = 0;
-    uint64_t total_color_temperature = 0;
-
-    // Results
-    uint32_t average_ceiling_light_level = 0;
-    uint32_t average_table_light_level = 0;
-    uint32_t average_ceiling_color_temperature = 0;
-    uint32_t average_table_color_temperature = 0;
-    uint32_t average_light_level = 0;
-    uint32_t average_color_temperature = 0;
-
-    std::shared_ptr<NSPanelConfig> config;
-    if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-      std::shared_ptr<NSPanelRoomStatus> status;
-      for (int i = 0; i < config->n_room_ids; i++) {
-        if (RoomManager::get_room_status(&status, config->room_ids[i]) == ESP_OK) {
-          total_num_ceiling_lights += status->number_of_ceiling_lights_on;
-          total_num_table_lights += status->number_of_table_lights_on;
-          total_ceiling_lights_brightness += status->ceiling_lights_dim_level;
-          total_table_lights_brightness += status->table_lights_dim_level;
-          total_ceiling_lights_color_temperature += status->ceiling_lights_color_temperature_value;
-          total_table_lights_color_temperature += status->table_lights_color_temperature_value;
-
-          total_number_of_lights += status->number_of_ceiling_lights_on;
-          total_number_of_lights += status->number_of_table_lights_on;
-          total_light_level += status->ceiling_lights_dim_level;
-          total_light_level += status->table_lights_dim_level;
-          total_color_temperature += status->ceiling_lights_color_temperature_value;
-          total_color_temperature += status->table_lights_color_temperature_value;
-        } else {
-          ESP_LOGE("HomePage", "Failed to get NSPanel room status for room id %ld from RoomManager while calculating all lights average light level.", config->room_ids[i]);
-        }
-      }
-
-      if (total_num_ceiling_lights > 0) {
-        average_ceiling_light_level = total_ceiling_lights_brightness / total_num_ceiling_lights;
-        average_ceiling_color_temperature = total_ceiling_lights_color_temperature / total_num_ceiling_lights;
-      }
-      if (total_num_table_lights > 0) {
-        average_table_light_level = total_table_lights_brightness / total_num_table_lights;
-        average_table_color_temperature = total_table_lights_color_temperature / total_num_table_lights;
-      }
-      if (total_number_of_lights > 0) {
-        average_light_level = total_light_level / total_number_of_lights;
-        average_color_temperature = total_color_temperature / total_number_of_lights;
-      }
-
+    std::shared_ptr<NSPanelRoomStatus> status;
+    if (RoomManager::get_home_page_status_all_rooms(&status) == ESP_OK) [[likely]] {
       NSPanelMQTTManagerCommand__FirstPageTurnLightOn turn_light_on_cmd = NSPANEL_MQTTMANAGER_COMMAND__FIRST_PAGE_TURN_LIGHT_ON__INIT;
       turn_light_on_cmd.has_brightness_value = true;
-      turn_light_on_cmd.brightness_slider_value = average_table_light_level > 0 ? 0 : HomePage::_cache_brightness_slider.get();
+      if (status->table_lights_dim_level > 0) {
+        turn_light_on_cmd.brightness_slider_value = 0;
+      } else {
+        turn_light_on_cmd.brightness_slider_value = HomePage::_cache_brightness_slider;
+      }
       turn_light_on_cmd.affect_lights = NSPANEL_MQTTMANAGER_COMMAND__AFFECT_LIGHTS_OPTIONS__TABLE_LIGHTS;
       turn_light_on_cmd.has_kelvin_value = true;
-      turn_light_on_cmd.kelvin_slider_value = HomePage::_cache_color_temperature_slider.get();
+      turn_light_on_cmd.kelvin_slider_value = HomePage::_cache_color_temperature_slider;
       turn_light_on_cmd.global = true;     // Affect all rooms
       turn_light_on_cmd.selected_room = 0; // Set to 0 as it doesn't matter when "global" is set to true
 
@@ -749,29 +565,27 @@ void HomePage::_send_table_master_button_command_to_manager() {
       uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
       std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
       size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
-      if (packed_data_size == packed_length) {
-        if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) {
+      if (packed_data_size == packed_length) [[likely]] {
+        if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) [[likely]] {
           std::shared_ptr<NSPanelConfig> config;
-          if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-            if (config->optimistic_mode) {
-              NSPanelRoomStatus *mutable_status;
+          if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+            if (config->optimistic_mode) [[likely]] {
+              std::shared_ptr<NSPanelRoomStatus> mutable_status;
 
               // We are in optimistic mode, update all rooms with new values
-              for (int i = 0; i < config->n_room_ids; i++) {
-                if (RoomManager::get_room_status_mutable(&mutable_status, config->room_ids[i]) == ESP_OK) {
-                  if (average_ceiling_light_level == 0) {
-                    mutable_status->ceiling_lights_dim_level = HomePage::_cache_brightness_slider.get();
-                    mutable_status->number_of_ceiling_lights_on = mutable_status->number_of_ceiling_lights;
-                  } else {
-                    mutable_status->ceiling_lights_dim_level = 0;
-                    mutable_status->number_of_ceiling_lights_on = 0;
-                  }
-                  RoomManager::replace_room_status(mutable_status);
+              if (RoomManager::get_home_page_status_mutable_all_rooms(&mutable_status) == ESP_OK) [[likely]] {
+                if (status->average_dim_level == 0) {
+                  mutable_status->table_lights_dim_level = HomePage::_cache_brightness_slider;
+                  mutable_status->num_table_lights_on = mutable_status->num_table_lights;
+                } else {
+                  mutable_status->table_lights_dim_level = 0;
+                  mutable_status->num_table_lights_on = 0;
                 }
+                RoomManager::replace_home_page_status_all_rooms(mutable_status);
+                HomePage::_update_display();
+              } else {
+                ESP_LOGW("HomePage", "Failed to get mutable room status. Will wait for return result instead.");
               }
-              HomePage::_update_display();
-            } else {
-              ESP_LOGW("HomePage", "Failed to get mutable room status. Will wait for return result instead.");
             }
           }
         } else {
@@ -781,7 +595,7 @@ void HomePage::_send_table_master_button_command_to_manager() {
         ESP_LOGE("HomePage", "Failed to publish data while sending command to manager from 'ceiling master button'!");
       }
     } else {
-      ESP_LOGE("HomePage", "Failed to pack data while sending command to manager from 'ceiling master button'!");
+      ESP_LOGE("HomePage", "Failed to get home page status for all rooms. Will abort!");
     }
   }
 }
@@ -792,15 +606,15 @@ void HomePage::_update_brightness_slider_cache() {
     std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
       if (dimmer_slider_value >= config->raise_light_level_to_100_above) {
-        HomePage::_cache_brightness_slider.set(100);
+        HomePage::_cache_brightness_slider = 100;
 
         // In the case were we actually raise light level while reading it, update the slider to new value:
         Nextion::set_component_value(GUI_HOME_PAGE::dimmer_slider_name, 100, 250);
       } else {
-        HomePage::_cache_brightness_slider.set(dimmer_slider_value);
+        HomePage::_cache_brightness_slider = dimmer_slider_value;
       }
     } else {
-      HomePage::_cache_brightness_slider.set(dimmer_slider_value);
+      HomePage::_cache_brightness_slider = dimmer_slider_value;
     }
   } else {
     ESP_LOGE("HomePage", "Failed to get current color temperature value to update cache!");
@@ -810,7 +624,7 @@ void HomePage::_update_brightness_slider_cache() {
 void HomePage::_update_color_temperature_slider_cache() {
   int32_t color_temperature;
   if (Nextion::get_component_integer_value(GUI_HOME_PAGE::color_temperature_slider_name, &color_temperature, 1000, 250) == ESP_OK) {
-    HomePage::_cache_color_temperature_slider.set(color_temperature);
+    HomePage::_cache_color_temperature_slider = color_temperature;
   } else {
     ESP_LOGE("HomePage", "Failed to get current color temperature slider value to update cache!");
   }
@@ -826,7 +640,7 @@ void HomePage::_special_mode_timer_callback(void *arg) {
     Nextion::set_component_foreground(GUI_HOME_PAGE::dimmer_slider_name, GUI_HOME_PAGE::slider_highlight_color, 100);
     Nextion::set_component_foreground(GUI_HOME_PAGE::color_temperature_slider_name, GUI_HOME_PAGE::slider_highlight_color, 100);
 
-    HomePage::_cache_table_light_brightness.set(-1); // Set cache to -1 so that it updates once special mode ends
+    HomePage::_cache_table_light_brightness = -1; // Set cache to -1 so that it updates once special mode ends
     Nextion::set_component_value(GUI_HOME_PAGE::label_table_name, 0, 100);
     Nextion::set_component_value(GUI_HOME_PAGE::button_table_name, false, 100);
     HomePage::_ignore_next_ceiling_button_touch_up = true;
@@ -837,7 +651,7 @@ void HomePage::_special_mode_timer_callback(void *arg) {
     Nextion::set_component_foreground(GUI_HOME_PAGE::dimmer_slider_name, GUI_HOME_PAGE::slider_highlight_color, 100);
     Nextion::set_component_foreground(GUI_HOME_PAGE::color_temperature_slider_name, GUI_HOME_PAGE::slider_highlight_color, 100);
 
-    HomePage::_cache_ceiling_light_brightness.set(-1); // Set cache to -1 so that it updates once it special mode ends
+    HomePage::_cache_ceiling_light_brightness = -1; // Set cache to -1 so that it updates once it special mode ends
     Nextion::set_component_value(GUI_HOME_PAGE::label_ceiling_name, 0, 100);
     Nextion::set_component_value(GUI_HOME_PAGE::button_ceiling_name, false, 100);
     HomePage::_ignore_next_ceiling_button_touch_up = false;
@@ -882,12 +696,19 @@ void HomePage::_special_mode_timeout_timer_callback(void *arg) {
 }
 
 void HomePage::_handle_brightness_slider_event() {
+  std::shared_ptr<NSPanelRoomStatus> status;
+  if (RoomManager::get_home_page_status(&status) != ESP_OK) {
+    ESP_LOGE("HomePage", "Failed to get home page status when trying to update brightness slider event.");
+    return;
+  }
+
   NSPanelMQTTManagerCommand__FirstPageTurnLightOn turn_light_on_cmd = NSPANEL_MQTTMANAGER_COMMAND__FIRST_PAGE_TURN_LIGHT_ON__INIT;
   turn_light_on_cmd.has_brightness_value = true;
-  turn_light_on_cmd.brightness_slider_value = HomePage::_cache_brightness_slider.get();
+  turn_light_on_cmd.brightness_slider_value = HomePage::_cache_brightness_slider;
   turn_light_on_cmd.has_kelvin_value = false;
   turn_light_on_cmd.kelvin_slider_value = 0;
-  RoomManager::get_current_room_id(&turn_light_on_cmd.selected_room);
+  turn_light_on_cmd.selected_room = status->id;
+
   if (HomePage::_current_edit_mode == HomePageEditMode::ALL_LIGHTS) {
     turn_light_on_cmd.affect_lights = NSPANEL_MQTTMANAGER_COMMAND__AFFECT_LIGHTS_OPTIONS__ALL;
   } else if (HomePage::_current_edit_mode == HomePageEditMode::CEILING_LIGHTS) {
@@ -916,45 +737,71 @@ void HomePage::_handle_brightness_slider_event() {
   std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
   size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
 
-  if (packed_data_size == packed_length) {
-    if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) {
-      // TODO: This needs to be pointer to mutable room status in order for this to work.
+  if (packed_data_size == packed_length) [[likely]] {
+    if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) [[likely]] {
       std::shared_ptr<NSPanelConfig> config;
-      if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-        if (config->optimistic_mode) {
-          NSPanelRoomStatus *mutable_status;
-          if (RoomManager::get_current_room_status_mutable(&mutable_status) == ESP_OK) {
+      if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+        // Get the correct mutable status object.
+        std::shared_ptr<NSPanelRoomStatus> mut_status;
+        if (HomePage::_current_affect_mode == HomePageAffectMode::ROOM) {
+          if (RoomManager::get_home_page_status_mutable(&mut_status) == ESP_OK) [[likely]] {
+          } else {
+            ESP_LOGE("HomePage", "Failed to get mutable home page status. Will abort.");
+            return;
+          }
+        } else if (HomePage::_current_affect_mode == HomePageAffectMode::ALL) {
+          if (RoomManager::get_home_page_status_mutable_all_rooms(&mut_status) == ESP_OK) [[likely]] {
+          } else {
+            ESP_LOGE("HomePage", "Failed to get mutable home page status. Will abort.");
+            return;
+          }
+        } else {
+          ESP_LOGW("HomePage", "Failed to get config when checking if optimistic mode is active. Will not update optimistically.");
+          return;
+        }
 
-            if (mutable_status->number_of_ceiling_lights_on == 0 && mutable_status->number_of_table_lights_on == 0) {
-              mutable_status->number_of_ceiling_lights_on = mutable_status->number_of_ceiling_lights;
-              mutable_status->number_of_table_lights_on = mutable_status->number_of_table_lights;
-            }
-            if (mutable_status->number_of_ceiling_lights_on > 0) {
-              mutable_status->ceiling_lights_dim_level = HomePage::_cache_brightness_slider.get();
-            }
-            if (mutable_status->number_of_table_lights_on > 0) {
-              mutable_status->table_lights_dim_level = HomePage::_cache_brightness_slider.get();
-            }
+        if (mut_status->ceiling_lights_dim_level == 0 && mut_status->table_lights_dim_level == 0) {
+          mut_status->ceiling_lights_dim_level = HomePage::_cache_brightness_slider;
+          mut_status->num_ceiling_lights_on = mut_status->num_ceiling_lights;
+          mut_status->table_lights_dim_level = HomePage::_cache_brightness_slider;
+          mut_status->num_table_lights_on = mut_status->num_table_lights;
+        } else if (mut_status->ceiling_lights_dim_level > 0 && mut_status->table_lights_dim_level == 0) {
+          mut_status->ceiling_lights_dim_level = HomePage::_cache_brightness_slider;
+          mut_status->num_ceiling_lights_on = mut_status->num_ceiling_lights;
+        } else if (mut_status->ceiling_lights_dim_level == 0 && mut_status->table_lights_dim_level > 0) {
+          mut_status->table_lights_dim_level = HomePage::_cache_brightness_slider;
+          mut_status->num_table_lights_on = mut_status->num_table_lights;
+        }
+        // Calculate new average of total color temperature:
+        uint16_t total_light_level = mut_status->ceiling_lights_dim_level * mut_status->num_ceiling_lights_on;
+        uint16_t number_of_lights_on = mut_status->num_ceiling_lights_on;
+        total_light_level += mut_status->table_lights_dim_level * mut_status->num_table_lights_on;
+        number_of_lights_on += mut_status->num_table_lights_on;
 
-            uint64_t total_light_level = 0;
-            uint16_t number_of_lights_on = 0;
-            total_light_level = mutable_status->ceiling_lights_dim_level * mutable_status->number_of_ceiling_lights_on;
-            number_of_lights_on += mutable_status->number_of_ceiling_lights_on;
-            total_light_level += mutable_status->table_lights_dim_level * mutable_status->number_of_table_lights_on;
-            number_of_lights_on += mutable_status->number_of_table_lights_on;
-
-            if (number_of_lights_on > 0) {
-              mutable_status->average_dim_level = total_light_level / number_of_lights_on;
-            }
-
-            RoomManager::replace_room_status(mutable_status);
+        if (number_of_lights_on > 0) {
+          mut_status->average_dim_level = total_light_level / number_of_lights_on;
+        }
+        if (HomePage::_current_affect_mode == HomePageAffectMode::ROOM) {
+          if (RoomManager::replace_home_page_status(mut_status) == ESP_OK) [[likely]] {
             HomePage::_update_display();
           } else {
-            ESP_LOGW("HomePage", "Couldn't get current room status while trying to update screen while in optimistic mode.");
+            ESP_LOGE("HomePage", "Failed to get mutable home page status. Will abort.");
+            return;
           }
+        } else if (HomePage::_current_affect_mode == HomePageAffectMode::ALL) {
+          if (RoomManager::replace_home_page_status_all_rooms(mut_status) == ESP_OK) [[likely]] {
+            HomePage::_update_display();
+          } else {
+            ESP_LOGE("HomePage", "Failed to get mutable home page status. Will abort.");
+            return;
+          }
+        } else {
+          ESP_LOGW("HomePage", "Failed to get config when checking if optimistic mode is active. Will not update optimistically.");
+          return;
         }
+
       } else {
-        ESP_LOGW("HomePage", "Failed to get NSPM config when checking if panel is optimistic. Will wait for return result instead.");
+        ESP_LOGW("HomePage", "Failed to get config when checking if optimistic mode is active. Will not update optimistically.");
       }
     } else {
       ESP_LOGE("HomePage", "Failed to publish data while sending command to manager from 'brightness slider event'!");
@@ -965,12 +812,19 @@ void HomePage::_handle_brightness_slider_event() {
 }
 
 void HomePage::_handle_color_temperature_slider_event() {
+  std::shared_ptr<NSPanelRoomStatus> status;
+  if (RoomManager::get_home_page_status(&status) != ESP_OK) {
+    ESP_LOGE("HomePage", "Failed to get home page status when trying to update color temperature slider event.");
+    return;
+  }
+
   NSPanelMQTTManagerCommand__FirstPageTurnLightOn turn_light_on_cmd = NSPANEL_MQTTMANAGER_COMMAND__FIRST_PAGE_TURN_LIGHT_ON__INIT;
   turn_light_on_cmd.has_brightness_value = false;
   turn_light_on_cmd.brightness_slider_value = 0;
   turn_light_on_cmd.has_kelvin_value = true;
-  turn_light_on_cmd.kelvin_slider_value = HomePage::_cache_color_temperature_slider.get();
-  RoomManager::get_current_room_id(&turn_light_on_cmd.selected_room);
+  turn_light_on_cmd.kelvin_slider_value = HomePage::_cache_color_temperature_slider;
+  turn_light_on_cmd.selected_room = status->id;
+
   if (HomePage::_current_edit_mode == HomePageEditMode::ALL_LIGHTS) {
     turn_light_on_cmd.affect_lights = NSPANEL_MQTTMANAGER_COMMAND__AFFECT_LIGHTS_OPTIONS__ALL;
   } else if (HomePage::_current_edit_mode == HomePageEditMode::CEILING_LIGHTS) {

@@ -34,6 +34,11 @@ private:
   static void _update_manager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
   /**
+   * @brief Handle any event trigger from the NSPM_ConfigManager
+   */
+  static void _nspm_configmanager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
+  /**
    * @brief Handle any event trigger from the RoomManager
    */
   static void _room_manager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
@@ -51,4 +56,10 @@ private:
   // In the case of a Nextion "sleep" event, ie. trigger screensaver, should we
   // or is the screensaver blocked?
   static inline MutexWrapped<bool> _screensaver_blocked = false;
+
+  // Has the config been loaded from NSPanel Manager container yet?
+  static inline bool _nspm_config_loaded = false;
+
+  // Has the status for the home page been loaded from the manager yet?
+  static inline bool _home_page_status_loaded = false;
 };
