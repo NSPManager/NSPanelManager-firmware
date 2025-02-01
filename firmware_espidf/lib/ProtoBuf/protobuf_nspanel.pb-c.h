@@ -17,6 +17,7 @@ PROTOBUF_C__BEGIN_DECLS
 
 typedef struct NSPanelScene NSPanelScene;
 typedef struct NSPanelConfig NSPanelConfig;
+typedef struct NSPanelConfig__RoomInfo NSPanelConfig__RoomInfo;
 typedef struct NSPanelWarning NSPanelWarning;
 typedef struct NSPanelStatusReport NSPanelStatusReport;
 typedef struct NSPanelLightStatus NSPanelLightStatus;
@@ -87,6 +88,18 @@ struct  NSPanelScene
     , 0, 0, (char *)protobuf_c_empty_string }
 
 
+struct  NSPanelConfig__RoomInfo
+{
+  ProtobufCMessage base;
+  int32_t room_id;
+  size_t n_entity_page_ids;
+  int32_t *entity_page_ids;
+};
+#define NSPANEL_CONFIG__ROOM_INFO__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&nspanel_config__room_info__descriptor) \
+    , 0, 0,NULL }
+
+
 struct  NSPanelConfig
 {
   ProtobufCMessage base;
@@ -107,8 +120,8 @@ struct  NSPanelConfig
   /*
    * Allowed rooms
    */
-  size_t n_room_ids;
-  int32_t *room_ids;
+  size_t n_room_infos;
+  NSPanelConfig__RoomInfo **room_infos;
   protobuf_c_boolean reverse_relays;
   protobuf_c_boolean relay1_default_mode;
   protobuf_c_boolean relay2_default_mode;
@@ -126,10 +139,14 @@ struct  NSPanelConfig
   protobuf_c_boolean optimistic_mode;
   int32_t raise_light_level_to_100_above;
   int32_t nspanel_id;
+  protobuf_c_boolean relay1_is_in_relay_group;
+  int32_t relay1_relay_group;
+  protobuf_c_boolean relay2_is_in_relay_group;
+  int32_t relay2_relay_group;
 };
 #define NSPANEL_CONFIG__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&nspanel_config__descriptor) \
-    , (char *)protobuf_c_empty_string, 0, 0, 0, 0, 0, 0, 0, 0, 0, NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITH_BACKGROUND, 0, 0, 0, 0,NULL, 0, 0, 0, 0, 0, (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, 0, (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, 0, 0, 0,NULL, 0, 0, 0 }
+    , (char *)protobuf_c_empty_string, 0, 0, 0, 0, 0, 0, 0, 0, 0, NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITH_BACKGROUND, 0, 0, 0, 0,NULL, 0, 0, 0, 0, 0, (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, 0, (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, 0, 0, 0,NULL, 0, 0, 0, 0, 0, 0, 0 }
 
 
 struct  NSPanelWarning
@@ -234,10 +251,12 @@ struct  NSPanelRoomStatus
   int32_t num_table_lights;
   int32_t num_ceiling_lights_on;
   int32_t num_table_lights_on;
+  size_t n_entity_page_ids;
+  int32_t *entity_page_ids;
 };
 #define NSPANEL_ROOM_STATUS__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&nspanel_room_status__descriptor) \
-    , 0, (char *)protobuf_c_empty_string, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+    , 0, (char *)protobuf_c_empty_string, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,NULL }
 
 
 struct  NSPanelWeatherUpdate__ForecastItem
@@ -426,6 +445,9 @@ NSPanelScene *
 void   nspanel_scene__free_unpacked
                      (NSPanelScene *message,
                       ProtobufCAllocator *allocator);
+/* NSPanelConfig__RoomInfo methods */
+void   nspanel_config__room_info__init
+                     (NSPanelConfig__RoomInfo         *message);
 /* NSPanelConfig methods */
 void   nspanel_config__init
                      (NSPanelConfig         *message);
@@ -613,6 +635,9 @@ void   nspanel_mqttmanager_command__free_unpacked
 typedef void (*NSPanelScene_Closure)
                  (const NSPanelScene *message,
                   void *closure_data);
+typedef void (*NSPanelConfig__RoomInfo_Closure)
+                 (const NSPanelConfig__RoomInfo *message,
+                  void *closure_data);
 typedef void (*NSPanelConfig_Closure)
                  (const NSPanelConfig *message,
                   void *closure_data);
@@ -676,6 +701,7 @@ typedef void (*NSPanelMQTTManagerCommand_Closure)
 extern const ProtobufCEnumDescriptor    nspanel_warning_level__descriptor;
 extern const ProtobufCMessageDescriptor nspanel_scene__descriptor;
 extern const ProtobufCMessageDescriptor nspanel_config__descriptor;
+extern const ProtobufCMessageDescriptor nspanel_config__room_info__descriptor;
 extern const ProtobufCEnumDescriptor    nspanel_config__nspanel_screensaver_mode__descriptor;
 extern const ProtobufCMessageDescriptor nspanel_warning__descriptor;
 extern const ProtobufCMessageDescriptor nspanel_status_report__descriptor;

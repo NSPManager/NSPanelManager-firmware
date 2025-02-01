@@ -1,4 +1,6 @@
 #pragma once
+#include <MutexWrapper.hpp>
+#include <atomic>
 #include <esp_event.h>
 #include <list>
 #include <memory>
@@ -40,6 +42,13 @@ public:
   static esp_err_t get_home_page_status_mutable_all_rooms(std::shared_ptr<NSPanelRoomStatus> *status);
 
   /**
+   * @brief Go to the specified room
+   * @param room_id: The ID of the room to go to.
+   * @return ESP_OK if operation was successful, otherwise ESP_ERR_NOT_FINISHED or ESP_ERR_NOT_FOUND
+   */
+  static esp_err_t go_to_room_id(uint32_t room_id);
+
+  /**
    * @brief Navigate to the previous room in order
    * @return ESP_OK if operation was successful, otherwise ESP_ERR_NOT_FINISHED or ESP_ERR_NOT_FOUND
    */
@@ -50,6 +59,12 @@ public:
    * @return ESP_OK if operation was successful, otherwise ESP_ERR_NOT_FINISHED or ESP_ERR_NOT_FOUND
    */
   static esp_err_t go_to_next_room();
+
+  /**
+   * @brief Navigate to the default room
+   * @return ESP_OK if operation was successful, otherwise ESP_ERR_NOT_FINISHED or ESP_ERR_NOT_FOUND
+   */
+  static esp_err_t go_to_default_room();
 
   /**
    * @brief Will replace current room status with the one provided
@@ -66,20 +81,33 @@ public:
   static esp_err_t replace_home_page_status_all_rooms(std::shared_ptr<NSPanelRoomStatus> status);
 
   /**
-   * @brief Get a NSPanelRoomEntitiesPage status object for the currently selected room that contains all entities to be displayed and their values
+   * @brief Get an NSPanelRoomEntitiesPage status object for the currently selected room that contains all entities to be displayed and their values
    * @param status: Reference to where to save NSPanelRoomEntitiesPage to
    * @return ESP_OK if operation was successful, otherwise ESP_ERR_NOT_FINISHED
    */
   static esp_err_t get_current_room_entities_page_status(std::shared_ptr<NSPanelRoomEntitiesPage> *status);
 
   /**
-   * @brief Navigate to the previous entities page in order
+   * @brief Go to the specified entities page
+   * @param room_id: The ID of the page to go to.
+   * @return ESP_OK if operation was successful, otherwise ESP_ERR_NOT_FINISHED or ESP_ERR_NOT_FOUND
+   */
+  static esp_err_t go_to_entities_page_id(uint32_t page_id);
+
+  /**
+   * @brief Go to the first entities page for the currently selected room.
+   * @return ESP_OK if operation was successful, otherwise ESP_ERR_NOT_FINISHED
+   */
+  static esp_err_t go_to_first_entities_page();
+
+  /**
+   * @brief Navigate to the previous entities page in order and if needed, change to previous room with an entity page defined.
    * @return ESP_OK if operation was successful, otherwise ESP_ERR_NOT_FINISHED or ESP_ERR_NOT_FOUND
    */
   static esp_err_t go_to_previous_entities_page();
 
   /**
-   * @brief Navigate to the next entities page in order
+   * @brief Navigate to the next entities page in order and if needed, change to next room with an entity page defined.
    * @return ESP_OK if operation was successful, otherwise ESP_ERR_NOT_FINISHED or ESP_ERR_NOT_FOUND
    */
   static esp_err_t go_to_next_entities_page();
@@ -131,7 +159,13 @@ private:
   // Status of home page for currently selected room
   static inline std::shared_ptr<NSPanelRoomStatus> _home_page;
 
-  // STatus of home page for all rooms
+  // The MQTT topic to receive the NSPanelRoomStatus protobuf object from.
+  static inline MutexWrapped<std::string> _current_home_page_status_topic;
+
+  // The currently selected room ID
+  static inline std::atomic<uint32_t> _current_room_id;
+
+  // Status of home page for all rooms
   static inline std::shared_ptr<NSPanelRoomStatus> _home_page_all_rooms;
 
   // Mutex to only allow one task at the time to access the status of the home page
@@ -139,6 +173,12 @@ private:
 
   // Current entities page that is showing
   static inline std::shared_ptr<NSPanelRoomEntitiesPage> _entities_page;
+
+  // The MQTT topic to receive EntitiesPage protobuf object from.
+  static inline MutexWrapped<std::string> _current_entities_page_status_topic;
+
+  // The currently selected entity page ID
+  static inline std::atomic<uint32_t> _current_entities_page_id;
 
   // Mutex to allow only one task at the time to access the current entities page shared_ptr
   static inline SemaphoreHandle_t _entities_page_mutex;

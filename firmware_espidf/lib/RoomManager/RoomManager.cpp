@@ -35,6 +35,11 @@ void RoomManager::init() {
 
 esp_err_t RoomManager::get_home_page_status(std::shared_ptr<NSPanelRoomStatus> *status) {
   if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250) == pdPASS)) {
+    if (RoomManager::_home_page == nullptr) [[unlikely]] {
+      xSemaphoreGive(RoomManager::_home_page_mutex);
+      return ESP_ERR_NOT_FINISHED;
+    }
+
     *status = RoomManager::_home_page;
     xSemaphoreGive(RoomManager::_home_page_mutex);
     return ESP_OK;
@@ -46,6 +51,11 @@ esp_err_t RoomManager::get_home_page_status(std::shared_ptr<NSPanelRoomStatus> *
 
 esp_err_t RoomManager::get_home_page_status_all_rooms(std::shared_ptr<NSPanelRoomStatus> *status) {
   if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250) == pdPASS)) {
+    if (RoomManager::_home_page == nullptr) [[unlikely]] {
+      xSemaphoreGive(RoomManager::_home_page_mutex);
+      return ESP_ERR_NOT_FINISHED;
+    }
+
     *status = RoomManager::_home_page_all_rooms;
     xSemaphoreGive(RoomManager::_home_page_mutex);
     return ESP_OK;
@@ -57,6 +67,11 @@ esp_err_t RoomManager::get_home_page_status_all_rooms(std::shared_ptr<NSPanelRoo
 
 esp_err_t RoomManager::get_home_page_status_mutable(std::shared_ptr<NSPanelRoomStatus> *status) {
   if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250) == pdPASS)) {
+    if (RoomManager::_home_page == nullptr) [[unlikely]] {
+      xSemaphoreGive(RoomManager::_home_page_mutex);
+      return ESP_ERR_NOT_FINISHED;
+    }
+
     size_t status_pack_size = nspanel_room_status__get_packed_size(RoomManager::_home_page.get());
     std::vector<uint8_t> buffer(status_pack_size);
     nspanel_room_status__pack(RoomManager::_home_page.get(), buffer.data());
@@ -79,6 +94,11 @@ esp_err_t RoomManager::get_home_page_status_mutable(std::shared_ptr<NSPanelRoomS
 
 esp_err_t RoomManager::get_home_page_status_mutable_all_rooms(std::shared_ptr<NSPanelRoomStatus> *status) {
   if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250) == pdPASS)) {
+    if (RoomManager::_home_page == nullptr) [[unlikely]] {
+      xSemaphoreGive(RoomManager::_home_page_mutex);
+      return ESP_ERR_NOT_FINISHED;
+    }
+
     size_t status_pack_size = nspanel_room_status__get_packed_size(RoomManager::_home_page_all_rooms.get());
     std::vector<uint8_t> buffer(status_pack_size);
     nspanel_room_status__pack(RoomManager::_home_page_all_rooms.get(), buffer.data());
@@ -99,31 +119,68 @@ esp_err_t RoomManager::get_home_page_status_mutable_all_rooms(std::shared_ptr<NS
   return ESP_ERR_NOT_FINISHED;
 }
 
+esp_err_t RoomManager::go_to_room_id(uint32_t room_id) {
+  ESP_LOGD("RoomManager", "Request to navigate to room page ID %lu", room_id);
+  std::string current_room_topic = RoomManager::_current_home_page_status_topic.get();
+  if (!current_room_topic.empty()) [[likely]] {
+    if (MqttManager::unsubscribe(current_room_topic) != ESP_OK) [[unlikely]] {
+      ESP_LOGW("RoomManager", "Failed to unsubscribe from current room status topic.");
+    }
+  }
+
+  std::shared_ptr<NSPanelConfig> config;
+  if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+    bool valid_room = false;
+    for (int i = 0; i < config->n_room_infos; i++) {
+      if (config->room_infos[i]->room_id == room_id) {
+        valid_room = true;
+        break;
+      }
+    }
+
+    if (!valid_room) [[unlikely]] {
+      ESP_LOGW("RoomManager", "Requested to go to room id %lu but not such ID was found in config. Will go to default room instead.", room_id);
+      room_id = config->default_room;
+    }
+
+    std::string new_mqtt_room_topic = "nspanel/mqttmanager_";
+    new_mqtt_room_topic.append(NSPM_ConfigManager::get_manager_address());
+    new_mqtt_room_topic.append("/room/");
+    new_mqtt_room_topic.append(std::to_string(room_id));
+    new_mqtt_room_topic.append("/state");
+    RoomManager::_current_home_page_status_topic.set(new_mqtt_room_topic);
+    if (MqttManager::subscribe(new_mqtt_room_topic) == ESP_OK) [[likely]] {
+      RoomManager::_current_room_id = room_id;
+      return ESP_OK;
+    }
+  }
+  return ESP_ERR_NOT_FINISHED;
+}
+
 esp_err_t RoomManager::go_to_previous_room() {
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-    NSPanelMQTTManagerCommand command = NSPANEL_MQTTMANAGER_COMMAND__INIT;
-    NSPanelMQTTManagerCommand__PreviousRoom previous_room_cmd = NSPANEL_MQTTMANAGER_COMMAND__PREVIOUS_ROOM__INIT;
-    previous_room_cmd.nspanel_id = config->nspanel_id;
-    command.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_PREVIOUS_ROOM;
-    command.previous_room = &previous_room_cmd;
-
-    // Serialize
-    size_t packed_cmd_size = nspanel_mqttmanager_command__get_packed_size(&command);
-    std::vector<uint8_t> buffer(packed_cmd_size);
-    if (nspanel_mqttmanager_command__pack(&command, buffer.data()) == packed_cmd_size) {
-      esp_err_t pub_res = MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (char *)buffer.data(), buffer.size(), false);
-      if (pub_res != ESP_OK) {
-        ESP_LOGE("RoomManager", "Failed to publish command to go to previous room. Error: %s", esp_err_to_name(pub_res));
-        return ESP_ERR_NOT_FINISHED;
+    uint32_t current_room_index = -1;
+    for (int i = 0; i < config->n_room_infos; i++) {
+      if (config->room_infos[i]->room_id == RoomManager::_current_room_id) {
+        current_room_index = i;
+        break;
       }
-      return ESP_OK;
-    } else {
-      ESP_LOGE("RoomManager", "Failed to pack command to go to previous room!");
-      return ESP_ERR_NOT_FINISHED;
+    }
+
+    if (current_room_index < 0) [[unlikely]] {
+      ESP_LOGW("RoomManager", "Did not find currently selected room in room IDs. Will go to default room.");
+      return RoomManager::go_to_room_id(config->default_room);
+    } else [[likely]] {
+      if (current_room_index == 0) {
+        // We are at first room in list, wrap around to end of list.
+        return RoomManager::go_to_room_id(config->room_infos[config->n_room_infos - 1]->room_id);
+      } else [[likely]] {
+        return RoomManager::go_to_room_id(config->room_infos[--current_room_index]->room_id);
+      }
     }
   } else {
-    ESP_LOGE("RoomManager", "Failed to get config while trying to send command to manager.");
+    ESP_LOGE("RoomManager", "Failed to get config while trying to go to previous room.");
   }
   return ESP_ERR_NOT_FINISHED;
 }
@@ -131,28 +188,37 @@ esp_err_t RoomManager::go_to_previous_room() {
 esp_err_t RoomManager::go_to_next_room() {
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-    NSPanelMQTTManagerCommand command = NSPANEL_MQTTMANAGER_COMMAND__INIT;
-    NSPanelMQTTManagerCommand__NextRoom next_room_cmd = NSPANEL_MQTTMANAGER_COMMAND__NEXT_ROOM__INIT;
-    next_room_cmd.nspanel_id = config->nspanel_id;
-    command.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_NEXT_ROOM;
-    command.next_room = &next_room_cmd;
-
-    // Serialize
-    size_t packed_cmd_size = nspanel_mqttmanager_command__get_packed_size(&command);
-    std::vector<uint8_t> buffer(packed_cmd_size);
-    if (nspanel_mqttmanager_command__pack(&command, buffer.data()) == packed_cmd_size) {
-      esp_err_t pub_res = MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (char *)buffer.data(), buffer.size(), false);
-      if (pub_res != ESP_OK) {
-        ESP_LOGE("RoomManager", "Failed to publish command to go to next room. Error: %s", esp_err_to_name(pub_res));
-        return ESP_ERR_NOT_FINISHED;
+    uint32_t current_room_index = -1;
+    for (int i = 0; i < config->n_room_infos; i++) {
+      if (config->room_infos[i]->room_id == RoomManager::_current_room_id) {
+        current_room_index = i;
+        break;
       }
-      return ESP_OK;
-    } else {
-      ESP_LOGE("RoomManager", "Failed to pack command to go to next room!");
-      return ESP_ERR_NOT_FINISHED;
+    }
+
+    if (current_room_index < 0) [[unlikely]] {
+      ESP_LOGW("RoomManager", "Did not find currently selected room in room IDs. Will go to default room.");
+      return RoomManager::go_to_room_id(config->default_room);
+    } else [[likely]] {
+      if (current_room_index != config->n_room_infos - 1) [[likely]] {
+        return RoomManager::go_to_room_id(config->room_infos[++current_room_index]->room_id);
+      } else {
+        // We have reached end of list of rooms, wrap around to first room.
+        return RoomManager::go_to_room_id(config->room_infos[0]->room_id);
+      }
     }
   } else {
-    ESP_LOGE("RoomManager", "Failed to get config while trying to send command to manager.");
+    ESP_LOGE("RoomManager", "Failed to get config while trying to go to next room.");
+  }
+  return ESP_ERR_NOT_FINISHED;
+}
+
+esp_err_t RoomManager::go_to_default_room() {
+  std::shared_ptr<NSPanelConfig> config;
+  if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+    return RoomManager::go_to_room_id(config->default_room);
+  } else {
+    ESP_LOGE("RoomManager", "Failed to get config while trying to go to next room.");
   }
   return ESP_ERR_NOT_FINISHED;
 }
@@ -181,6 +247,11 @@ esp_err_t RoomManager::replace_home_page_status_all_rooms(std::shared_ptr<NSPane
 
 esp_err_t RoomManager::get_current_room_entities_page_status(std::shared_ptr<NSPanelRoomEntitiesPage> *status) {
   if (xSemaphoreTake(RoomManager::_entities_page_mutex, pdMS_TO_TICKS(250) == pdPASS)) {
+    if (RoomManager::_entities_page == nullptr) [[unlikely]] {
+      xSemaphoreGive(RoomManager::_entities_page_mutex);
+      return ESP_ERR_NOT_FINISHED;
+    }
+
     *status = RoomManager::_entities_page;
     xSemaphoreGive(RoomManager::_entities_page_mutex);
     return ESP_OK;
@@ -188,31 +259,113 @@ esp_err_t RoomManager::get_current_room_entities_page_status(std::shared_ptr<NSP
   return ESP_ERR_NOT_FINISHED;
 }
 
+esp_err_t RoomManager::go_to_entities_page_id(uint32_t page_id) {
+  if (xSemaphoreTake(RoomManager::_entities_page_mutex, pdMS_TO_TICKS(250) == pdPASS)) {
+    ESP_LOGD("RoomManager", "Request to navigate to entities page ID %lu", page_id);
+    std::string current_entities_page_topic = RoomManager::_current_entities_page_status_topic.get();
+    if (!current_entities_page_topic.empty()) [[likely]] {
+      if (MqttManager::unsubscribe(current_entities_page_topic) != ESP_OK) [[unlikely]] {
+        ESP_LOGW("RoomManager", "Failed to unsubscribe from current room status topic.");
+      }
+    }
+
+    std::shared_ptr<NSPanelConfig> config;
+    if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+      bool valid_page_id = false;
+      uint32_t entities_page_room_id = 0; // The ID of the room that the entity page is attached to.
+      for (int i = 0; i < config->n_room_infos && !valid_page_id; i++) {
+        for (int j = 0; j < config->room_infos[i]->n_entity_page_ids && !valid_page_id; j++) {
+          if (config->room_infos[i]->entity_page_ids[j] == page_id) {
+            entities_page_room_id = config->room_infos[i]->room_id;
+            valid_page_id = true;
+          }
+        }
+      }
+
+      if (!valid_page_id) [[unlikely]] {
+        ESP_LOGW("RoomManager", "Requested to go to entities page id %lu but not such ID was found in config. Will abort.", page_id);
+        xSemaphoreGive(RoomManager::_entities_page_mutex);
+        return ESP_ERR_NOT_FINISHED;
+      }
+
+      std::string new_mqtt_entities_page_status_topic = "nspanel/mqttmanager_";
+      new_mqtt_entities_page_status_topic.append(NSPM_ConfigManager::get_manager_address());
+      new_mqtt_entities_page_status_topic.append("/room/");
+      new_mqtt_entities_page_status_topic.append(std::to_string(entities_page_room_id));
+      new_mqtt_entities_page_status_topic.append("/entity_pages/");
+      new_mqtt_entities_page_status_topic.append(std::to_string(page_id));
+      new_mqtt_entities_page_status_topic.append("/state");
+      RoomManager::_current_entities_page_status_topic.set(new_mqtt_entities_page_status_topic);
+      if (MqttManager::subscribe(new_mqtt_entities_page_status_topic) == ESP_OK) [[likely]] {
+        xSemaphoreGive(RoomManager::_entities_page_mutex);
+        RoomManager::_current_entities_page_id = page_id;
+        return ESP_OK;
+      } else {
+        ESP_LOGE("RoomManager", "Failed to subscribe to new MQTT topic for entity page state updates.");
+        xSemaphoreGive(RoomManager::_entities_page_mutex);
+      }
+    }
+    return ESP_ERR_NOT_FINISHED;
+  }
+  return ESP_ERR_NOT_FINISHED;
+}
+
+esp_err_t RoomManager::go_to_first_entities_page() {
+  std::shared_ptr<NSPanelConfig> config;
+  if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+    for (int i = 0; i < config->n_room_infos; i++) {
+      if (config->room_infos[i]->room_id == RoomManager::_current_room_id) {
+        if (config->room_infos[i]->n_entity_page_ids > 0) [[likely]] {
+          return RoomManager::go_to_entities_page_id(config->room_infos[i]->entity_page_ids[0]);
+          break;
+        } else {
+          ESP_LOGE("RoomManager", "Requested to go to first entity page in room but room has not entity pages. Will abort.");
+          xSemaphoreGive(RoomManager::_entities_page_mutex);
+          return ESP_ERR_NOT_FINISHED;
+        }
+      }
+    }
+    ESP_LOGE("RoomManager", "Failed to find currently selected room while trying to go to first entities page.");
+  } else {
+    ESP_LOGE("RoomManager", "Failed to get config while trying to go to first entities page for room.");
+  }
+  return ESP_ERR_NOT_FINISHED;
+}
+
 esp_err_t RoomManager::go_to_next_entities_page() {
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-    NSPanelMQTTManagerCommand command = NSPANEL_MQTTMANAGER_COMMAND__INIT;
-    NSPanelMQTTManagerCommand__NextEntitiesPage next_entities_page = NSPANEL_MQTTMANAGER_COMMAND__NEXT_ENTITIES_PAGE__INIT;
-    next_entities_page.nspanel_id = config->nspanel_id;
-    command.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_NEXT_ENTITIES_PAGE;
-    command.next_entities_page = &next_entities_page;
-
-    // Serialize
-    size_t packed_cmd_size = nspanel_mqttmanager_command__get_packed_size(&command);
-    std::vector<uint8_t> buffer(packed_cmd_size);
-    if (nspanel_mqttmanager_command__pack(&command, buffer.data()) == packed_cmd_size) {
-      esp_err_t pub_res = MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (char *)buffer.data(), buffer.size(), false);
-      if (pub_res != ESP_OK) {
-        ESP_LOGE("RoomManager", "Failed to publish command to go to next page. Error: %s", esp_err_to_name(pub_res));
-        return ESP_ERR_NOT_FINISHED;
+    bool select_next_entity_page = false;
+    for (int i = 0; i < config->n_room_infos; i++) {
+      for (int j = 0; j < config->room_infos[i]->n_entity_page_ids; j++) {
+        if (config->room_infos[i]->entity_page_ids[j] == RoomManager::_current_entities_page_id) {
+          select_next_entity_page = true;
+        } else if (select_next_entity_page) {
+          // We need to go to another room for this page, switch.
+          if (config->room_infos[i]->room_id != RoomManager::_current_room_id) {
+            RoomManager::go_to_room_id(config->room_infos[i]->room_id); //
+          }
+          return RoomManager::go_to_entities_page_id(config->room_infos[i]->entity_page_ids[j]);
+        }
       }
-      return ESP_OK;
+    }
+
+    if (select_next_entity_page) {
+      // Did not find any entity page after currently selected, try from beginning ie. "wrap" around
+      for (int i = 0; i < config->n_room_infos; i++) {
+        for (int j = 0; j < config->room_infos[i]->n_entity_page_ids; j++) {
+          // We need to go to another room for this page, switch.
+          if (config->room_infos[i]->room_id != RoomManager::_current_room_id) {
+            RoomManager::go_to_room_id(config->room_infos[i]->room_id); //
+          }
+          return RoomManager::go_to_entities_page_id(config->room_infos[i]->entity_page_ids[j]);
+        }
+      }
     } else {
-      ESP_LOGE("RoomManager", "Failed to pack command to go to next page!");
-      return ESP_ERR_NOT_FINISHED;
+      ESP_LOGE("RoomManager", "Did not find currently selected page within config. Aborting.");
     }
   } else {
-    ESP_LOGE("RoomManager", "Failed to get config while trying to send command to manager.");
+    ESP_LOGE("RoomManager", "Failed to get config while trying to go to next entities page.");
   }
 
   return ESP_ERR_NOT_FINISHED;
@@ -221,29 +374,39 @@ esp_err_t RoomManager::go_to_next_entities_page() {
 esp_err_t RoomManager::go_to_previous_entities_page() {
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-    NSPanelMQTTManagerCommand command = NSPANEL_MQTTMANAGER_COMMAND__INIT;
-    NSPanelMQTTManagerCommand__PreviousEntitiesPage previous_entities_page = NSPANEL_MQTTMANAGER_COMMAND__PREVIOUS_ENTITIES_PAGE__INIT;
-    previous_entities_page.nspanel_id = config->nspanel_id;
-    command.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_PREVIOUS_ENTITIES_PAGE;
-    command.previous_entities_page = &previous_entities_page;
-
-    // Serialize
-    size_t packed_cmd_size = nspanel_mqttmanager_command__get_packed_size(&command);
-    std::vector<uint8_t> buffer(packed_cmd_size);
-    if (nspanel_mqttmanager_command__pack(&command, buffer.data()) == packed_cmd_size) {
-      esp_err_t pub_res = MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (char *)buffer.data(), buffer.size(), false);
-      if (pub_res != ESP_OK) {
-        ESP_LOGE("RoomManager", "Failed to publish command to go to next page. Error: %s", esp_err_to_name(pub_res));
-        return ESP_ERR_NOT_FINISHED;
+    bool select_next_entity_page = false;
+    for (int i = config->n_room_infos; i > 0; i--) {
+      for (int j = config->room_infos[i]->n_entity_page_ids; j > 0; j--) {
+        if (config->room_infos[i]->entity_page_ids[j] == RoomManager::_current_entities_page_id) {
+          select_next_entity_page = true;
+        } else if (select_next_entity_page) {
+          // We need to go to another room for this page, switch.
+          if (config->room_infos[i]->room_id != RoomManager::_current_room_id) {
+            RoomManager::go_to_room_id(config->room_infos[i]->room_id); //
+          }
+          return RoomManager::go_to_entities_page_id(config->room_infos[i]->entity_page_ids[j]);
+        }
       }
-      return ESP_OK;
+    }
+
+    if (select_next_entity_page) {
+      // Did not find any entity page after currently selected, try from beginning ie. "wrap" around
+      for (int i = config->n_room_infos; i > 0; i--) {
+        for (int j = config->room_infos[i]->n_entity_page_ids; j > 0; j--) {
+          // We need to go to another room for this page, switch.
+          if (config->room_infos[i]->room_id != RoomManager::_current_room_id) {
+            RoomManager::go_to_room_id(config->room_infos[i]->room_id); //
+          }
+          return RoomManager::go_to_entities_page_id(config->room_infos[i]->entity_page_ids[j]);
+        }
+      }
     } else {
-      ESP_LOGE("RoomManager", "Failed to pack command to go to next page!");
-      return ESP_ERR_NOT_FINISHED;
+      ESP_LOGE("RoomManager", "Did not find currently selected page within config. Aborting.");
     }
   } else {
-    ESP_LOGE("RoomManager", "Failed to get config while trying to send command to manager.");
+    ESP_LOGE("RoomManager", "Failed to get config while trying to go to previous entities page.");
   }
+
   return ESP_ERR_NOT_FINISHED;
 }
 
@@ -275,14 +438,10 @@ void RoomManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
   std::string base_topic = "nspanel/";
   base_topic.append(WiFiManager::mac_string());
 
-  std::string home_page_topic = base_topic;
-  home_page_topic.append("/home_page");
   std::string home_page_all_rooms_topic = base_topic;
   home_page_all_rooms_topic.append("/home_page_all");
-  std::string entities_page_topic = base_topic;
-  entities_page_topic.append("/entities_page");
 
-  if (topic_string.compare(home_page_topic) == 0) {
+  if (topic_string.compare(RoomManager::_current_home_page_status_topic.get()) == 0) {
     NSPanelRoomStatus *room_status = nspanel_room_status__unpack(NULL, event->data_len, (const uint8_t *)event->data);
     if (room_status != NULL) {
       if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
@@ -318,7 +477,7 @@ void RoomManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
     } else {
       ESP_LOGE("RoomManager", "Got new status for home page but failed to unpack it.");
     }
-  } else if (topic_string.compare(entities_page_topic) == 0) {
+  } else if (topic_string.compare(RoomManager::_current_entities_page_status_topic.get()) == 0) {
     NSPanelRoomEntitiesPage *entities_page = nspanel_room_entities_page__unpack(NULL, event->data_len, (const uint8_t *)event->data);
     if (entities_page != NULL) {
       if (xSemaphoreTake(RoomManager::_entities_page_mutex, pdMS_TO_TICKS(250)) == pdPASS) {

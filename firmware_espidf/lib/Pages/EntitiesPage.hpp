@@ -69,4 +69,7 @@ private:
 
   // What is the currently displayed header text. Used to determine if we should update header text.
   static inline MutexWrapped<std::string> _currently_showing_header_text;
+
+  // The MQTT where the current entities page update is sent.
+  static inline MutexWrapped<std::string> _current_entities_page_mqtt_topic;
 };

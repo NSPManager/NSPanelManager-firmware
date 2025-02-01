@@ -12,7 +12,11 @@ void WiFiManager::start_client(std::string *ssid, std::string *psk, std::string 
   esp_log_level_set("WiFiManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config.
 
   WiFiManager::_connected = false;
-  WiFiManager::_ip_info.ip.addr = 0;
+  WiFiManager::_ip_info.set({
+      .ip{
+          .addr = 0,
+      },
+  });
 
   esp_netif_init();
   esp_netif_create_default_wifi_sta();
@@ -58,7 +62,11 @@ void WiFiManager::start_client(std::string *ssid, std::string *psk, std::string 
 void WiFiManager::start_ap(std::string *ssid) {
   esp_log_level_set("WiFiManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config.
   WiFiManager::_connected = false;
-  WiFiManager::_ip_info.ip.addr = 0;
+  WiFiManager::_ip_info.set({
+      .ip{
+          .addr = 0,
+      },
+  });
 
   esp_netif_init();
   esp_netif_create_default_wifi_ap();
@@ -93,7 +101,7 @@ void WiFiManager::start_ap(std::string *ssid) {
   esp_netif_ip_info_t ip_info;
   esp_netif_t *netif_handle = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
   esp_netif_get_ip_info(netif_handle, &ip_info);
-  WiFiManager::_ip_info = ip_info;
+  WiFiManager::_ip_info.set(ip_info);
   char ip_addr_str[IP4ADDR_STRLEN_MAX];
   sprintf(ip_addr_str, IPSTR, IP2STR(&ip_info.ip));
   ESP_LOGI("WiFiManager", "SoftAP started with IP %s", ip_addr_str);
@@ -102,7 +110,7 @@ void WiFiManager::start_ap(std::string *ssid) {
   captive_portal_url.append(ip_addr_str);
 
   // TODO: When updating framework to at least ESP-IDF v5.4 setup DHCP option for captive portal.
-  // esp_netif_dhcps_option(netif_handle, ESP_NETIF_OP_SET, ESP_NETIF_CAPTIVEPORTAL_URI, (void *)captive_portal_url.c_str(), captive_portal_url.length());
+  esp_netif_dhcps_option(netif_handle, ESP_NETIF_OP_SET, ESP_NETIF_CAPTIVEPORTAL_URI, (void *)captive_portal_url.c_str(), captive_portal_url.length());
   esp_netif_dhcps_start(netif);
 }
 
@@ -129,7 +137,7 @@ void WiFiManager::_event_handler(void *arg, esp_event_base_t event_base, int32_t
     switch (event_id) {
     case IP_EVENT_STA_GOT_IP: {
       ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-      WiFiManager::_ip_info = event->ip_info;
+      WiFiManager::_ip_info.set(event->ip_info);
       ESP_LOGI("WiFiManager", "Got IP: " IPSTR ", Netmask: " IPSTR ", Gateway: " IPSTR, IP2STR(&event->ip_info.ip), IP2STR(&event->ip_info.netmask), IP2STR(&event->ip_info.gw));
       break;
     }
@@ -169,12 +177,13 @@ bool WiFiManager::connected() {
 }
 
 esp_netif_ip_info_t WiFiManager::ip_info() {
-  return WiFiManager::_ip_info;
+  return WiFiManager::_ip_info.get();
 }
 
 std::string WiFiManager::ip_string() {
   char ip_str[IP4ADDR_STRLEN_MAX];
-  sprintf(ip_str, IPSTR, IP2STR(&WiFiManager::_ip_info.ip));
+  esp_netif_ip_info_t info = WiFiManager::_ip_info.get();
+  sprintf(ip_str, IPSTR, IP2STR(&info.ip));
   return std::string(ip_str);
 }
 

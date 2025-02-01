@@ -55,7 +55,7 @@ void InterfaceManager::init() {
 
   // Wait for WiFi
   std::string append_string = "";
-  if (!WiFiManager::connected() || WiFiManager::ip_info().ip.addr == 0) {
+  while (!WiFiManager::connected()) {
     std::string connection_text = "Connecting to ";
     connection_text.append(ConfigManager::wifi_ssid);
 
@@ -220,8 +220,10 @@ void InterfaceManager::_nspm_configmanager_event_handler(void *arg, esp_event_ba
   case nspm_configmanager_event::CONFIG_LOADED: {
     InterfaceManager::_nspm_config_loaded = true;
     if (InterfaceManager::_home_page_status_loaded && InterfaceManager::_nspm_config_loaded && LoadingPage::showing()) {
-      ESP_LOGI("InterfaceManager", "Home page status and base config loaded. Will go to home page.");
-      HomePage::show(); // TODO: Show the user selected first page.
+      ESP_LOGI("InterfaceManager", "Home page status and base config loaded. Will go to home page on default room.");
+      RoomManager::go_to_default_room();
+      RoomManager::go_to_first_entities_page(); // Also select the first entities page for default room as this is the first time and no room is currently selected.
+      HomePage::show();                         // TODO: Show the user selected first page.
     }
     break;
   }
@@ -238,7 +240,9 @@ void InterfaceManager::_room_manager_event_handler(void *arg, esp_event_base_t e
     InterfaceManager::_home_page_status_loaded = true;
     if (InterfaceManager::_home_page_status_loaded && InterfaceManager::_nspm_config_loaded && LoadingPage::showing()) {
       ESP_LOGI("InterfaceManager", "Home page status and base config loaded. Will go to home page.");
-      HomePage::show(); // TODO: Show the user selected first page.
+      RoomManager::go_to_default_room();
+      RoomManager::go_to_first_entities_page(); // Also select the first entities page for default room as this is the first time and no room is currently selected.
+      HomePage::show();                         // TODO: Show the user selected first page.
     }
   }
 }

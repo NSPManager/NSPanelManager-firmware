@@ -15,7 +15,7 @@ void EntitiesPage::show() {
   InterfaceManager::call_unshow_callback();
   InterfaceManager::current_page_unshow_callback.set(EntitiesPage::unshow);
 
-  if (RoomManager::get_current_room_entities_page_status(&EntitiesPage::_current_entities_page) != ESP_OK) {
+  if (RoomManager::get_current_room_entities_page_status(&EntitiesPage::_current_entities_page) != ESP_OK) [[unlikely]] {
     ESP_LOGE("EntitiesPage", "Failed to get current room entities. Will return to HomePage.");
     HomePage::show();
     return;

@@ -1,4 +1,5 @@
 #pragma once
+#include <MutexWrapper.hpp>
 #include <atomic>
 #include <esp_wifi.h>
 #include <string>
@@ -67,7 +68,7 @@ private:
   static inline std::atomic<bool> _connected = false;
 
   // Current IP address
-  static inline esp_netif_ip_info_t _ip_info;
+  static inline MutexWrapped<esp_netif_ip_info_t> _ip_info;
 
   // MAC address of ESP32 WiFi
   static inline char _mac_address[18];

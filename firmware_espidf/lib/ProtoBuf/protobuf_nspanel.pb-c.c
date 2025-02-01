@@ -52,6 +52,12 @@ void   nspanel_scene__free_unpacked
   assert(message->base.descriptor == &nspanel_scene__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
+void   nspanel_config__room_info__init
+                     (NSPanelConfig__RoomInfo         *message)
+{
+  static const NSPanelConfig__RoomInfo init_value = NSPANEL_CONFIG__ROOM_INFO__INIT;
+  *message = init_value;
+}
 void   nspanel_config__init
                      (NSPanelConfig         *message)
 {
@@ -536,6 +542,57 @@ const ProtobufCMessageDescriptor nspanel_scene__descriptor =
   (ProtobufCMessageInit) nspanel_scene__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
+static const ProtobufCFieldDescriptor nspanel_config__room_info__field_descriptors[2] =
+{
+  {
+    "room_id",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(NSPanelConfig__RoomInfo, room_id),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "entity_page_ids",
+    2,
+    PROTOBUF_C_LABEL_REPEATED,
+    PROTOBUF_C_TYPE_INT32,
+    offsetof(NSPanelConfig__RoomInfo, n_entity_page_ids),
+    offsetof(NSPanelConfig__RoomInfo, entity_page_ids),
+    NULL,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_PACKED,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned nspanel_config__room_info__field_indices_by_name[] = {
+  1,   /* field[1] = entity_page_ids */
+  0,   /* field[0] = room_id */
+};
+static const ProtobufCIntRange nspanel_config__room_info__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor nspanel_config__room_info__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "NSPanelConfig.RoomInfo",
+  "RoomInfo",
+  "NSPanelConfig__RoomInfo",
+  "",
+  sizeof(NSPanelConfig__RoomInfo),
+  2,
+  nspanel_config__room_info__field_descriptors,
+  nspanel_config__room_info__field_indices_by_name,
+  1,  nspanel_config__room_info__number_ranges,
+  (ProtobufCMessageInit) nspanel_config__room_info__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
 static const ProtobufCEnumValue nspanel_config__nspanel_screensaver_mode__enum_values_by_number[5] =
 {
   { "WEATHER_WITH_BACKGROUND", "NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITH_BACKGROUND", 0 },
@@ -570,7 +627,7 @@ const ProtobufCEnumDescriptor nspanel_config__nspanel_screensaver_mode__descript
   nspanel_config__nspanel_screensaver_mode__value_ranges,
   NULL,NULL,NULL,NULL   /* reserved[1234] */
 };
-static const ProtobufCFieldDescriptor nspanel_config__field_descriptors[31] =
+static const ProtobufCFieldDescriptor nspanel_config__field_descriptors[35] =
 {
   {
     "name",
@@ -741,15 +798,15 @@ static const ProtobufCFieldDescriptor nspanel_config__field_descriptors[31] =
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
   {
-    "room_ids",
+    "room_infos",
     15,
     PROTOBUF_C_LABEL_REPEATED,
-    PROTOBUF_C_TYPE_INT32,
-    offsetof(NSPanelConfig, n_room_ids),
-    offsetof(NSPanelConfig, room_ids),
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(NSPanelConfig, n_room_infos),
+    offsetof(NSPanelConfig, room_infos),
+    &nspanel_config__room_info__descriptor,
     NULL,
-    NULL,
-    0 | PROTOBUF_C_FIELD_FLAG_PACKED,             /* flags */
+    0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
   {
@@ -944,6 +1001,54 @@ static const ProtobufCFieldDescriptor nspanel_config__field_descriptors[31] =
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
+  {
+    "relay1_is_in_relay_group",
+    32,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(NSPanelConfig, relay1_is_in_relay_group),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "relay1_relay_group",
+    33,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(NSPanelConfig, relay1_relay_group),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "relay2_is_in_relay_group",
+    34,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(NSPanelConfig, relay2_is_in_relay_group),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "relay2_relay_group",
+    35,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(NSPanelConfig, relay2_relay_group),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
 };
 static const unsigned nspanel_config__field_indices_by_name[] = {
   25,   /* field[25] = button1_detached_light_id */
@@ -966,9 +1071,13 @@ static const unsigned nspanel_config__field_indices_by_name[] = {
   28,   /* field[28] = optimistic_mode */
   29,   /* field[29] = raise_light_level_to_100_above */
   16,   /* field[16] = relay1_default_mode */
+  31,   /* field[31] = relay1_is_in_relay_group */
+  32,   /* field[32] = relay1_relay_group */
   17,   /* field[17] = relay2_default_mode */
+  33,   /* field[33] = relay2_is_in_relay_group */
+  34,   /* field[34] = relay2_relay_group */
   15,   /* field[15] = reverse_relays */
-  14,   /* field[14] = room_ids */
+  14,   /* field[14] = room_infos */
   8,   /* field[8] = screen_dim_level */
   3,   /* field[3] = screensaver_activation_timeout */
   9,   /* field[9] = screensaver_dim_level */
@@ -981,7 +1090,7 @@ static const unsigned nspanel_config__field_indices_by_name[] = {
 static const ProtobufCIntRange nspanel_config__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 31 }
+  { 0, 35 }
 };
 const ProtobufCMessageDescriptor nspanel_config__descriptor =
 {
@@ -991,7 +1100,7 @@ const ProtobufCMessageDescriptor nspanel_config__descriptor =
   "NSPanelConfig",
   "",
   sizeof(NSPanelConfig),
-  31,
+  35,
   nspanel_config__field_descriptors,
   nspanel_config__field_indices_by_name,
   1,  nspanel_config__number_ranges,
@@ -1534,7 +1643,7 @@ const ProtobufCMessageDescriptor nspanel_room_entities_page__descriptor =
   (ProtobufCMessageInit) nspanel_room_entities_page__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCFieldDescriptor nspanel_room_status__field_descriptors[12] =
+static const ProtobufCFieldDescriptor nspanel_room_status__field_descriptors[13] =
 {
   {
     "id",
@@ -1680,12 +1789,25 @@ static const ProtobufCFieldDescriptor nspanel_room_status__field_descriptors[12]
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
+  {
+    "entity_page_ids",
+    13,
+    PROTOBUF_C_LABEL_REPEATED,
+    PROTOBUF_C_TYPE_INT32,
+    offsetof(NSPanelRoomStatus, n_entity_page_ids),
+    offsetof(NSPanelRoomStatus, entity_page_ids),
+    NULL,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_PACKED,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
 };
 static const unsigned nspanel_room_status__field_indices_by_name[] = {
   5,   /* field[5] = average_color_temperature */
   2,   /* field[2] = average_dim_level */
   6,   /* field[6] = ceiling_lights_color_temperature_value */
   3,   /* field[3] = ceiling_lights_dim_level */
+  12,   /* field[12] = entity_page_ids */
   0,   /* field[0] = id */
   1,   /* field[1] = name */
   8,   /* field[8] = num_ceiling_lights */
@@ -1698,7 +1820,7 @@ static const unsigned nspanel_room_status__field_indices_by_name[] = {
 static const ProtobufCIntRange nspanel_room_status__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 12 }
+  { 0, 13 }
 };
 const ProtobufCMessageDescriptor nspanel_room_status__descriptor =
 {
@@ -1708,7 +1830,7 @@ const ProtobufCMessageDescriptor nspanel_room_status__descriptor =
   "NSPanelRoomStatus",
   "",
   sizeof(NSPanelRoomStatus),
-  12,
+  13,
   nspanel_room_status__field_descriptors,
   nspanel_room_status__field_indices_by_name,
   1,  nspanel_room_status__number_ranges,
