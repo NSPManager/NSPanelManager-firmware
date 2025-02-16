@@ -61,6 +61,11 @@ private:
    */
   static void _handle_items12_touch_event(nextion_event_touch_t *touch_data);
 
+  /**
+   * Send toggle command to manager
+   */
+  static void _send_entity_toggle_command_to_manager(uint32_t entities_page_id, uint8_t entity_slot);
+
   // Vars
   static inline std::shared_ptr<NSPanelRoomEntitiesPage> _current_entities_page;
 

@@ -403,30 +403,6 @@ void   nspanel_mqttmanager_command__light_command__init
   static const NSPanelMQTTManagerCommand__LightCommand init_value = NSPANEL_MQTTMANAGER_COMMAND__LIGHT_COMMAND__INIT;
   *message = init_value;
 }
-void   nspanel_mqttmanager_command__next_room__init
-                     (NSPanelMQTTManagerCommand__NextRoom         *message)
-{
-  static const NSPanelMQTTManagerCommand__NextRoom init_value = NSPANEL_MQTTMANAGER_COMMAND__NEXT_ROOM__INIT;
-  *message = init_value;
-}
-void   nspanel_mqttmanager_command__previous_room__init
-                     (NSPanelMQTTManagerCommand__PreviousRoom         *message)
-{
-  static const NSPanelMQTTManagerCommand__PreviousRoom init_value = NSPANEL_MQTTMANAGER_COMMAND__PREVIOUS_ROOM__INIT;
-  *message = init_value;
-}
-void   nspanel_mqttmanager_command__next_entities_page__init
-                     (NSPanelMQTTManagerCommand__NextEntitiesPage         *message)
-{
-  static const NSPanelMQTTManagerCommand__NextEntitiesPage init_value = NSPANEL_MQTTMANAGER_COMMAND__NEXT_ENTITIES_PAGE__INIT;
-  *message = init_value;
-}
-void   nspanel_mqttmanager_command__previous_entities_page__init
-                     (NSPanelMQTTManagerCommand__PreviousEntitiesPage         *message)
-{
-  static const NSPanelMQTTManagerCommand__PreviousEntitiesPage init_value = NSPANEL_MQTTMANAGER_COMMAND__PREVIOUS_ENTITIES_PAGE__INIT;
-  *message = init_value;
-}
 void   nspanel_mqttmanager_command__toggle_entity_from_entities_page__init
                      (NSPanelMQTTManagerCommand__ToggleEntityFromEntitiesPage         *message)
 {
@@ -2365,158 +2341,6 @@ const ProtobufCMessageDescriptor nspanel_mqttmanager_command__light_command__des
   (ProtobufCMessageInit) nspanel_mqttmanager_command__light_command__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCFieldDescriptor nspanel_mqttmanager_command__next_room__field_descriptors[1] =
-{
-  {
-    "nspanel_id",
-    1,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_INT32,
-    0,   /* quantifier_offset */
-    offsetof(NSPanelMQTTManagerCommand__NextRoom, nspanel_id),
-    NULL,
-    NULL,
-    0,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-};
-static const unsigned nspanel_mqttmanager_command__next_room__field_indices_by_name[] = {
-  0,   /* field[0] = nspanel_id */
-};
-static const ProtobufCIntRange nspanel_mqttmanager_command__next_room__number_ranges[1 + 1] =
-{
-  { 1, 0 },
-  { 0, 1 }
-};
-const ProtobufCMessageDescriptor nspanel_mqttmanager_command__next_room__descriptor =
-{
-  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
-  "NSPanelMQTTManagerCommand.NextRoom",
-  "NextRoom",
-  "NSPanelMQTTManagerCommand__NextRoom",
-  "",
-  sizeof(NSPanelMQTTManagerCommand__NextRoom),
-  1,
-  nspanel_mqttmanager_command__next_room__field_descriptors,
-  nspanel_mqttmanager_command__next_room__field_indices_by_name,
-  1,  nspanel_mqttmanager_command__next_room__number_ranges,
-  (ProtobufCMessageInit) nspanel_mqttmanager_command__next_room__init,
-  NULL,NULL,NULL    /* reserved[123] */
-};
-static const ProtobufCFieldDescriptor nspanel_mqttmanager_command__previous_room__field_descriptors[1] =
-{
-  {
-    "nspanel_id",
-    1,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_INT32,
-    0,   /* quantifier_offset */
-    offsetof(NSPanelMQTTManagerCommand__PreviousRoom, nspanel_id),
-    NULL,
-    NULL,
-    0,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-};
-static const unsigned nspanel_mqttmanager_command__previous_room__field_indices_by_name[] = {
-  0,   /* field[0] = nspanel_id */
-};
-static const ProtobufCIntRange nspanel_mqttmanager_command__previous_room__number_ranges[1 + 1] =
-{
-  { 1, 0 },
-  { 0, 1 }
-};
-const ProtobufCMessageDescriptor nspanel_mqttmanager_command__previous_room__descriptor =
-{
-  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
-  "NSPanelMQTTManagerCommand.PreviousRoom",
-  "PreviousRoom",
-  "NSPanelMQTTManagerCommand__PreviousRoom",
-  "",
-  sizeof(NSPanelMQTTManagerCommand__PreviousRoom),
-  1,
-  nspanel_mqttmanager_command__previous_room__field_descriptors,
-  nspanel_mqttmanager_command__previous_room__field_indices_by_name,
-  1,  nspanel_mqttmanager_command__previous_room__number_ranges,
-  (ProtobufCMessageInit) nspanel_mqttmanager_command__previous_room__init,
-  NULL,NULL,NULL    /* reserved[123] */
-};
-static const ProtobufCFieldDescriptor nspanel_mqttmanager_command__next_entities_page__field_descriptors[1] =
-{
-  {
-    "nspanel_id",
-    1,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_INT32,
-    0,   /* quantifier_offset */
-    offsetof(NSPanelMQTTManagerCommand__NextEntitiesPage, nspanel_id),
-    NULL,
-    NULL,
-    0,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-};
-static const unsigned nspanel_mqttmanager_command__next_entities_page__field_indices_by_name[] = {
-  0,   /* field[0] = nspanel_id */
-};
-static const ProtobufCIntRange nspanel_mqttmanager_command__next_entities_page__number_ranges[1 + 1] =
-{
-  { 1, 0 },
-  { 0, 1 }
-};
-const ProtobufCMessageDescriptor nspanel_mqttmanager_command__next_entities_page__descriptor =
-{
-  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
-  "NSPanelMQTTManagerCommand.NextEntitiesPage",
-  "NextEntitiesPage",
-  "NSPanelMQTTManagerCommand__NextEntitiesPage",
-  "",
-  sizeof(NSPanelMQTTManagerCommand__NextEntitiesPage),
-  1,
-  nspanel_mqttmanager_command__next_entities_page__field_descriptors,
-  nspanel_mqttmanager_command__next_entities_page__field_indices_by_name,
-  1,  nspanel_mqttmanager_command__next_entities_page__number_ranges,
-  (ProtobufCMessageInit) nspanel_mqttmanager_command__next_entities_page__init,
-  NULL,NULL,NULL    /* reserved[123] */
-};
-static const ProtobufCFieldDescriptor nspanel_mqttmanager_command__previous_entities_page__field_descriptors[1] =
-{
-  {
-    "nspanel_id",
-    1,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_INT32,
-    0,   /* quantifier_offset */
-    offsetof(NSPanelMQTTManagerCommand__PreviousEntitiesPage, nspanel_id),
-    NULL,
-    NULL,
-    0,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-};
-static const unsigned nspanel_mqttmanager_command__previous_entities_page__field_indices_by_name[] = {
-  0,   /* field[0] = nspanel_id */
-};
-static const ProtobufCIntRange nspanel_mqttmanager_command__previous_entities_page__number_ranges[1 + 1] =
-{
-  { 1, 0 },
-  { 0, 1 }
-};
-const ProtobufCMessageDescriptor nspanel_mqttmanager_command__previous_entities_page__descriptor =
-{
-  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
-  "NSPanelMQTTManagerCommand.PreviousEntitiesPage",
-  "PreviousEntitiesPage",
-  "NSPanelMQTTManagerCommand__PreviousEntitiesPage",
-  "",
-  sizeof(NSPanelMQTTManagerCommand__PreviousEntitiesPage),
-  1,
-  nspanel_mqttmanager_command__previous_entities_page__field_descriptors,
-  nspanel_mqttmanager_command__previous_entities_page__field_indices_by_name,
-  1,  nspanel_mqttmanager_command__previous_entities_page__number_ranges,
-  (ProtobufCMessageInit) nspanel_mqttmanager_command__previous_entities_page__init,
-  NULL,NULL,NULL    /* reserved[123] */
-};
 static const ProtobufCFieldDescriptor nspanel_mqttmanager_command__toggle_entity_from_entities_page__field_descriptors[2] =
 {
   {
@@ -2598,7 +2422,7 @@ const ProtobufCEnumDescriptor nspanel_mqttmanager_command__affect_lights_options
   nspanel_mqttmanager_command__affect_lights_options__value_ranges,
   NULL,NULL,NULL,NULL   /* reserved[1234] */
 };
-static const ProtobufCFieldDescriptor nspanel_mqttmanager_command__field_descriptors[7] =
+static const ProtobufCFieldDescriptor nspanel_mqttmanager_command__field_descriptors[4] =
 {
   {
     "first_page_turn_on",
@@ -2637,49 +2461,13 @@ static const ProtobufCFieldDescriptor nspanel_mqttmanager_command__field_descrip
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
   {
-    "next_room",
+    "toggle_entity_from_entities_page",
     4,
     PROTOBUF_C_LABEL_NONE,
     PROTOBUF_C_TYPE_MESSAGE,
     offsetof(NSPanelMQTTManagerCommand, command_data_case),
-    offsetof(NSPanelMQTTManagerCommand, next_room),
-    &nspanel_mqttmanager_command__next_room__descriptor,
-    NULL,
-    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-  {
-    "previous_room",
-    5,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_MESSAGE,
-    offsetof(NSPanelMQTTManagerCommand, command_data_case),
-    offsetof(NSPanelMQTTManagerCommand, previous_room),
-    &nspanel_mqttmanager_command__previous_room__descriptor,
-    NULL,
-    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-  {
-    "next_entities_page",
-    6,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_MESSAGE,
-    offsetof(NSPanelMQTTManagerCommand, command_data_case),
-    offsetof(NSPanelMQTTManagerCommand, next_entities_page),
-    &nspanel_mqttmanager_command__next_entities_page__descriptor,
-    NULL,
-    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-  {
-    "previous_entities_page",
-    7,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_MESSAGE,
-    offsetof(NSPanelMQTTManagerCommand, command_data_case),
-    offsetof(NSPanelMQTTManagerCommand, previous_entities_page),
-    &nspanel_mqttmanager_command__previous_entities_page__descriptor,
+    offsetof(NSPanelMQTTManagerCommand, toggle_entity_from_entities_page),
+    &nspanel_mqttmanager_command__toggle_entity_from_entities_page__descriptor,
     NULL,
     0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
@@ -2689,15 +2477,12 @@ static const unsigned nspanel_mqttmanager_command__field_indices_by_name[] = {
   1,   /* field[1] = first_page_turn_off */
   0,   /* field[0] = first_page_turn_on */
   2,   /* field[2] = light_command */
-  5,   /* field[5] = next_entities_page */
-  3,   /* field[3] = next_room */
-  6,   /* field[6] = previous_entities_page */
-  4,   /* field[4] = previous_room */
+  3,   /* field[3] = toggle_entity_from_entities_page */
 };
 static const ProtobufCIntRange nspanel_mqttmanager_command__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 7 }
+  { 0, 4 }
 };
 const ProtobufCMessageDescriptor nspanel_mqttmanager_command__descriptor =
 {
@@ -2707,7 +2492,7 @@ const ProtobufCMessageDescriptor nspanel_mqttmanager_command__descriptor =
   "NSPanelMQTTManagerCommand",
   "",
   sizeof(NSPanelMQTTManagerCommand),
-  7,
+  4,
   nspanel_mqttmanager_command__field_descriptors,
   nspanel_mqttmanager_command__field_indices_by_name,
   1,  nspanel_mqttmanager_command__number_ranges,

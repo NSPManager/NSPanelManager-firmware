@@ -709,6 +709,8 @@ void HomePage::_handle_brightness_slider_event() {
   turn_light_on_cmd.kelvin_slider_value = 0;
   turn_light_on_cmd.selected_room = status->id;
 
+  ESP_LOGD("HomePage", "Sending command to request brightness %ld%%", turn_light_on_cmd.brightness_slider_value);
+
   if (HomePage::_current_edit_mode == HomePageEditMode::ALL_LIGHTS) {
     turn_light_on_cmd.affect_lights = NSPANEL_MQTTMANAGER_COMMAND__AFFECT_LIGHTS_OPTIONS__ALL;
   } else if (HomePage::_current_edit_mode == HomePageEditMode::CEILING_LIGHTS) {
@@ -824,6 +826,8 @@ void HomePage::_handle_color_temperature_slider_event() {
   turn_light_on_cmd.has_kelvin_value = true;
   turn_light_on_cmd.kelvin_slider_value = HomePage::_cache_color_temperature_slider;
   turn_light_on_cmd.selected_room = status->id;
+
+  ESP_LOGD("HomePage", "Sending command to request color temp %ld%%", turn_light_on_cmd.kelvin_slider_value);
 
   if (HomePage::_current_edit_mode == HomePageEditMode::ALL_LIGHTS) {
     turn_light_on_cmd.affect_lights = NSPANEL_MQTTMANAGER_COMMAND__AFFECT_LIGHTS_OPTIONS__ALL;

@@ -2,6 +2,8 @@
 #include <GUI_data.hpp>
 #include <HomePage.hpp>
 #include <InterfaceManager.hpp>
+#include <MqttManager.hpp>
+#include <NSPM_ConfigManager.hpp>
 #include <Nextion.hpp>
 #include <Nextion_event.hpp>
 #include <RoomManager.hpp>
@@ -159,6 +161,17 @@ void EntitiesPage::_handle_nextion_event(void *arg, esp_event_base_t event_base,
 }
 
 void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data) {
+  // First check if we actually pressed an entity toggle button or an entity name
+  if (touch_data->pressed) {
+    for (int i = 0; i < sizeof(GUI_ITEMS4_PAGE::item_slots); i++) {
+      if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].button_id) {
+        EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
+        return; // Found match, no need to continue.
+      }
+    }
+  }
+
+  // We did not press an entity, check if we pressed any other button
   switch (touch_data->component_id) {
   case GUI_ITEMS4_PAGE::button_back_id:
     HomePage::show();
@@ -179,6 +192,17 @@ void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data)
 }
 
 void EntitiesPage::_handle_items8_touch_event(nextion_event_touch_t *touch_data) {
+  // First check if we actually pressed an entity toggle button or an entity name
+  if (touch_data->pressed) {
+    for (int i = 0; i < sizeof(GUI_ITEMS8_PAGE::item_slots); i++) {
+      if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].button_id) {
+        EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
+        return; // Found match, no need to continue.
+      }
+    }
+  }
+
+  // We did not press an entity, check if we pressed any other button
   switch (touch_data->component_id) {
   case GUI_ITEMS8_PAGE::button_back_id:
     HomePage::show();
@@ -199,6 +223,17 @@ void EntitiesPage::_handle_items8_touch_event(nextion_event_touch_t *touch_data)
 }
 
 void EntitiesPage::_handle_items12_touch_event(nextion_event_touch_t *touch_data) {
+  // First check if we actually pressed an entity toggle button or an entity name
+  if (touch_data->pressed) {
+    for (int i = 0; i < sizeof(GUI_ITEMS12_PAGE::item_slots); i++) {
+      if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].button_id) {
+        EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
+        return; // Found match, no need to continue.
+      }
+    }
+  }
+
+  // We did not press an entity, check if we pressed any other button
   switch (touch_data->component_id) {
   case GUI_ITEMS12_PAGE::button_back_id:
     HomePage::show();
@@ -214,5 +249,44 @@ void EntitiesPage::_handle_items12_touch_event(nextion_event_touch_t *touch_data
   default:
     ESP_LOGD("EntitiesPage", "Unknown component ID of touch event in items12. ID: %u", touch_data->component_id);
     break;
+  }
+}
+
+void EntitiesPage::_send_entity_toggle_command_to_manager(uint32_t entity_page_id, uint8_t entity_slot) {
+  NSPanelMQTTManagerCommand__ToggleEntityFromEntitiesPage toggle_cmd = NSPANEL_MQTTMANAGER_COMMAND__TOGGLE_ENTITY_FROM_ENTITIES_PAGE__INIT;
+  toggle_cmd.entity_page_id = entity_page_id;
+  toggle_cmd.entity_slot = entity_slot;
+
+  ESP_LOGD("HomePage", "Sending command to toggle entity in slot %d from entity page with ID %ld.", entity_slot, entity_page_id);
+
+  NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
+  cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_TOGGLE_ENTITY_FROM_ENTITIES_PAGE;
+  cmd.toggle_entity_from_entities_page = &toggle_cmd;
+
+  uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
+  std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
+  size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
+  if (packed_data_size == packed_length) {
+    if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) {
+      std::shared_ptr<NSPanelConfig> config;
+      if (NSPM_ConfigManager::get_config(&config)) {
+        if (config->optimistic_mode) {
+          for (int i = 0; i < EntitiesPage::_current_entities_page->n_entities; i++) {
+            if (EntitiesPage::_current_entities_page->entities[i]->room_view_position == entity_slot) {
+              if (EntitiesPage::_current_entities_page->entities[i]->icon == GUI_ITEMS_PAGE_COMMON::items_button_switch_on_icon) {
+                EntitiesPage::_current_entities_page->entities[i]->icon = GUI_ITEMS_PAGE_COMMON::items_button_switch_off_icon;
+              } else {
+                EntitiesPage::_current_entities_page->entities[i]->icon = GUI_ITEMS_PAGE_COMMON::items_button_switch_on_icon;
+              }
+              EntitiesPage::_update_display();
+              break;
+            }
+          }
+        }
+      }
+      ESP_LOGE("EntitiesPage", "Failed to send toggle command!");
+    }
+  } else {
+    ESP_LOGE("EntitiesPage", "Failed to serialize toggle command!");
   }
 }

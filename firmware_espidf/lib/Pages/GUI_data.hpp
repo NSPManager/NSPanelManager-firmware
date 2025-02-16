@@ -177,9 +177,10 @@ public:
 // This is used to better be able to loop over item slots instead of copy-paste lots
 // of code.
 struct GUI_ITEMS_PAGE_ITEM_DATA {
-  uint8_t item_id;
-  const char *label_name;
+  uint8_t button_id;
   const char *button_name;
+  uint8_t label_id;
+  const char *label_name;
 };
 
 class GUI_ITEMS_PAGE_COMMON {
@@ -211,24 +212,28 @@ public:
 
   static inline constexpr GUI_ITEMS_PAGE_ITEM_DATA item_slots[] = {
       {
-          .item_id = 1,
-          .label_name = "i1_label",
+          .button_id = 5,
           .button_name = "i1_button",
+          .label_id = 1,
+          .label_name = "i1_label",
       },
       {
-          .item_id = 2,
-          .label_name = "i2_label",
+          .button_id = 6,
           .button_name = "i2_button",
+          .label_id = 2,
+          .label_name = "i2_label",
       },
       {
-          .item_id = 3,
-          .label_name = "i3_label",
+          .button_id = 7,
           .button_name = "i3_button",
+          .label_id = 3,
+          .label_name = "i3_label",
       },
       {
-          .item_id = 4,
-          .label_name = "i4_label",
+          .button_id = 8,
           .button_name = "i4_button",
+          .label_id = 4,
+          .label_name = "i4_label",
       },
   };
 };
@@ -244,44 +249,52 @@ public:
 
   static inline constexpr GUI_ITEMS_PAGE_ITEM_DATA item_slots[] = {
       {
-          .item_id = 1,
-          .label_name = "i1_label",
+          .button_id = 5,
           .button_name = "i1_button",
+          .label_id = 1,
+          .label_name = "i1_label",
       },
       {
-          .item_id = 2,
-          .label_name = "i2_label",
+          .button_id = 6,
           .button_name = "i2_button",
+          .label_id = 2,
+          .label_name = "i2_label",
       },
       {
-          .item_id = 3,
-          .label_name = "i3_label",
+          .button_id = 7,
           .button_name = "i3_button",
+          .label_id = 3,
+          .label_name = "i3_label",
       },
       {
-          .item_id = 4,
-          .label_name = "i4_label",
+          .button_id = 8,
           .button_name = "i4_button",
+          .label_id = 4,
+          .label_name = "i4_label",
       },
       {
-          .item_id = 5,
-          .label_name = "i5_label",
+          .button_id = 9,
           .button_name = "i5_button",
+          .label_id = 5,
+          .label_name = "i5_label",
       },
       {
-          .item_id = 6,
-          .label_name = "i6_label",
+          .button_id = 10,
           .button_name = "i6_button",
+          .label_id = 6,
+          .label_name = "i6_label",
       },
       {
-          .item_id = 7,
-          .label_name = "i7_label",
+          .button_id = 11,
           .button_name = "i7_button",
+          .label_id = 7,
+          .label_name = "i7_label",
       },
       {
-          .item_id = 8,
-          .label_name = "i8_label",
+          .button_id = 12,
           .button_name = "i8_button",
+          .label_id = 8,
+          .label_name = "i8_label",
       },
   };
 };
@@ -297,64 +310,76 @@ public:
 
   static inline constexpr GUI_ITEMS_PAGE_ITEM_DATA item_slots[] = {
       {
-          .item_id = 1,
-          .label_name = "i1_label",
+          .button_id = 5,
           .button_name = "i1_button",
+          .label_id = 1,
+          .label_name = "i1_label",
       },
       {
-          .item_id = 2,
-          .label_name = "i2_label",
+          .button_id = 6,
           .button_name = "i2_button",
+          .label_id = 2,
+          .label_name = "i2_label",
       },
       {
-          .item_id = 3,
-          .label_name = "i3_label",
+          .button_id = 7,
           .button_name = "i3_button",
+          .label_id = 3,
+          .label_name = "i3_label",
       },
       {
-          .item_id = 4,
-          .label_name = "i4_label",
+          .button_id = 8,
           .button_name = "i4_button",
+          .label_id = 4,
+          .label_name = "i4_label",
       },
       {
-          .item_id = 5,
-          .label_name = "i5_label",
+          .button_id = 9,
           .button_name = "i5_button",
+          .label_id = 5,
+          .label_name = "i5_label",
       },
       {
-          .item_id = 6,
-          .label_name = "i6_label",
+          .button_id = 10,
           .button_name = "i6_button",
+          .label_id = 6,
+          .label_name = "i6_label",
       },
       {
-          .item_id = 7,
-          .label_name = "i7_label",
+          .button_id = 11,
           .button_name = "i7_button",
+          .label_id = 7,
+          .label_name = "i7_label",
       },
       {
-          .item_id = 8,
-          .label_name = "i8_label",
+          .button_id = 12,
           .button_name = "i8_button",
+          .label_id = 8,
+          .label_name = "i8_label",
       },
       {
-          .item_id = 9,
-          .label_name = "i9_label",
+          .button_id = 13,
           .button_name = "i9_button",
+          .label_id = 9,
+          .label_name = "i9_label",
       },
       {
-          .item_id = 10,
-          .label_name = "i10_label",
+          .button_id = 14,
           .button_name = "i10_button",
+          .label_id = 10,
+          .label_name = "i10_label",
       },
       {
-          .item_id = 11,
-          .label_name = "i11_label",
+          .button_id = 15,
           .button_name = "i11_button",
+          .label_id = 11,
+          .label_name = "i11_label",
       },
       {
-          .item_id = 12,
-          .label_name = "i12_label",
+          .button_id = 16,
           .button_name = "i12_button",
+          .label_id = 12,
+          .label_name = "i12_label",
       },
   };
 };

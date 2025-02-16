@@ -92,7 +92,7 @@ void WiFiManager::start_ap(std::string *ssid) {
   WiFiManager::_config.ap.max_connection = 4;
   WiFiManager::_config.ap.authmode = wifi_auth_mode_t::WIFI_AUTH_OPEN;
 
-  ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+  ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &WiFiManager::_config));
   ESP_ERROR_CHECK(esp_wifi_start());
 
@@ -109,7 +109,6 @@ void WiFiManager::start_ap(std::string *ssid) {
   std::string captive_portal_url = "http://";
   captive_portal_url.append(ip_addr_str);
 
-  // TODO: When updating framework to at least ESP-IDF v5.4 setup DHCP option for captive portal.
   esp_netif_dhcps_option(netif_handle, ESP_NETIF_OP_SET, ESP_NETIF_CAPTIVEPORTAL_URI, (void *)captive_portal_url.c_str(), captive_portal_url.length());
   esp_netif_dhcps_start(netif);
 }
