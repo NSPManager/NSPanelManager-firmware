@@ -30,6 +30,13 @@ public:
    */
   static void update_littlefs(void *param);
 
+  /*
+   * When updating the ESP32 firmware it will update one of the partitions and switch to that partition for the next boot.
+   * If it then fails to boot or the boot is not marked as successful it will revert to the old firmware.
+   * This function will mark the current boot as successful. For more information please see https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/ota.html#app-rollback
+   */
+  static void mark_boot_successful();
+
 private:
   /**
    * @brief Handle events triggered from MQTT places.

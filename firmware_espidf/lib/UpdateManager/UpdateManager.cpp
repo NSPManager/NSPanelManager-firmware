@@ -302,6 +302,11 @@ void UpdateManager::update_littlefs(void *param) {
   }
 }
 
+void UpdateManager::mark_boot_successful() {
+  esp_ota_mark_app_valid_cancel_rollback();
+  ESP_LOGI("UpdateManager", "Current boot marked as successful, will not rollback on reboot.");
+}
+
 esp_err_t UpdateManager::_setup_http_client(esp_http_client_handle_t *client, std::vector<uint8_t> *return_data, const char *download_url, int64_t offset, int64_t length) {
   UpdateManager::_download_data_store = return_data;
 

@@ -150,4 +150,7 @@ extern "C" void app_main() {
 
   // Hook into update manager
   UpdateManager::init();
+
+  ESP_LOGI("Main", "Init complete. Will mark boot as complete as we've registered to manager.");
+  UpdateManager::mark_boot_successful();
 }
