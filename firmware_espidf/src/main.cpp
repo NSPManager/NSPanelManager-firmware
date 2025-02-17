@@ -112,7 +112,7 @@ extern "C" void app_main() {
     } else {
       ESP_LOGI("Main", "Config loaded successfully. Starting NSPanel as '%s'.", ConfigManager::wifi_hostname.c_str());
       // Set global log level
-      esp_log_level_set("*", static_cast<esp_log_level_t>(ConfigManager::log_level));
+      // esp_log_level_set("*", static_cast<esp_log_level_t>(ConfigManager::log_level));
 
       // Start task that handles WiFi connection
       WiFiManager::start_client(&ConfigManager::wifi_ssid, &ConfigManager::wifi_psk, &ConfigManager::wifi_hostname);
