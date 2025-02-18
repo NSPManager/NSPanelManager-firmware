@@ -245,6 +245,9 @@ void UpdateManager::update_firmware(void *param) {
     if (md5_string.compare(ConfigManager::md5_firmware) != 0) {
       ESP_LOGI("UpdateManager", "New firmware available. Will update OTA.");
       if (UpdateManager::_update_firmware_ota() == ESP_OK) {
+        ConfigManager::has_updated = true;
+        ConfigManager::save_config();
+
         ESP_LOGI("UpdateManager", "Firmware update complete. Stored firmware checksum will be updated on next successful boot.");
 
         UpdateManager::update_littlefs(NULL, true);
@@ -310,26 +313,29 @@ void UpdateManager::mark_boot_successful() {
   firmware_md5_string.append(std::to_string(NSPM_ConfigManager::get_manager_port()));
   firmware_md5_string.append("/checksum_firmware");
 
-  std::vector<uint8_t> data;
-  if (UpdateManager::_download_data(&data, firmware_md5_string.c_str(), -1, -1) == ESP_OK) {
-    std::string md5_string = std::string((char *)data.data(), data.size());
+  if (ConfigManager::has_updated) {
+    std::vector<uint8_t> data;
+    if (UpdateManager::_download_data(&data, firmware_md5_string.c_str(), -1, -1) == ESP_OK) {
+      std::string md5_string = std::string((char *)data.data(), data.size());
 
-    if (md5_string.compare(ConfigManager::md5_firmware) != 0) {
-      ConfigManager::md5_firmware = md5_string;
-      // Save the existing config loaded into memory into the new LittleFS partition.
-      if (ConfigManager::save_config() == ESP_OK) {
-        ESP_LOGI("UpdateManager", "Updated stored firmware checksum to %s. Will reboot.", md5_string.c_str());
+      if (md5_string.compare(ConfigManager::md5_firmware) != 0) {
+        ConfigManager::md5_firmware = md5_string;
+        ConfigManager::has_updated = false;
+        // Save the existing config loaded into memory into the new LittleFS partition.
+        if (ConfigManager::save_config() == ESP_OK) {
+          ESP_LOGI("UpdateManager", "Updated stored firmware checksum to %s. Will reboot.", md5_string.c_str());
+        } else {
+          ESP_LOGE("UpdateManager", "Failed to save config!");
+        }
+
+        vTaskDelay(pdTICKS_TO_MS(10));
+        esp_restart();
       } else {
-        ESP_LOGE("UpdateManager", "Failed to save config!");
+        ESP_LOGI("UpdateManager", "Stored firmware checksum is correct, will not update!");
       }
-
-      vTaskDelay(pdTICKS_TO_MS(10));
-      esp_restart();
     } else {
-      ESP_LOGI("UpdateManager", "Stored firmware checksum is correct, will not update!");
+      ESP_LOGE("UpdateManager", "Failed to get firmware checksum from manager.");
     }
-  } else {
-    ESP_LOGE("UpdateManager", "Failed to get firmware checksum from manager.");
   }
 }
 

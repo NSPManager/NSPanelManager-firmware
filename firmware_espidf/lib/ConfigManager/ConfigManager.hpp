@@ -59,4 +59,7 @@ public:
 
   // MD5 checksum for installed gui, used to check if new gui update is available in manager
   static inline std::string md5_gui;
+
+  // Used to indicate that the stored checksum for the firmware should be updated on next reboot.
+  static inline bool has_updated;
 };

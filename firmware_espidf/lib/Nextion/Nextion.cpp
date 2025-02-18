@@ -21,10 +21,10 @@ esp_err_t Nextion::init() {
 
   // Start custom event loop that handles messages from UART -> data handler
   Nextion::_handle_uart_data_event_loop_args = {
-      .queue_size = 16,
+      .queue_size = NEXTION_UART_EVENT_LOOP_QUEUE_SIZE,
       .task_name = "uart_handle_data",
       .task_priority = 8,
-      .task_stack_size = 2048,
+      .task_stack_size = NEXTION_UART_EVENT_LOOP_STACK_SIZE,
       .task_core_id = 1,
   };
   esp_err_t create_result = esp_event_loop_create(&Nextion::_handle_uart_data_event_loop_args, &Nextion::_handle_uart_data_event_loop);
@@ -133,20 +133,22 @@ void Nextion::_task_uart_event(void *param) {
                 read_nextion_jump_instruction = false; // Reset special handling
               }
 
-              switch (esp_event_post_to(Nextion::_handle_uart_data_event_loop, NEXTION_EVENT, nextion_event_t::RECEIVED_DATA, &uart_buffer, sizeof(uart_buffer), pdMS_TO_TICKS(16))) {
-              case ESP_OK:
-                break;
+              if (sizeof(uart_buffer) <= NEXTION_UART_EVENT_LOOP_STACK_SIZE - 512) { // Subtract 512 to allow for internal variables in the event loop
+                switch (esp_event_post_to(Nextion::_handle_uart_data_event_loop, NEXTION_EVENT, nextion_event_t::RECEIVED_DATA, &uart_buffer, sizeof(uart_buffer), pdMS_TO_TICKS(16))) {
+                case ESP_OK:
+                  break;
 
-              case ESP_ERR_TIMEOUT:
-                ESP_LOGE("Nextion", "Failed to post new event data from UART event!");
-                break;
+                case ESP_ERR_TIMEOUT:
+                  ESP_LOGE("Nextion", "Failed to post new event data from UART event!");
+                  break;
 
-              case ESP_ERR_INVALID_ARG:
-                ESP_LOGE("Nextion", "Invalid combination of event base and data when posting event from UART data!");
-                break;
+                case ESP_ERR_INVALID_ARG:
+                  ESP_LOGE("Nextion", "Invalid combination of event base and data when posting event from UART data!");
+                  break;
 
-              default:
-                ESP_LOGE("Nextion", "Unknown error when posting event data from UART event!");
+                default:
+                  ESP_LOGE("Nextion", "Unknown error when posting event data from UART event!");
+                }
               }
             }
             xSemaphoreGive(Nextion::_nextion_state_mutex);
@@ -181,21 +183,23 @@ void Nextion::_task_uart_event(void *param) {
             uart_read_bytes(UART_NUM_2, uart_buffer.data(), pattern_position, pdMS_TO_TICKS(64));
             uart_read_bytes(UART_NUM_2, uart_pattern_buffer.data(), 3, pdMS_TO_TICKS(64)); // Read last three 0XFF as well to clear buffer.
 
-            switch (esp_event_post_to(Nextion::_handle_uart_data_event_loop, NEXTION_EVENT, nextion_event_t::RECEIVED_DATA, &uart_buffer, sizeof(uart_buffer), pdMS_TO_TICKS(16))) {
-            case ESP_OK:
-              [[likely]];
-              break;
+            if (sizeof(uart_buffer) <= NEXTION_UART_EVENT_LOOP_STACK_SIZE - 512) { // Subtract 512 to allow for internal variables in the event loop
+              switch (esp_event_post_to(Nextion::_handle_uart_data_event_loop, NEXTION_EVENT, nextion_event_t::RECEIVED_DATA, &uart_buffer, sizeof(uart_buffer), pdMS_TO_TICKS(16))) {
+              case ESP_OK:
+                [[likely]];
+                break;
 
-            case ESP_ERR_TIMEOUT:
-              ESP_LOGE("Nextion", "Failed to post new event data from UART event!");
-              break;
+              case ESP_ERR_TIMEOUT:
+                ESP_LOGE("Nextion", "Failed to post new event data from UART event!");
+                break;
 
-            case ESP_ERR_INVALID_ARG:
-              ESP_LOGE("Nextion", "Invalid combination of event base and data when posting event from UART data!");
-              break;
+              case ESP_ERR_INVALID_ARG:
+                ESP_LOGE("Nextion", "Invalid combination of event base and data when posting event from UART data!");
+                break;
 
-            default:
-              ESP_LOGE("Nextion", "Unknown error when posting event data from UART event!");
+              default:
+                ESP_LOGE("Nextion", "Unknown error when posting event data from UART event!");
+              }
             }
           }
         } else [[unlikely]] {

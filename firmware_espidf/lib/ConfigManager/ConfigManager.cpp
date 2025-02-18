@@ -98,6 +98,11 @@ esp_err_t ConfigManager::load_config() {
     ConfigManager::use_latest_nextion_upload_protocol = (strncmp("true", item->valuestring, sizeof("true")) == 0);
   }
 
+  item = cJSON_GetObjectItem(json, "has_updated");
+  if (cJSON_IsBool(item)) {
+    ConfigManager::has_updated = cJSON_IsTrue(item);
+  }
+
   item = cJSON_GetObjectItem(json, "upload_baud");
   if (cJSON_IsNumber(item)) {
     ConfigManager::nextion_upload_baudrate = item->valueint;
@@ -127,6 +132,7 @@ void ConfigManager::create_default() {
   ConfigManager::mqtt_username = "";
   ConfigManager::mqtt_password = "";
 
+  ConfigManager::has_updated = false;
   ConfigManager::md5_firmware = "";
   ConfigManager::md5_data_file = "";
   ConfigManager::md5_gui = "";
@@ -161,6 +167,13 @@ esp_err_t ConfigManager::save_config() {
   } else {
     cJSON_AddFalseToObject(json, "use_new_upload_protocol");
   }
+
+  if (ConfigManager::has_updated) {
+    cJSON_AddTrueToObject(json, "has_updated");
+  } else {
+    cJSON_AddFalseToObject(json, "has_updated");
+  }
+
   cJSON_AddNumberToObject(json, "upload_baud", ConfigManager::nextion_upload_baudrate);
 
   char *json_string = cJSON_Print(json);

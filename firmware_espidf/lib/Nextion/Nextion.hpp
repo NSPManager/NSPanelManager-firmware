@@ -16,6 +16,9 @@ enum nextion_state_t {
   UPDATING
 };
 
+static constexpr uint16_t NEXTION_UART_EVENT_LOOP_STACK_SIZE = 3096;
+static constexpr uint16_t NEXTION_UART_EVENT_LOOP_QUEUE_SIZE = 6;
+
 class Nextion {
 public:
   /**
