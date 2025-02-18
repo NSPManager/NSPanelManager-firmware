@@ -245,11 +245,9 @@ void UpdateManager::update_firmware(void *param) {
     if (md5_string.compare(ConfigManager::md5_firmware) != 0) {
       ESP_LOGI("UpdateManager", "New firmware available. Will update OTA.");
       if (UpdateManager::_update_firmware_ota() == ESP_OK) {
-        ESP_LOGI("UpdateManager", "Firmware update complete, will save new MD5 checksum.");
-        ConfigManager::md5_firmware = md5_string;
-        ConfigManager::save_config();
+        ESP_LOGI("UpdateManager", "Firmware update complete. Stored firmware checksum will be updated on next successful boot.");
 
-        UpdateManager::update_littlefs(NULL);
+        UpdateManager::update_littlefs(NULL, true);
 
         ESP_LOGI("UpdateManager", "Update complete. Will start in 2 seconds");
         vTaskDelay(pdMS_TO_TICKS(2000));
@@ -257,7 +255,7 @@ void UpdateManager::update_firmware(void *param) {
       }
     } else {
       ESP_LOGI("UpdateManager", "Firmware already up to date. Will check LittleFS.");
-      UpdateManager::update_littlefs(NULL);
+      UpdateManager::update_littlefs(NULL, false);
     }
   } else {
     ESP_LOGE("UpdateManager", "Failed to new firmware MD5 checksum.");
@@ -267,7 +265,7 @@ void UpdateManager::update_firmware(void *param) {
   vTaskDelete(NULL);
 }
 
-void UpdateManager::update_littlefs(void *param) {
+void UpdateManager::update_littlefs(void *param, bool force_update) {
   // TODO: Implement
   std::string littlefs_md5_string = "http://";
   littlefs_md5_string.append(NSPM_ConfigManager::get_manager_address());
@@ -280,7 +278,7 @@ void UpdateManager::update_littlefs(void *param) {
     std::string md5_string = std::string((char *)data.data(), data.size());
     ESP_LOGD("UpdateManager", "Got new MD5 sum from manager: %s", md5_string.c_str());
 
-    if (md5_string.compare(ConfigManager::md5_data_file) != 0) {
+    if (md5_string.compare(ConfigManager::md5_data_file) != 0 || force_update) {
       ESP_LOGI("UpdateManager", "New LittleFS available. Will update OTA.");
       LittleFS::unmount(); // Unmount LittleFS
       if (UpdateManager::_update_littlefs_ota() == ESP_OK) {
@@ -304,7 +302,35 @@ void UpdateManager::update_littlefs(void *param) {
 
 void UpdateManager::mark_boot_successful() {
   esp_ota_mark_app_valid_cancel_rollback();
-  ESP_LOGI("UpdateManager", "Current boot marked as successful, will not rollback on reboot.");
+  ESP_LOGI("UpdateManager", "Current boot marked as successful, will not rollback on reboot. Updating stored FW checksum in LittleFS.");
+
+  std::string firmware_md5_string = "http://";
+  firmware_md5_string.append(NSPM_ConfigManager::get_manager_address());
+  firmware_md5_string.append(":");
+  firmware_md5_string.append(std::to_string(NSPM_ConfigManager::get_manager_port()));
+  firmware_md5_string.append("/checksum_firmware");
+
+  std::vector<uint8_t> data;
+  if (UpdateManager::_download_data(&data, firmware_md5_string.c_str(), -1, -1) == ESP_OK) {
+    std::string md5_string = std::string((char *)data.data(), data.size());
+
+    if (md5_string.compare(ConfigManager::md5_firmware) != 0) {
+      ConfigManager::md5_firmware = md5_string;
+      // Save the existing config loaded into memory into the new LittleFS partition.
+      if (ConfigManager::save_config() == ESP_OK) {
+        ESP_LOGI("UpdateManager", "Updated stored firmware checksum to %s. Will reboot.", md5_string.c_str());
+      } else {
+        ESP_LOGE("UpdateManager", "Failed to save config!");
+      }
+
+      vTaskDelay(pdTICKS_TO_MS(10));
+      esp_restart();
+    } else {
+      ESP_LOGI("UpdateManager", "Stored firmware checksum is correct, will not update!");
+    }
+  } else {
+    ESP_LOGE("UpdateManager", "Failed to get firmware checksum from manager.");
+  }
 }
 
 esp_err_t UpdateManager::_setup_http_client(esp_http_client_handle_t *client, std::vector<uint8_t> *return_data, const char *download_url, int64_t offset, int64_t length) {

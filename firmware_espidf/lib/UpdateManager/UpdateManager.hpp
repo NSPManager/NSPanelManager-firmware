@@ -26,9 +26,10 @@ public:
 
   /**
    * Update LittleFS OTA from manager.
+   * @param force_update: Force an update even though the stored checksum is the same.
    * Will compare stored MD5 checksum of installed LittleFS with the checksum in the manager.
    */
-  static void update_littlefs(void *param);
+  static void update_littlefs(void *param, bool force_update);
 
   /*
    * When updating the ESP32 firmware it will update one of the partitions and switch to that partition for the next boot.
