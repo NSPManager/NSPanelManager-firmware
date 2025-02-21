@@ -30,7 +30,8 @@ void RoomManager::init() {
 
   // Hook into MQTT events
   MqttManager::register_handler(MQTT_EVENT_DATA, RoomManager::_mqtt_event_handler, NULL);
-  MqttManager::register_handler(MQTT_EVENT_CONNECTED, RoomManager::_mqtt_event_handler_connected, NULL);
+  // MqttManager::register_handler(MQTT_EVENT_CONNECTED, RoomManager::_mqtt_event_handler_connected, NULL);
+  esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, &RoomManager::_event_handler, NULL);
 }
 
 esp_err_t RoomManager::get_home_page_status(std::shared_ptr<NSPanelRoomStatus> *status) {
@@ -130,6 +131,11 @@ esp_err_t RoomManager::go_to_room_id(uint32_t room_id) {
 
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+    if (config->n_room_infos <= 0) [[unlikely]] {
+      ESP_LOGE("RoomManager", "Tried going to another room but no rooms exist in current config.");
+      return ESP_ERR_NOT_FINISHED;
+    }
+
     bool valid_room = false;
     for (int i = 0; i < config->n_room_infos; i++) {
       if (config->room_infos[i]->room_id == room_id) {
@@ -149,6 +155,7 @@ esp_err_t RoomManager::go_to_room_id(uint32_t room_id) {
     new_mqtt_room_topic.append(std::to_string(room_id));
     new_mqtt_room_topic.append("/state");
     RoomManager::_current_home_page_status_topic.set(new_mqtt_room_topic);
+    ESP_LOGD("RoomManager", "Subscribing to room topic %s.", new_mqtt_room_topic.c_str());
     if (MqttManager::subscribe(new_mqtt_room_topic) == ESP_OK) [[likely]] {
       RoomManager::_current_room_id = room_id;
       return ESP_OK;
@@ -160,7 +167,12 @@ esp_err_t RoomManager::go_to_room_id(uint32_t room_id) {
 esp_err_t RoomManager::go_to_previous_room() {
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-    uint32_t current_room_index = -1;
+    if (config->n_room_infos <= 0) [[unlikely]] {
+      ESP_LOGE("RoomManager", "Tried going to another room but no rooms exist in current config.");
+      return ESP_ERR_NOT_FINISHED;
+    }
+
+    int32_t current_room_index = -1;
     for (int i = 0; i < config->n_room_infos; i++) {
       if (config->room_infos[i]->room_id == RoomManager::_current_room_id) {
         current_room_index = i;
@@ -188,7 +200,12 @@ esp_err_t RoomManager::go_to_previous_room() {
 esp_err_t RoomManager::go_to_next_room() {
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-    uint32_t current_room_index = -1;
+    if (config->n_room_infos <= 0) [[unlikely]] {
+      ESP_LOGE("RoomManager", "Tried going to another room but no rooms exist in current config.");
+      return ESP_ERR_NOT_FINISHED;
+    }
+
+    int32_t current_room_index = -1;
     for (int i = 0; i < config->n_room_infos; i++) {
       if (config->room_infos[i]->room_id == RoomManager::_current_room_id) {
         current_room_index = i;
@@ -375,8 +392,8 @@ esp_err_t RoomManager::go_to_previous_entities_page() {
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
     bool select_next_entity_page = false;
-    for (int i = config->n_room_infos; i > 0; i--) {
-      for (int j = config->room_infos[i]->n_entity_page_ids; j > 0; j--) {
+    for (size_t i = config->n_room_infos; i-- > 0;) {
+      for (size_t j = config->room_infos[i]->n_entity_page_ids; j-- > 0;) {
         if (config->room_infos[i]->entity_page_ids[j] == RoomManager::_current_entities_page_id) {
           select_next_entity_page = true;
         } else if (select_next_entity_page) {
@@ -391,8 +408,8 @@ esp_err_t RoomManager::go_to_previous_entities_page() {
 
     if (select_next_entity_page) {
       // Did not find any entity page after currently selected, try from beginning ie. "wrap" around
-      for (int i = config->n_room_infos; i > 0; i--) {
-        for (int j = config->room_infos[i]->n_entity_page_ids; j > 0; j--) {
+      for (size_t i = config->n_room_infos; i-- > 0;) {
+        for (size_t j = config->room_infos[i]->n_entity_page_ids; j-- > 0;) {
           // We need to go to another room for this page, switch.
           if (config->room_infos[i]->room_id != RoomManager::_current_room_id) {
             RoomManager::go_to_room_id(config->room_infos[i]->room_id); //
@@ -435,12 +452,6 @@ void RoomManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
   esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
   std::string topic_string = std::string(event->topic, event->topic_len);
 
-  std::string base_topic = "nspanel/";
-  base_topic.append(WiFiManager::mac_string());
-
-  std::string home_page_all_rooms_topic = base_topic;
-  home_page_all_rooms_topic.append("/home_page_all");
-
   if (topic_string.compare(RoomManager::_current_home_page_status_topic.get()) == 0) {
     NSPanelRoomStatus *room_status = nspanel_room_status__unpack(NULL, event->data_len, (const uint8_t *)event->data);
     if (room_status != NULL) {
@@ -454,24 +465,6 @@ void RoomManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
         }
       } else {
         ESP_LOGE("RoomManager", "Got new status for home page but couldn't take mutex to update it! Will free new state.");
-        nspanel_room_status__free_unpacked(room_status, NULL);
-      }
-    } else {
-      ESP_LOGE("RoomManager", "Got new status for home page but failed to unpack it.");
-    }
-  } else if (topic_string.compare(home_page_all_rooms_topic) == 0) {
-    NSPanelRoomStatus *room_status = nspanel_room_status__unpack(NULL, event->data_len, (const uint8_t *)event->data);
-    if (room_status != NULL) {
-      if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
-        ESP_LOGD("RoomManager", "Received new home page state for all rooms.");
-        RoomManager::_home_page_all_rooms = std::shared_ptr<NSPanelRoomStatus>(room_status, &RoomManager::_nspanel_room_status_shared_ptr_deleter);
-        xSemaphoreGive(RoomManager::_home_page_mutex);
-
-        if (esp_event_post_to(RoomManager::_local_event_loop, ROOMMANAGER_EVENT, roommanager_event_t::HOME_PAGE_UPDATED, NULL, 0, pdMS_TO_TICKS(250)) != ESP_OK) {
-          ESP_LOGW("RoomManager", "Failed to publish event that new home page data is available for all rooms.");
-        }
-      } else {
-        ESP_LOGE("RoomManager", "Got new status for home page (all rooms) but couldn't take mutex to update it! Will free new state.");
         nspanel_room_status__free_unpacked(room_status, NULL);
       }
     } else {
@@ -499,24 +492,26 @@ void RoomManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
 }
 
 void RoomManager::_mqtt_event_handler_connected(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-  ESP_LOGI("RoomManager", "MQTT connected. Subscribing to room status topics.");
-  // Subscribe to relevant MQTT topics.
-  std::string mqtt_base_topic = "nspanel/";
-  mqtt_base_topic.append(WiFiManager::mac_string());
-
-  std::string home_page_topic = mqtt_base_topic;
-  home_page_topic.append("/home_page");
-  std::string home_page_all_rooms_topic = mqtt_base_topic;
-  home_page_all_rooms_topic.append("/home_page_all");
-  std::string entities_page_topic = mqtt_base_topic;
-  entities_page_topic.append("/entities_page");
-
-  MqttManager::subscribe(home_page_topic);
-  MqttManager::subscribe(home_page_all_rooms_topic);
-  MqttManager::subscribe(entities_page_topic);
+  // ESP_LOGI("RoomManager", "MQTT connected. Subscribing to room status topics.");
 }
 
 void RoomManager::_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
+  if (event_base == NSPM_CONFIGMANAGER_EVENT) {
+    if (event_id == nspm_configmanager_event::CONFIG_LOADED) {
+      // We have just loaded a new config, is this the first config we load? If so, go to default room.
+      if (RoomManager::_current_home_page_status_topic.get().empty()) {
+        // We have not subscribed to a room yet ie not config has been loaded yet. Go to default room.
+        std::shared_ptr<NSPanelConfig> config;
+        while (NSPM_ConfigManager::get_config(&config) != ESP_OK) {
+          ESP_LOGE("RoomManager", "Failed to get current config, will try again in 500ms.");
+          vTaskDelay(pdMS_TO_TICKS(500));
+        }
+
+        // Config loaded, go to default room
+        RoomManager::go_to_default_room();
+      }
+    }
+  }
 }
 
 void RoomManager::_nspanel_room_status_shared_ptr_deleter(NSPanelRoomStatus *status) {
