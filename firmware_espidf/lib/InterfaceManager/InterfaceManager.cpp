@@ -225,6 +225,15 @@ void InterfaceManager::_nspm_configmanager_event_handler(void *arg, esp_event_ba
       RoomManager::go_to_first_entities_page(); // Also select the first entities page for default room as this is the first time and no room is currently selected.
       HomePage::show();                         // TODO: Show the user selected first page.
     }
+
+    std::shared_ptr<NSPanelConfig> config;
+    if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+      if (Nextion::set_timer_value(GUI_HOME_PAGE::timer_screensaver_name, config->screensaver_activation_timeout, pdMS_TO_TICKS(250)) != ESP_OK) {
+        ESP_LOGE("InterfaceManager", "Failed to update timer value for screensaver timeout.");
+      }
+    } else {
+      ESP_LOGW("InterfaceManager", "Failed to get config when received new config. Will not be able to update screensaver timeout!");
+    }
     break;
   }
 
