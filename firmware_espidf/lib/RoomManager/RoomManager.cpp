@@ -123,11 +123,6 @@ esp_err_t RoomManager::get_home_page_status_mutable_all_rooms(std::shared_ptr<NS
 esp_err_t RoomManager::go_to_room_id(uint32_t room_id) {
   ESP_LOGD("RoomManager", "Request to navigate to room page ID %lu", room_id);
   std::string current_room_topic = RoomManager::_current_home_page_status_topic.get();
-  if (!current_room_topic.empty()) [[likely]] {
-    if (MqttManager::unsubscribe(current_room_topic) != ESP_OK) [[unlikely]] {
-      ESP_LOGW("RoomManager", "Failed to unsubscribe from current room status topic.");
-    }
-  }
 
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
@@ -158,6 +153,13 @@ esp_err_t RoomManager::go_to_room_id(uint32_t room_id) {
     ESP_LOGD("RoomManager", "Subscribing to room topic %s.", new_mqtt_room_topic.c_str());
     if (MqttManager::subscribe(new_mqtt_room_topic) == ESP_OK) [[likely]] {
       RoomManager::_current_room_id = room_id;
+
+      // We managed to successfully subscribe to the new room topic, unsubscribe from the old topic:
+      if (!current_room_topic.empty()) [[likely]] {
+        if (MqttManager::unsubscribe(current_room_topic) != ESP_OK) [[unlikely]] {
+          ESP_LOGW("RoomManager", "Failed to unsubscribe from current room status topic.");
+        }
+      }
       return ESP_OK;
     }
   }
