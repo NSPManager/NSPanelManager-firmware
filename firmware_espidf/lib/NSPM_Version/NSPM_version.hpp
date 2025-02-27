@@ -1,1 +1,1 @@
-#define NSPM_VERSION "0.3.325"
+#define NSPM_VERSION "0.3.327"
