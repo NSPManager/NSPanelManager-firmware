@@ -64,7 +64,6 @@ public:
   static inline constexpr char *label_current_rain_name = "screensaver.curRain";
   static inline constexpr char *label_current_wind_name = "screensaver.curWind";
   static inline constexpr char *label_current_room_temperature_name = "screensaver.curRoomtemp";
-  static inline constexpr char *label_current_room_temperature_icon_name = "screensaver.t7"; // TODO: Needed/Used anywhere?
 
   static inline constexpr char *label_current_day_name = "screensaver.curDay";
   static inline constexpr char *label_current_time = "screensaver.curTime";
@@ -81,11 +80,10 @@ public:
   static inline constexpr char *screensaver_minimal_background_control_variable_name = "screensaver2.ssBackground";
 
   static inline constexpr char *label_screensaver_minimal_current_room_temperature_name = "screensaver2.curRoomtemp";
-  static inline constexpr char *label_screensaver_minimal_current_room_temperature_icon_name = "screensaver.t7"; // TODO: Needed/Used anywhere?
-  static inline constexpr char *label_screensaver_minmal_current_day_name = "screensaver.curDay";
-  static inline constexpr char *label_screensaver_minmal_current_time = "screensaver.curTime";
-  static inline constexpr char *label_screensaver_minmal_am_pm_name = "screensaver.curAMPM";
-  static inline constexpr char *label_screensaver_minmal_am_pm_name_raw = "curAMPM";
+  static inline constexpr char *label_screensaver_minmal_current_day_name = "screensaver2.curDay";
+  static inline constexpr char *label_screensaver_minmal_current_time = "screensaver2.curTime";
+  static inline constexpr char *label_screensaver_minmal_am_pm_name = "screensaver2.curAMPM";
+  static inline constexpr char *label_screensaver_minmal_am_pm_name_raw = "screensaver2.curAMPM";
 
   static inline constexpr char *label_forecast_day_names[] = {
       "forDay1",
@@ -249,49 +247,49 @@ public:
 
   static inline constexpr GUI_ITEMS_PAGE_ITEM_DATA item_slots[] = {
       {
-          .button_id = 5,
+          .button_id = 9,
           .button_name = "i1_button",
           .label_id = 1,
           .label_name = "i1_label",
       },
       {
-          .button_id = 6,
+          .button_id = 10,
           .button_name = "i2_button",
           .label_id = 2,
           .label_name = "i2_label",
       },
       {
-          .button_id = 7,
+          .button_id = 11,
           .button_name = "i3_button",
           .label_id = 3,
           .label_name = "i3_label",
       },
       {
-          .button_id = 8,
+          .button_id = 12,
           .button_name = "i4_button",
           .label_id = 4,
           .label_name = "i4_label",
       },
       {
-          .button_id = 9,
+          .button_id = 13,
           .button_name = "i5_button",
           .label_id = 5,
           .label_name = "i5_label",
       },
       {
-          .button_id = 10,
+          .button_id = 14,
           .button_name = "i6_button",
           .label_id = 6,
           .label_name = "i6_label",
       },
       {
-          .button_id = 11,
+          .button_id = 15,
           .button_name = "i7_button",
           .label_id = 7,
           .label_name = "i7_label",
       },
       {
-          .button_id = 12,
+          .button_id = 16,
           .button_name = "i8_button",
           .label_id = 8,
           .label_name = "i8_label",
@@ -310,73 +308,73 @@ public:
 
   static inline constexpr GUI_ITEMS_PAGE_ITEM_DATA item_slots[] = {
       {
-          .button_id = 5,
+          .button_id = 13,
           .button_name = "i1_button",
           .label_id = 1,
           .label_name = "i1_label",
       },
       {
-          .button_id = 6,
+          .button_id = 14,
           .button_name = "i2_button",
           .label_id = 2,
           .label_name = "i2_label",
       },
       {
-          .button_id = 7,
+          .button_id = 15,
           .button_name = "i3_button",
           .label_id = 3,
           .label_name = "i3_label",
       },
       {
-          .button_id = 8,
+          .button_id = 16,
           .button_name = "i4_button",
           .label_id = 4,
           .label_name = "i4_label",
       },
       {
-          .button_id = 9,
+          .button_id = 17,
           .button_name = "i5_button",
           .label_id = 5,
           .label_name = "i5_label",
       },
       {
-          .button_id = 10,
+          .button_id = 18,
           .button_name = "i6_button",
           .label_id = 6,
           .label_name = "i6_label",
       },
       {
-          .button_id = 11,
+          .button_id = 19,
           .button_name = "i7_button",
           .label_id = 7,
           .label_name = "i7_label",
       },
       {
-          .button_id = 12,
+          .button_id = 20,
           .button_name = "i8_button",
           .label_id = 8,
           .label_name = "i8_label",
       },
       {
-          .button_id = 13,
+          .button_id = 21,
           .button_name = "i9_button",
           .label_id = 9,
           .label_name = "i9_label",
       },
       {
-          .button_id = 14,
+          .button_id = 22,
           .button_name = "i10_button",
           .label_id = 10,
           .label_name = "i10_label",
       },
       {
-          .button_id = 15,
+          .button_id = 23,
           .button_name = "i11_button",
           .label_id = 11,
           .label_name = "i11_label",
       },
       {
-          .button_id = 16,
+          .button_id = 24,
           .button_name = "i12_button",
           .label_id = 12,
           .label_name = "i12_label",
