@@ -258,11 +258,7 @@ void HomePage::_handle_config_update(void *arg, esp_event_base_t event_base, int
     if (HomePage::_nspm_cur_config != nullptr && config->default_room != HomePage::_nspm_cur_config->default_room) { // Has the default page changed
       if (RoomManager::get_current_room_id() == HomePage::_nspm_cur_config->default_room) {                          // Are we currently displaying the 'default page'? If so, go to new default page.
         RoomManager::go_to_room_id(config->default_room);
-      } else {
-        ESP_LOGD("HomePage", "Currently selected room is not previous default, will not change.");
       }
-    } else {
-      ESP_LOGD("HomePage", "Current config is null or default room has not changed.");
     }
     HomePage::_nspm_cur_config = config;
   } else {
