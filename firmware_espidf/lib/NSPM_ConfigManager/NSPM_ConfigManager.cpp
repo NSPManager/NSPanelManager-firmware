@@ -89,6 +89,7 @@ void NSPM_ConfigManager::_handle_register_accept(const char *data, size_t data_l
       cJSON_Delete(json); // Cleanup
       return;
     }
+    cJSON_Delete(json); // Cleanup
 
     ESP_LOGI("NSPM_ConfigManager", "Received register_accept from manager. Registered to manager at %s:%d", NSPM_ConfigManager::_manager_address.c_str(), NSPM_ConfigManager::_manager_port);
     NSPM_ConfigManager::_send_register_requests = false;
@@ -100,20 +101,29 @@ void NSPM_ConfigManager::_handle_register_accept(const char *data, size_t data_l
       ESP_LOGE("NSPM_ConfigManager", "Failed to subscribe to NSPanel config topic '%s'.", NSPM_ConfigManager::_mqtt_config_topic.c_str());
       vTaskDelay(pdMS_TO_TICKS(500));
     }
-    cJSON_Delete(json); // Cleanup
 
-    ESP_LOGI("NSPM_ConfigManager", "Register accept fully processed.");
+    ESP_LOGI("NSPM_ConfigManager", "Register accept fully processed. Subscribed to panel config topic: %s", NSPM_ConfigManager::_mqtt_config_topic.c_str());
   }
 }
 
 void NSPM_ConfigManager::_handle_new_config_data(const char *data, size_t data_length) {
-  ESP_LOGI("NSPM_ConfigManager", "Received new config data from MQTT.");
-
+  ESP_LOGD("NSPM_ConfigManager", "Received new config data, start processing.");
   if (xSemaphoreTake(NSPM_ConfigManager::_config_mutex, pdMS_TO_TICKS(5000))) {
-    NSPM_ConfigManager::_config = std::shared_ptr<NSPanelConfig>(nspanel_config__unpack(NULL, data_length, (const uint8_t *)data), &NSPM_ConfigManager::_delete_nspanelconfig_object_from_shared_ptr);
+    bool trigger_new_config_event = false;
+    NSPanelConfig *new_config = nspanel_config__unpack(NULL, data_length, (const uint8_t *)data);
+    if (new_config != NULL) [[likely]] {
+      NSPM_ConfigManager::_config = std::shared_ptr<NSPanelConfig>(new_config, &NSPM_ConfigManager::_delete_nspanelconfig_object_from_shared_ptr);
+      trigger_new_config_event = true;
+      ESP_LOGD("NSPM_ConfigManager", "New screensaver timeout: %ld", new_config->screensaver_activation_timeout);
+    } else {
+      ESP_LOGE("NSPM_ConfigManager", "Received new config but failed to parse into protobuf object.");
+    }
     xSemaphoreGive(NSPM_ConfigManager::_config_mutex);
 
-    esp_event_post(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, NULL, 0, pdMS_TO_TICKS(250));
+    if (trigger_new_config_event) {
+      ESP_LOGI("NSPM_ConfigManager", "Received new config data from MQTT, will trigger event.");
+      esp_event_post(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, NULL, 0, pdMS_TO_TICKS(250));
+    }
   } else {
     ESP_LOGE("NSPM_ConfigManager", "Failed to gain config mutex while processing new config from MQTT!");
   }

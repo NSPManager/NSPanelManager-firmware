@@ -2,6 +2,8 @@
 #include <MutexWrapper.hpp>
 #include <esp_event.h>
 #include <functional>
+#include <memory>
+#include <protobuf_nspanel.pb-c.h>
 
 class InterfaceManager {
 public:
@@ -62,4 +64,7 @@ private:
 
   // Has the status for the home page been loaded from the manager yet?
   static inline bool _home_page_status_loaded = false;
+
+  // Current NSPanelConfig. Primarily used to check if current screensaver timeout has changed and if so update the interval.
+  static inline std::shared_ptr<NSPanelConfig> _nspm_cur_config;
 };

@@ -11,6 +11,8 @@ ESP_EVENT_DEFINE_BASE(NEXTION_EVENT);
 
 esp_err_t Nextion::init() {
   esp_log_level_set("Nextion", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
+  ESP_LOGI("Nextion", "Initializing Nextion display.");
+
   // Setup initial values and create mutexes:
   Nextion::_nextion_state_mutex = xSemaphoreCreateMutex();
   Nextion::_uart_write_mutex = xSemaphoreCreateMutex();
@@ -558,6 +560,13 @@ esp_err_t Nextion::set_component_pco2(const char *component_id, uint16_t color, 
 }
 
 esp_err_t Nextion::set_component_visibility(const char *component_id, bool visibility, uint16_t mutex_timeout) {
+  // Remove page name from beginning of component_id as it doesn't work with "vis"-command.
+  std::string raw_component_name = component_id;
+  uint16_t dot_position = raw_component_name.find('.');
+  if (dot_position != std::string::npos && dot_position + 1 < raw_component_name.length()) { // A dot was found, remove page name.
+    raw_component_name = raw_component_name.substr(dot_position + 1);
+  }
+
   // Verify that the Nextion state is "running" as we don't want to send data that may interrupt other processes such as updating the GUI
   if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
     if (Nextion::_current_nextion_state != nextion_state_t::RUNNING) {
@@ -567,9 +576,11 @@ esp_err_t Nextion::set_component_visibility(const char *component_id, bool visib
     xSemaphoreGive(Nextion::_nextion_state_mutex);
   }
 
+  ESP_LOGD("Nextion", "Setting visibility of component %s", raw_component_name.c_str());
+
   if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
     uart_write_bytes(UART_NUM_2, "vis ", strlen("vis "));
-    uart_write_bytes(UART_NUM_2, component_id, strlen(component_id));
+    uart_write_bytes(UART_NUM_2, raw_component_name.c_str(), raw_component_name.length());
     uart_write_bytes(UART_NUM_2, visibility ? ",1" : ",0", strlen(visibility ? ",1" : ",0"));
 
     // Send command finished sequence

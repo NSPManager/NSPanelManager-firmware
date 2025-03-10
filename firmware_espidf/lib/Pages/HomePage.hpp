@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <esp_event.h>
 #include <esp_timer.h>
+#include <memory>
+#include <protobuf_nspanel.pb-c.h>
 #include <string>
 
 class HomePage {
@@ -53,6 +55,11 @@ private:
    * Handle events from Nextion, such as touch events:
    */
   static void _handle_nextion_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
+  /**
+   * Handle event for a new config from MQTTManager:
+   */
+  static void _handle_config_update(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
   /**
    * Handle "Master ceiling lights" button events
@@ -146,4 +153,7 @@ private:
 
   // The actual handle to access the ESP timer that handles special mode deactivation
   static inline esp_timer_handle_t _special_mode_timeout_timer_handle = NULL;
+
+  // The current config from manager. This is primarily used to check if the "default page" has changed when a new config is received.
+  static inline std::shared_ptr<NSPanelConfig> _nspm_cur_config;
 };

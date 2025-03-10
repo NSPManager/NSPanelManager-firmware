@@ -4,11 +4,13 @@
 #include <InterfaceManager.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
+#include <NSPM_ConfigManager_event.hpp>
 #include <Nextion.hpp>
 #include <Nextion_event.hpp>
 #include <RoomManager.hpp>
 #include <RoomManager_event.hpp>
 #include <esp_log.h>
+#include <memory>
 #include <protobuf_nspanel.pb-c.h>
 #include <vector>
 
@@ -20,9 +22,17 @@ void HomePage::show() {
 
   Nextion::go_to_page(GUI_HOME_PAGE::page_name, 250);
 
+  std::shared_ptr<NSPanelConfig> config;
+  if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+    HomePage::_nspm_cur_config = config;
+  } else {
+    ESP_LOGW("HomePage", "Failed to get new config. Can not update HomePage local 'cur config'.");
+  }
+
   HomePage::_update_display();
   RoomManager::register_handler(ESP_EVENT_ANY_ID, HomePage::_handle_roommanager_event, NULL);
   esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, HomePage::_handle_nextion_event, NULL);
+  esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, HomePage::_handle_config_update, NULL);
 
   if (HomePage::_special_mode_timer_handle == NULL) {
     // This is the first time this page is shown, create timers
@@ -49,6 +59,7 @@ void HomePage::show() {
 void HomePage::unshow() {
   RoomManager::unregister_handler(ESP_EVENT_ANY_ID, HomePage::_handle_roommanager_event);
   esp_event_handler_unregister(NEXTION_EVENT, ESP_EVENT_ANY_ID, HomePage::_handle_nextion_event);
+  esp_event_handler_unregister(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, HomePage::_handle_config_update);
 }
 
 void HomePage::set_current_affect_mode(HomePageAffectMode mode) {
@@ -238,6 +249,24 @@ void HomePage::_handle_nextion_event(void *arg, esp_event_base_t event_base, int
 
   default:
     break;
+  }
+}
+
+void HomePage::_handle_config_update(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
+  std::shared_ptr<NSPanelConfig> config;
+  if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+    if (HomePage::_nspm_cur_config != nullptr && config->default_room != HomePage::_nspm_cur_config->default_room) { // Has the default page changed
+      if (RoomManager::get_current_room_id() == HomePage::_nspm_cur_config->default_room) {                          // Are we currently displaying the 'default page'? If so, go to new default page.
+        RoomManager::go_to_room_id(config->default_room);
+      } else {
+        ESP_LOGD("HomePage", "Currently selected room is not previous default, will not change.");
+      }
+    } else {
+      ESP_LOGD("HomePage", "Current config is null or default room has not changed.");
+    }
+    HomePage::_nspm_cur_config = config;
+  } else {
+    ESP_LOGW("HomePage", "Failed to get new config. Can not determine if 'default page' has changed.");
   }
 }
 

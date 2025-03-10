@@ -127,7 +127,7 @@ esp_err_t RoomManager::go_to_room_id(uint32_t room_id) {
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
     if (config->n_room_infos <= 0) [[unlikely]] {
-      ESP_LOGE("RoomManager", "Tried going to another room but no rooms exist in current config.");
+      ESP_LOGE("RoomManager", "Tried going to room %lu but no rooms exist in current config.", room_id);
       return ESP_ERR_NOT_FINISHED;
     }
 
@@ -240,6 +240,10 @@ esp_err_t RoomManager::go_to_default_room() {
     ESP_LOGE("RoomManager", "Failed to get config while trying to go to next room.");
   }
   return ESP_ERR_NOT_FINISHED;
+}
+
+uint32_t RoomManager::get_current_room_id() {
+  return RoomManager::_current_room_id;
 }
 
 esp_err_t RoomManager::replace_home_page_status(std::shared_ptr<NSPanelRoomStatus> status) {

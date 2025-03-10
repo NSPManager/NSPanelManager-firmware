@@ -58,12 +58,13 @@ public:
   static inline constexpr char *page_name = "screensaver";
   static inline constexpr char *screensaver_background_control_variable_name = "screensaver.ssBackground";
 
-  static inline constexpr char *label_current_weather_icon_name = "screensaver.curIcon";
+  static inline constexpr char *label_current_weather_icon_name = "screensaver.curTempIcon";
   static inline constexpr char *label_current_temperature_name = "screensaver.curTemp";
+  static inline constexpr char *label_current_room_temperature_icon_name = "screensaver.roomTempIcon";
+  static inline constexpr char *label_current_room_temperature_name = "screensaver.roomTemp";
   static inline constexpr char *label_current_max_min_temperature_name = "screensaver.curMaxmin";
   static inline constexpr char *label_current_rain_name = "screensaver.curRain";
   static inline constexpr char *label_current_wind_name = "screensaver.curWind";
-  static inline constexpr char *label_current_room_temperature_name = "screensaver.curRoomtemp";
 
   static inline constexpr char *label_current_day_name = "screensaver.curDay";
   static inline constexpr char *label_current_time = "screensaver.curTime";
@@ -79,7 +80,11 @@ public:
   static inline constexpr char *screensaver_minimal_firstview_variable_name = "screensaver2.firstview";
   static inline constexpr char *screensaver_minimal_background_control_variable_name = "screensaver2.ssBackground";
 
-  static inline constexpr char *label_screensaver_minimal_current_room_temperature_name = "screensaver2.curRoomtemp";
+  static inline constexpr char *label_screensaver_minimal_current_weather_icon_name = "screensaver2.curTempIcon";
+  static inline constexpr char *label_screensaver_minimal_current_temperature_name = "screensaver2.curTemp";
+  static inline constexpr char *label_screensaver_minimal_current_room_temperature_icon_name = "screensaver2.roomTempIcon";
+  static inline constexpr char *label_screensaver_minimal_current_room_temperature_name = "screensaver2.roomTemp";
+
   static inline constexpr char *label_screensaver_minimal_current_day_name = "screensaver2.curDay";
   static inline constexpr char *label_screensaver_minimal_current_time = "screensaver2.curTime";
   static inline constexpr char *label_screensaver_minimal_am_pm_name = "screensaver2.curAMPM";

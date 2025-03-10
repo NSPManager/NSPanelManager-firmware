@@ -67,6 +67,12 @@ public:
   static esp_err_t go_to_default_room();
 
   /**
+   * @brief Return the ID of the currently displayed room.
+   * @return ID of currently displayed room.
+   */
+  static uint32_t get_current_room_id();
+
+  /**
    * @brief Will replace current room status with the one provided
    * @param status: The new room status to be replaced into the list of rooms.
    * @return ESP_OK if operation was successful, otherwise ESP_ERR_NOT_FINISHED

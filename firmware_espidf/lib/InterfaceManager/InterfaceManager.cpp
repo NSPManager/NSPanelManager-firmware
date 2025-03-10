@@ -15,6 +15,7 @@
 #include <WiFiManager.hpp>
 #include <cmath>
 #include <esp_log.h>
+#include <protobuf_nspanel.pb-c.h>
 
 void InterfaceManager::init() {
   esp_log_level_set("InterfaceManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
@@ -123,6 +124,7 @@ void InterfaceManager::_nextion_event_handler(void *arg, esp_event_base_t event_
   switch (event_id) {
   case nextion_event_t::SLEEP_EVENT: {
     if (!InterfaceManager::_screensaver_blocked.get()) {
+      ESP_LOGD("InterfaceManager", "Got sleep event from InterfaceManager and screensaver is not blocked. Will switch to screensaver page.");
       ScreensaverPage::show();
     }
     break;
@@ -136,11 +138,11 @@ void InterfaceManager::_nextion_event_handler(void *arg, esp_event_base_t event_
       if (config->default_page == 0) { // TODO: Convert to protobuf ENUM for clarity
         HomePage::show();              // TODO: Show the user selected first page
       } else {
-        ESP_LOGE("ScreensaverPage", "Unknown default page %ld, will default to home page!", config->default_page);
+        ESP_LOGE("InterfaceManager", "Unknown default page %ld, will default to home page!", config->default_page);
         HomePage::show();
       }
     } else {
-      ESP_LOGE("ScreensaverPage", "Failed to get NSPanel Config when unshowing screensaver page!");
+      ESP_LOGE("InterfaceManager", "Failed to get NSPanel Config when unshowing screensaver page!");
     }
     break;
   }
@@ -228,9 +230,13 @@ void InterfaceManager::_nspm_configmanager_event_handler(void *arg, esp_event_ba
 
     std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-      if (Nextion::set_timer_value(GUI_HOME_PAGE::timer_screensaver_name, config->screensaver_activation_timeout, pdMS_TO_TICKS(250)) != ESP_OK) {
-        ESP_LOGE("InterfaceManager", "Failed to update timer value for screensaver timeout.");
+      if (InterfaceManager::_nspm_cur_config == nullptr || InterfaceManager::_nspm_cur_config->screensaver_activation_timeout != config->screensaver_activation_timeout) {
+        ESP_LOGI("InterfaceManager", "Updating screensaver activation timeout to %ld", config->screensaver_activation_timeout);
+        if (Nextion::set_timer_value(GUI_HOME_PAGE::timer_screensaver_name, config->screensaver_activation_timeout, pdMS_TO_TICKS(250)) != ESP_OK) {
+          ESP_LOGE("InterfaceManager", "Failed to update timer value for screensaver timeout.");
+        }
       }
+      InterfaceManager::_nspm_cur_config = config;
     } else {
       ESP_LOGW("InterfaceManager", "Failed to get config when received new config. Will not be able to update screensaver timeout!");
     }
