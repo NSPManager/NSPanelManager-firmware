@@ -80,10 +80,10 @@ public:
   static inline constexpr char *screensaver_minimal_background_control_variable_name = "screensaver2.ssBackground";
 
   static inline constexpr char *label_screensaver_minimal_current_room_temperature_name = "screensaver2.curRoomtemp";
-  static inline constexpr char *label_screensaver_minmal_current_day_name = "screensaver2.curDay";
-  static inline constexpr char *label_screensaver_minmal_current_time = "screensaver2.curTime";
-  static inline constexpr char *label_screensaver_minmal_am_pm_name = "screensaver2.curAMPM";
-  static inline constexpr char *label_screensaver_minmal_am_pm_name_raw = "screensaver2.curAMPM";
+  static inline constexpr char *label_screensaver_minimal_current_day_name = "screensaver2.curDay";
+  static inline constexpr char *label_screensaver_minimal_current_time = "screensaver2.curTime";
+  static inline constexpr char *label_screensaver_minimal_am_pm_name = "screensaver2.curAMPM";
+  static inline constexpr char *label_screensaver_minimal_am_pm_name_raw = "screensaver2.curAMPM";
 
   static inline constexpr char *label_forecast_day_names[] = {
       "forDay1",
