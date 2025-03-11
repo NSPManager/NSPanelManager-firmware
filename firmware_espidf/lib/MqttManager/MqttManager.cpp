@@ -27,7 +27,7 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
 
   MqttManager::_state_topic = "nspanel/";
   MqttManager::_state_topic.append(WiFiManager::mac_string());
-  MqttManager::_state_topic.append("/state");
+  MqttManager::_state_topic.append("/status");
 
   // Create JSON object for state offline message used in last will for MQTT connection.
   cJSON *json = cJSON_CreateObject();
@@ -147,7 +147,7 @@ void MqttManager::_send_mqtt_online_update() {
     }
 
     char *json_string = cJSON_Print(json);
-    if (MqttManager::publish(MqttManager::_state_topic, json_string, strlen(json_string), false) != ESP_OK) {
+    if (MqttManager::publish(MqttManager::_state_topic, json_string, strlen(json_string), true) != ESP_OK) {
       ESP_LOGE("MqttManager", "Failed to send online state update to topic %s!", MqttManager::_state_topic.c_str());
     }
 

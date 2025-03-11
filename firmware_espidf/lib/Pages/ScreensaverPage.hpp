@@ -7,6 +7,12 @@
 class ScreensaverPage {
 public:
   /**
+   * Initialize and start listening for events and update data on screensaver page in background so that
+   * the screensaver is ready when it's time to show it.
+   */
+  static void init();
+
+  /**
    * Show the screensaver page
    */
   static void show();

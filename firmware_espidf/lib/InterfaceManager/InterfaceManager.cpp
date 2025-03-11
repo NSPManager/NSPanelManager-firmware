@@ -226,6 +226,9 @@ void InterfaceManager::_nspm_configmanager_event_handler(void *arg, esp_event_ba
       RoomManager::go_to_default_room();
       RoomManager::go_to_first_entities_page(); // Also select the first entities page for default room as this is the first time and no room is currently selected.
       HomePage::show();                         // TODO: Show the user selected first page.
+
+      // Initialize Screensaver page so that it's read when it's time to show it.
+      ScreensaverPage::init();
     }
 
     std::shared_ptr<NSPanelConfig> config;
@@ -258,6 +261,9 @@ void InterfaceManager::_room_manager_event_handler(void *arg, esp_event_base_t e
       RoomManager::go_to_default_room();
       RoomManager::go_to_first_entities_page(); // Also select the first entities page for default room as this is the first time and no room is currently selected.
       HomePage::show();                         // TODO: Show the user selected first page.
+
+      // Initialize Screensaver page so that it's read when it's time to show it.
+      ScreensaverPage::init();
     }
   }
 }

@@ -576,8 +576,6 @@ esp_err_t Nextion::set_component_visibility(const char *component_id, bool visib
     xSemaphoreGive(Nextion::_nextion_state_mutex);
   }
 
-  ESP_LOGD("Nextion", "Setting visibility of component %s", raw_component_name.c_str());
-
   if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
     uart_write_bytes(UART_NUM_2, "vis ", strlen("vis "));
     uart_write_bytes(UART_NUM_2, raw_component_name.c_str(), raw_component_name.length());
