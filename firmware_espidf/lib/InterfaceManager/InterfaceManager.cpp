@@ -234,7 +234,6 @@ void InterfaceManager::_nspm_configmanager_event_handler(void *arg, esp_event_ba
     std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
       if (InterfaceManager::_nspm_cur_config == nullptr || InterfaceManager::_nspm_cur_config->screensaver_activation_timeout != config->screensaver_activation_timeout) {
-        ESP_LOGI("InterfaceManager", "Updating screensaver activation timeout to %ld", config->screensaver_activation_timeout);
         if (Nextion::set_timer_value(GUI_HOME_PAGE::timer_screensaver_name, config->screensaver_activation_timeout, pdMS_TO_TICKS(250)) != ESP_OK) {
           ESP_LOGE("InterfaceManager", "Failed to update timer value for screensaver timeout.");
         }

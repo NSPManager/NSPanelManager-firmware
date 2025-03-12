@@ -74,6 +74,7 @@ void HomePage::set_current_edit_mode(HomePageEditMode mode) {
 
 void HomePage::_update_display() {
   // Update displayed data
+  ESP_LOGD("HomePage", "Updating displayed values on HomePage.");
   std::shared_ptr<NSPanelRoomStatus> status;
   if (HomePage::_current_affect_mode == HomePageAffectMode::ROOM) {
     if (RoomManager::get_home_page_status(&status) == ESP_OK) [[likely]] {

@@ -197,7 +197,4 @@ private:
 
   // Event loop used for RoomManager events
   static inline esp_event_loop_handle_t _local_event_loop = NULL;
-
-  // Indicate wether we should load new room updates or not. This is used to disable loading of new rooms / room updates when updating firmware.
-  static inline bool _load_new_rooms = true;
 };
