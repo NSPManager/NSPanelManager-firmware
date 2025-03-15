@@ -17,6 +17,29 @@ void EntitiesPage::show() {
   InterfaceManager::call_unshow_callback();
   InterfaceManager::current_page_unshow_callback.set(EntitiesPage::unshow);
 
+  // If current room has an entities page, go to it and if not, show the next available entities page.
+  std::shared_ptr<NSPanelConfig> config;
+  if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+    bool select_next_entity_page = false;
+    for (int i = 0; i < config->n_room_infos; i++) {
+      if (config->room_infos[i]->room_id == RoomManager::get_current_room_id()) {
+        select_next_entity_page = true;
+      }
+      for (int j = 0; j < config->room_infos[i]->n_entity_page_ids; j++) {
+        if (select_next_entity_page) {
+          // We need to go to another room for this page, switch.
+          if (config->room_infos[i]->room_id != RoomManager::get_current_room_id()) {
+            RoomManager::go_to_room_id(config->room_infos[i]->room_id);
+          }
+          RoomManager::go_to_entities_page_id(config->room_infos[i]->entity_page_ids[j]);
+          break;
+        }
+      }
+    }
+  } else {
+    ESP_LOGE("EntitiesPage", "Failed to get config. Can't show the correct page. Data may be invalid!");
+  }
+
   if (RoomManager::get_current_room_entities_page_status(&EntitiesPage::_current_entities_page) != ESP_OK) [[unlikely]] {
     ESP_LOGE("EntitiesPage", "Failed to get current room entities. Will return to HomePage.");
     HomePage::show();
@@ -162,12 +185,12 @@ void EntitiesPage::_handle_nextion_event(void *arg, esp_event_base_t event_base,
 
 void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data) {
   // First check if we actually pressed an entity toggle button or an entity name
-  if (touch_data->pressed) {
-    for (int i = 0; i < sizeof(GUI_ITEMS4_PAGE::item_slots); i++) {
-      if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].button_id) {
+  for (int i = 0; i < sizeof(GUI_ITEMS4_PAGE::item_slots); i++) {
+    if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].button_id) {
+      if (touch_data->pressed) {
         EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
-        return; // Found match, no need to continue.
       }
+      return; // Found match, no need to continue.
     }
   }
 
@@ -193,12 +216,12 @@ void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data)
 
 void EntitiesPage::_handle_items8_touch_event(nextion_event_touch_t *touch_data) {
   // First check if we actually pressed an entity toggle button or an entity name
-  if (touch_data->pressed) {
-    for (int i = 0; i < sizeof(GUI_ITEMS8_PAGE::item_slots); i++) {
-      if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].button_id) {
+  for (int i = 0; i < sizeof(GUI_ITEMS8_PAGE::item_slots); i++) {
+    if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].button_id) {
+      if (touch_data->pressed) {
         EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
-        return; // Found match, no need to continue.
       }
+      return; // Found match, no need to continue.
     }
   }
 
@@ -224,12 +247,12 @@ void EntitiesPage::_handle_items8_touch_event(nextion_event_touch_t *touch_data)
 
 void EntitiesPage::_handle_items12_touch_event(nextion_event_touch_t *touch_data) {
   // First check if we actually pressed an entity toggle button or an entity name
-  if (touch_data->pressed) {
-    for (int i = 0; i < sizeof(GUI_ITEMS12_PAGE::item_slots); i++) {
-      if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].button_id) {
+  for (int i = 0; i < sizeof(GUI_ITEMS12_PAGE::item_slots); i++) {
+    if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].button_id) {
+      if (touch_data->pressed) {
         EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
-        return; // Found match, no need to continue.
       }
+      return; // Found match, no need to continue.
     }
   }
 
