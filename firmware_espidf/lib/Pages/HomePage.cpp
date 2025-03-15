@@ -422,7 +422,6 @@ void HomePage::_send_ceiling_master_button_command_to_manager() {
                   mut_status->average_dim_level = total_light_level / number_of_lights_on;
                 }
                 RoomManager::replace_home_page_status(mut_status);
-                HomePage::_update_display();
               } else {
                 ESP_LOGW("HomePage", "Failed to get config when checking if optimistic mode is active. Will now update optimistically.");
               }
@@ -479,7 +478,6 @@ void HomePage::_send_ceiling_master_button_command_to_manager() {
                   mutable_status->num_ceiling_lights_on = 0;
                 }
                 RoomManager::replace_home_page_status_all_rooms(mutable_status);
-                HomePage::_update_display();
               } else {
                 ESP_LOGW("HomePage", "Failed to get mutable room status. Will wait for return result instead.");
               }
@@ -551,7 +549,6 @@ void HomePage::_send_table_master_button_command_to_manager() {
                   mut_status->average_dim_level = total_light_level / number_of_lights_on;
                 }
                 RoomManager::replace_home_page_status(mut_status);
-                HomePage::_update_display();
               } else {
                 ESP_LOGW("HomePage", "Failed to get config when checking if optimistic mode is active. Will now update optimistically.");
               }
@@ -608,7 +605,6 @@ void HomePage::_send_table_master_button_command_to_manager() {
                   mutable_status->num_table_lights_on = 0;
                 }
                 RoomManager::replace_home_page_status_all_rooms(mutable_status);
-                HomePage::_update_display();
               } else {
                 ESP_LOGW("HomePage", "Failed to get mutable room status. Will wait for return result instead.");
               }
@@ -810,16 +806,12 @@ void HomePage::_handle_brightness_slider_event() {
           mut_status->average_dim_level = total_light_level / number_of_lights_on;
         }
         if (HomePage::_current_affect_mode == HomePageAffectMode::ROOM) {
-          if (RoomManager::replace_home_page_status(mut_status) == ESP_OK) [[likely]] {
-            HomePage::_update_display();
-          } else {
+          if (RoomManager::replace_home_page_status(mut_status) != ESP_OK) [[unlikely]] {
             ESP_LOGE("HomePage", "Failed to get mutable home page status. Will abort.");
             return;
           }
         } else if (HomePage::_current_affect_mode == HomePageAffectMode::ALL) {
-          if (RoomManager::replace_home_page_status_all_rooms(mut_status) == ESP_OK) [[likely]] {
-            HomePage::_update_display();
-          } else {
+          if (RoomManager::replace_home_page_status_all_rooms(mut_status) != ESP_OK) [[unlikely]] {
             ESP_LOGE("HomePage", "Failed to get mutable home page status. Will abort.");
             return;
           }
