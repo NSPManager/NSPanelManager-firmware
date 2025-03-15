@@ -372,7 +372,13 @@ void HomePage::_handle_nextion_event_master_table_lights_button(bool pressed) {
 }
 
 void HomePage::_send_ceiling_master_button_command_to_manager() {
-  ESP_LOGD("HomePage", "Send table master button event.");
+  std::shared_ptr<NSPanelConfig> config;
+  if (NSPM_ConfigManager::get_config(&config) != ESP_OK) [[unlikely]] {
+    ESP_LOGE("HomePage", "Failed to get config, cannot proceed with sending command to manager.");
+    return;
+  }
+
+  ESP_LOGD("HomePage", "Send ceiling master button event.");
   if (HomePage::_current_affect_mode == HomePageAffectMode::ROOM) {
     std::shared_ptr<NSPanelRoomStatus> status;
     if (RoomManager::get_home_page_status(&status) == ESP_OK) {
@@ -383,6 +389,9 @@ void HomePage::_send_ceiling_master_button_command_to_manager() {
           turn_light_on_cmd.brightness_slider_value = 0;
         } else {
           turn_light_on_cmd.brightness_slider_value = HomePage::_cache_brightness_slider;
+          if (turn_light_on_cmd.brightness_slider_value == 0) [[unlikely]] {
+            turn_light_on_cmd.brightness_slider_value = config->default_light_brightess;
+          }
         }
         turn_light_on_cmd.affect_lights = NSPANEL_MQTTMANAGER_COMMAND__AFFECT_LIGHTS_OPTIONS__CEILING_LIGHTS;
         turn_light_on_cmd.has_kelvin_value = true;
@@ -447,6 +456,9 @@ void HomePage::_send_ceiling_master_button_command_to_manager() {
         turn_light_on_cmd.brightness_slider_value = 0;
       } else {
         turn_light_on_cmd.brightness_slider_value = HomePage::_cache_brightness_slider;
+        if (turn_light_on_cmd.brightness_slider_value == 0) [[unlikely]] {
+          turn_light_on_cmd.brightness_slider_value = config->default_light_brightess;
+        }
       }
       turn_light_on_cmd.affect_lights = NSPANEL_MQTTMANAGER_COMMAND__AFFECT_LIGHTS_OPTIONS__CEILING_LIGHTS;
       turn_light_on_cmd.has_kelvin_value = true;
@@ -498,6 +510,12 @@ void HomePage::_send_ceiling_master_button_command_to_manager() {
 }
 
 void HomePage::_send_table_master_button_command_to_manager() {
+  std::shared_ptr<NSPanelConfig> config;
+  if (NSPM_ConfigManager::get_config(&config) != ESP_OK) [[unlikely]] {
+    ESP_LOGE("HomePage", "Failed to get config, cannot proceed with sending command to manager.");
+    return;
+  }
+
   ESP_LOGD("HomePage", "Send table master button event.");
   if (HomePage::_current_affect_mode == HomePageAffectMode::ROOM) {
     std::shared_ptr<NSPanelRoomStatus> status;
@@ -510,6 +528,9 @@ void HomePage::_send_table_master_button_command_to_manager() {
           turn_light_on_cmd.brightness_slider_value = 0;
         } else {
           turn_light_on_cmd.brightness_slider_value = HomePage::_cache_brightness_slider;
+          if (turn_light_on_cmd.brightness_slider_value == 0) [[unlikely]] {
+            turn_light_on_cmd.brightness_slider_value = config->default_light_brightess;
+          }
         }
         turn_light_on_cmd.affect_lights = NSPANEL_MQTTMANAGER_COMMAND__AFFECT_LIGHTS_OPTIONS__TABLE_LIGHTS;
         turn_light_on_cmd.has_kelvin_value = true;
@@ -574,6 +595,9 @@ void HomePage::_send_table_master_button_command_to_manager() {
         turn_light_on_cmd.brightness_slider_value = 0;
       } else {
         turn_light_on_cmd.brightness_slider_value = HomePage::_cache_brightness_slider;
+        if (turn_light_on_cmd.brightness_slider_value == 0) [[unlikely]] {
+          turn_light_on_cmd.brightness_slider_value = config->default_light_brightess;
+        }
       }
       turn_light_on_cmd.affect_lights = NSPANEL_MQTTMANAGER_COMMAND__AFFECT_LIGHTS_OPTIONS__TABLE_LIGHTS;
       turn_light_on_cmd.has_kelvin_value = true;
