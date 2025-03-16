@@ -21,17 +21,19 @@ void EntitiesPage::show() {
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
     bool select_next_entity_page = false;
-    for (int i = 0; i < config->n_room_infos; i++) {
+    bool has_selected_entities_page = false;
+    for (int i = 0; i < config->n_room_infos && !has_selected_entities_page; i++) {
       if (config->room_infos[i]->room_id == RoomManager::get_current_room_id()) {
         select_next_entity_page = true;
       }
-      for (int j = 0; j < config->room_infos[i]->n_entity_page_ids; j++) {
-        if (select_next_entity_page) {
+      if (select_next_entity_page) {
+        for (int j = 0; j < config->room_infos[i]->n_entity_page_ids; j++) {
           // We need to go to another room for this page, switch.
           if (config->room_infos[i]->room_id != RoomManager::get_current_room_id()) {
             RoomManager::go_to_room_id(config->room_infos[i]->room_id);
           }
           RoomManager::go_to_entities_page_id(config->room_infos[i]->entity_page_ids[j]);
+          has_selected_entities_page = true;
           break;
         }
       }
