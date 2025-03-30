@@ -67,6 +67,13 @@ private:
    */
   static void _send_entity_toggle_command_to_manager(uint32_t entities_page_id, uint8_t entity_slot);
 
+  /**
+   * Count to three seconds and update progress on screen.
+   * If the task has not been stopped it will send the command to save the scene.
+   * @param scene_slot: int32_t of which slot to save scene.
+   */
+  static void _task_save_scene_progress(void *scene_slot);
+
   // Vars
   static inline std::shared_ptr<NSPanelRoomEntitiesPage> _current_entities_page;
 
@@ -81,4 +88,10 @@ private:
 
   // The MQTT where the current entities page update is sent.
   static inline MutexWrapped<std::string> _current_entities_page_mqtt_topic;
+
+  // Task handle for task that will update the screen and save a scene.
+  static inline TaskHandle_t _save_scene_task_handle = NULL;
+
+  // The entities page slot to save the scene.
+  static inline std::atomic<bool> _save_scene = false;
 };

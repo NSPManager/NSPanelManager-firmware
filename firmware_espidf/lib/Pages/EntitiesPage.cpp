@@ -181,6 +181,29 @@ void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data)
         return; // Found match, no need to continue.
       }
     }
+
+    // Handle scene save buttons
+    for (int i = 0; i < sizeof(GUI_ITEMS4_PAGE::item_slots); i++) {
+      if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].button_id) {
+        if (touch_data->pressed) {
+          for (int j = 0; j < EntitiesPage::_current_entities_page->n_entities; j++) {
+            if (EntitiesPage::_current_entities_page->entities[j] != nullptr) {
+              if (EntitiesPage::_current_entities_page->entities[j]->room_view_position == i && EntitiesPage::_current_entities_page->entities[j]->can_save_scene && EntitiesPage::_save_scene_task_handle == NULL) {
+                // This is a scene we can actually save. Start save scene process.
+                ESP_LOGD("EntitiesPage", "Entity in slot %ld can save scene.", EntitiesPage::_current_entities_page->entities[j]->room_view_position);
+                EntitiesPage::_save_scene = true;
+                int32_t *scene_slot = new int32_t(EntitiesPage::_current_entities_page->entities[j]->room_view_position);
+                xTaskCreatePinnedToCore(EntitiesPage::_task_save_scene_progress, "save_scene", 4096, (void *)scene_slot, 1, &EntitiesPage::_save_scene_task_handle, 1);
+              }
+            }
+          }
+        } else {
+          // User released the button
+          EntitiesPage::_save_scene = false;
+        }
+        return; // Found match, no need to continue.
+      }
+    }
   } else {
     // Handle entities and not scenes
     for (int i = 0; i < sizeof(GUI_ITEMS4_PAGE::item_slots); i++) {
@@ -338,7 +361,7 @@ void EntitiesPage::_send_entity_toggle_command_to_manager(uint32_t entity_page_i
   toggle_cmd.entity_page_id = entity_page_id;
   toggle_cmd.entity_slot = entity_slot;
 
-  ESP_LOGD("HomePage", "Sending command to toggle entity in slot %d from entity page with ID %ld.", entity_slot, entity_page_id);
+  ESP_LOGD("EntitiesPage", "Sending command to toggle entity in slot %d from entity page with ID %ld.", entity_slot, entity_page_id);
 
   NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
   cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_TOGGLE_ENTITY_FROM_ENTITIES_PAGE;
@@ -354,4 +377,64 @@ void EntitiesPage::_send_entity_toggle_command_to_manager(uint32_t entity_page_i
   } else {
     ESP_LOGE("EntitiesPage", "Failed to serialize toggle command!");
   }
+}
+
+void EntitiesPage::_task_save_scene_progress(void *scene_slot) {
+  int32_t scene_slot_int = *((int32_t *)scene_slot);
+  delete scene_slot;
+
+  ESP_LOGD("EntitiesPage", "Starting save of scene in slot %ld", scene_slot_int);
+
+  Nextion::set_component_visibility(GUI_ITEMS_PAGE_COMMON::slider_save_name, true, 250);
+  for (int i = 0; i < 100 && EntitiesPage::_save_scene; i += 2) {
+    Nextion::set_component_value(GUI_ITEMS_PAGE_COMMON::slider_save_name, i, 25);
+    vTaskDelay(pdMS_TO_TICKS(3000 / (100 / 2))); // Update in steps of 2 and take 3 seconds (3000ms) to save a scene
+  }
+  Nextion::set_component_visibility(GUI_ITEMS_PAGE_COMMON::slider_save_name, false, 250);
+
+  if (EntitiesPage::_save_scene) {
+    // Send command to save scene.
+    NSPanelMQTTManagerCommand__SaveSceneCommand save_command = NSPANEL_MQTTMANAGER_COMMAND__SAVE_SCENE_COMMAND__INIT;
+    save_command.entity_page_id = EntitiesPage::_current_entities_page->id;
+    save_command.entity_slot = scene_slot_int;
+
+    ESP_LOGD("EntitiesPage", "Sending command to save scene in slot %ld from entity page with ID %ld.", scene_slot_int, EntitiesPage::_current_entities_page->id);
+
+    NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
+    cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_SAVE_SCENE_COMMAND;
+    cmd.save_scene_command = &save_command;
+
+    uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
+    std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
+    size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
+    if (packed_data_size == packed_length) {
+      if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) {
+        // Display text to user to say scene was saved.
+        Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, "Scene saved", 250);
+        EntitiesPage::_currently_showing_header_text.set("Scene saved");
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, EntitiesPage::_current_entities_page->header_text, 250);
+        EntitiesPage::_currently_showing_header_text.set(EntitiesPage::_current_entities_page->header_text);
+      } else {
+        ESP_LOGE("EntitiesPage", "Failed to send save command!");
+        Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, "Save failed", 250);
+        EntitiesPage::_currently_showing_header_text.set("Save failed");
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, EntitiesPage::_current_entities_page->header_text, 250);
+        EntitiesPage::_currently_showing_header_text.set(EntitiesPage::_current_entities_page->header_text);
+      }
+    } else {
+      ESP_LOGE("EntitiesPage", "Failed to serialize save command!");
+      ESP_LOGE("EntitiesPage", "Failed to send save command!");
+      Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, "Save failed", 250);
+      EntitiesPage::_currently_showing_header_text.set("Save failed");
+      vTaskDelay(pdMS_TO_TICKS(1000));
+      Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, EntitiesPage::_current_entities_page->header_text, 250);
+      EntitiesPage::_currently_showing_header_text.set(EntitiesPage::_current_entities_page->header_text);
+    }
+  }
+
+  // Task finished. Reset ptr and exit task.
+  EntitiesPage::_save_scene_task_handle = NULL;
+  vTaskDelete(NULL);
 }
