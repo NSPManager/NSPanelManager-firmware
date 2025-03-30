@@ -119,6 +119,24 @@ public:
   static esp_err_t go_to_next_entities_page();
 
   /**
+   * @brief Go to the first scenes page for the currently selected room.
+   * @return ESP_OK if operation was successful, otherwise ESP_ERR_NOT_FINISHED
+   */
+  static esp_err_t go_to_first_scenes_page();
+
+  /**
+   * @brief Navigate to the previous scenes page in order and if needed, change to previous room with an entity page defined.
+   * @return ESP_OK if operation was successful, otherwise ESP_ERR_NOT_FINISHED or ESP_ERR_NOT_FOUND
+   */
+  static esp_err_t go_to_previous_scenes_page();
+
+  /**
+   * @brief Navigate to the next scenes page in order and if needed, change to next room with an entity page defined.
+   * @return ESP_OK if operation was successful, otherwise ESP_ERR_NOT_FINISHED or ESP_ERR_NOT_FOUND
+   */
+  static esp_err_t go_to_next_scenes_page();
+
+  /**
    * @brief Register event handler for events.
    * @param event_id: The event id to subscribe to.
    * @param event_handler: The event handler callback to register

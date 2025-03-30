@@ -238,9 +238,13 @@ void HomePage::_handle_nextion_event(void *arg, esp_event_base_t event_base, int
         ESP_LOGE("HomePage", "Unknown affect mode when processing 'next mode button' event!");
         break;
       }
+    } else if (data->component_id == GUI_HOME_PAGE::button_scenes_id) {
+      if (HomePage::_current_affect_mode == HomePage::HomePageAffectMode::ROOM) {
+        EntitiesPage::show(true);
+      }
     } else if (data->component_id == GUI_HOME_PAGE::button_room_entities_id) {
       if (HomePage::_current_affect_mode == HomePage::HomePageAffectMode::ROOM) {
-        EntitiesPage::show();
+        EntitiesPage::show(false);
       }
     } else {
       ESP_LOGW("HomePage", "Got touch event from unknown ID: %d", data->component_id);

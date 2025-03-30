@@ -11,35 +11,18 @@
 #include <esp_log.h>
 #include <format>
 
-void EntitiesPage::show() {
+void EntitiesPage::show(bool scene_page) {
   esp_log_level_set("EntitiesPage", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
+  EntitiesPage::_is_showing_scenes = scene_page;
 
   InterfaceManager::call_unshow_callback();
   InterfaceManager::current_page_unshow_callback.set(EntitiesPage::unshow);
 
   // If current room has an entities page, go to it and if not, show the next available entities page.
-  std::shared_ptr<NSPanelConfig> config;
-  if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
-    bool select_next_entity_page = false;
-    bool has_selected_entities_page = false;
-    for (int i = 0; i < config->n_room_infos && !has_selected_entities_page; i++) {
-      if (config->room_infos[i]->room_id == RoomManager::get_current_room_id()) {
-        select_next_entity_page = true;
-      }
-      if (select_next_entity_page) {
-        for (int j = 0; j < config->room_infos[i]->n_entity_page_ids; j++) {
-          // We need to go to another room for this page, switch.
-          if (config->room_infos[i]->room_id != RoomManager::get_current_room_id()) {
-            RoomManager::go_to_room_id(config->room_infos[i]->room_id);
-          }
-          RoomManager::go_to_entities_page_id(config->room_infos[i]->entity_page_ids[j]);
-          has_selected_entities_page = true;
-          break;
-        }
-      }
-    }
+  if (scene_page) {
+    RoomManager::go_to_first_scenes_page();
   } else {
-    ESP_LOGE("EntitiesPage", "Failed to get config. Can't show the correct page. Data may be invalid!");
+    RoomManager::go_to_first_entities_page();
   }
 
   if (RoomManager::get_current_room_entities_page_status(&EntitiesPage::_current_entities_page) != ESP_OK) [[unlikely]] {
@@ -187,12 +170,26 @@ void EntitiesPage::_handle_nextion_event(void *arg, esp_event_base_t event_base,
 
 void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data) {
   // First check if we actually pressed an entity toggle button or an entity name
-  for (int i = 0; i < sizeof(GUI_ITEMS4_PAGE::item_slots); i++) {
-    if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].button_id) {
-      if (touch_data->pressed) {
-        EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
+  if (EntitiesPage::_is_showing_scenes) {
+    // When displaying scenes we don't want to send the toggle command when pressing the icon above/beside the button.
+    // We want to send the toggle command when pressing the text itself as the icon is for saving applicable scenes.
+    for (int i = 0; i < sizeof(GUI_ITEMS4_PAGE::item_slots); i++) {
+      if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].label_id) {
+        if (touch_data->pressed) {
+          EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
+        }
+        return; // Found match, no need to continue.
       }
-      return; // Found match, no need to continue.
+    }
+  } else {
+    // Handle entities and not scenes
+    for (int i = 0; i < sizeof(GUI_ITEMS4_PAGE::item_slots); i++) {
+      if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].button_id) {
+        if (touch_data->pressed) {
+          EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
+        }
+        return; // Found match, no need to continue.
+      }
     }
   }
 
@@ -202,13 +199,23 @@ void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data)
     HomePage::show();
     break;
 
-  case GUI_ITEMS4_PAGE::button_previous_page_id:
-    RoomManager::go_to_previous_entities_page();
+  case GUI_ITEMS4_PAGE::button_previous_page_id: {
+    if (EntitiesPage::_is_showing_scenes) {
+      RoomManager::go_to_previous_scenes_page();
+    } else {
+      RoomManager::go_to_previous_entities_page();
+    }
     break;
+  }
 
-  case GUI_ITEMS4_PAGE::button_next_page_id:
-    RoomManager::go_to_next_entities_page();
+  case GUI_ITEMS4_PAGE::button_next_page_id: {
+    if (EntitiesPage::_is_showing_scenes) {
+      RoomManager::go_to_next_scenes_page();
+    } else {
+      RoomManager::go_to_next_entities_page();
+    }
     break;
+  }
 
   default:
     ESP_LOGD("EntitiesPage", "Unknown component ID of touch event in items4. ID: %u", touch_data->component_id);
@@ -218,12 +225,26 @@ void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data)
 
 void EntitiesPage::_handle_items8_touch_event(nextion_event_touch_t *touch_data) {
   // First check if we actually pressed an entity toggle button or an entity name
-  for (int i = 0; i < sizeof(GUI_ITEMS8_PAGE::item_slots); i++) {
-    if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].button_id) {
-      if (touch_data->pressed) {
-        EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
+  if (EntitiesPage::_is_showing_scenes) {
+    // When displaying scenes we don't want to send the toggle command when pressing the icon above/beside the button.
+    // We want to send the toggle command when pressing the text itself as the icon is for saving applicable scenes.
+    for (int i = 0; i < sizeof(GUI_ITEMS8_PAGE::item_slots); i++) {
+      if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].label_id) {
+        if (touch_data->pressed) {
+          EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
+        }
+        return; // Found match, no need to continue.
       }
-      return; // Found match, no need to continue.
+    }
+  } else {
+    // Handle entities and not scenes
+    for (int i = 0; i < sizeof(GUI_ITEMS8_PAGE::item_slots); i++) {
+      if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].button_id) {
+        if (touch_data->pressed) {
+          EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
+        }
+        return; // Found match, no need to continue.
+      }
     }
   }
 
@@ -233,13 +254,23 @@ void EntitiesPage::_handle_items8_touch_event(nextion_event_touch_t *touch_data)
     HomePage::show();
     break;
 
-  case GUI_ITEMS8_PAGE::button_previous_page_id:
-    RoomManager::go_to_previous_entities_page();
+  case GUI_ITEMS8_PAGE::button_previous_page_id: {
+    if (EntitiesPage::_is_showing_scenes) {
+      RoomManager::go_to_previous_scenes_page();
+    } else {
+      RoomManager::go_to_previous_entities_page();
+    }
     break;
+  }
 
-  case GUI_ITEMS8_PAGE::button_next_page_id:
-    RoomManager::go_to_next_entities_page();
+  case GUI_ITEMS8_PAGE::button_next_page_id: {
+    if (EntitiesPage::_is_showing_scenes) {
+      RoomManager::go_to_next_scenes_page();
+    } else {
+      RoomManager::go_to_next_entities_page();
+    }
     break;
+  }
 
   default:
     ESP_LOGD("EntitiesPage", "Unknown component ID of touch event in items8. ID: %u", touch_data->component_id);
@@ -249,12 +280,26 @@ void EntitiesPage::_handle_items8_touch_event(nextion_event_touch_t *touch_data)
 
 void EntitiesPage::_handle_items12_touch_event(nextion_event_touch_t *touch_data) {
   // First check if we actually pressed an entity toggle button or an entity name
-  for (int i = 0; i < sizeof(GUI_ITEMS12_PAGE::item_slots); i++) {
-    if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].button_id) {
-      if (touch_data->pressed) {
-        EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
+  if (EntitiesPage::_is_showing_scenes) {
+    // When displaying scenes we don't want to send the toggle command when pressing the icon above/beside the button.
+    // We want to send the toggle command when pressing the text itself as the icon is for saving applicable scenes.
+    for (int i = 0; i < sizeof(GUI_ITEMS12_PAGE::item_slots); i++) {
+      if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].label_id) {
+        if (touch_data->pressed) {
+          EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
+        }
+        return; // Found match, no need to continue.
       }
-      return; // Found match, no need to continue.
+    }
+  } else {
+    // Handle entities and not scenes
+    for (int i = 0; i < sizeof(GUI_ITEMS12_PAGE::item_slots); i++) {
+      if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].button_id) {
+        if (touch_data->pressed) {
+          EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
+        }
+        return; // Found match, no need to continue.
+      }
     }
   }
 
@@ -264,13 +309,24 @@ void EntitiesPage::_handle_items12_touch_event(nextion_event_touch_t *touch_data
     HomePage::show();
     break;
 
-  case GUI_ITEMS12_PAGE::button_previous_page_id:
-    RoomManager::go_to_previous_entities_page();
+  case GUI_ITEMS12_PAGE::button_previous_page_id: {
+    if (EntitiesPage::_is_showing_scenes) {
+      RoomManager::go_to_previous_scenes_page();
+    } else {
+      RoomManager::go_to_previous_entities_page();
+    }
     break;
+  }
 
-  case GUI_ITEMS12_PAGE::button_next_page_id:
-    RoomManager::go_to_next_entities_page();
+  case GUI_ITEMS12_PAGE::button_next_page_id: {
+    if (EntitiesPage::_is_showing_scenes) {
+      RoomManager::go_to_next_scenes_page();
+    } else {
+      RoomManager::go_to_next_entities_page();
+    }
     break;
+  }
+
   default:
     ESP_LOGD("EntitiesPage", "Unknown component ID of touch event in items12. ID: %u", touch_data->component_id);
     break;
@@ -293,22 +349,6 @@ void EntitiesPage::_send_entity_toggle_command_to_manager(uint32_t entity_page_i
   size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
   if (packed_data_size == packed_length) {
     if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) {
-      std::shared_ptr<NSPanelConfig> config;
-      if (NSPM_ConfigManager::get_config(&config)) {
-        if (config->optimistic_mode) {
-          for (int i = 0; i < EntitiesPage::_current_entities_page->n_entities; i++) {
-            if (EntitiesPage::_current_entities_page->entities[i]->room_view_position == entity_slot) {
-              if (EntitiesPage::_current_entities_page->entities[i]->icon == GUI_ITEMS_PAGE_COMMON::items_button_switch_on_icon) {
-                EntitiesPage::_current_entities_page->entities[i]->icon = GUI_ITEMS_PAGE_COMMON::items_button_switch_off_icon;
-              } else {
-                EntitiesPage::_current_entities_page->entities[i]->icon = GUI_ITEMS_PAGE_COMMON::items_button_switch_on_icon;
-              }
-              EntitiesPage::_update_display();
-              break;
-            }
-          }
-        }
-      }
       ESP_LOGE("EntitiesPage", "Failed to send toggle command!");
     }
   } else {
