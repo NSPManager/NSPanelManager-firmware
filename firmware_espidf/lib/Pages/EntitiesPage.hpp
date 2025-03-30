@@ -65,7 +65,7 @@ private:
   /**
    * Send toggle command to manager
    */
-  static void _send_entity_toggle_command_to_manager(uint32_t entities_page_id, uint8_t entity_slot);
+  static void _send_entity_toggle_command_to_manager(uint32_t entities_page_id, uint32_t entity_slot);
 
   /**
    * Count to three seconds and update progress on screen.

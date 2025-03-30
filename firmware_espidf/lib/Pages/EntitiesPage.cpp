@@ -173,7 +173,7 @@ void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data)
   if (EntitiesPage::_is_showing_scenes) {
     // When displaying scenes we don't want to send the toggle command when pressing the icon above/beside the button.
     // We want to send the toggle command when pressing the text itself as the icon is for saving applicable scenes.
-    for (int i = 0; i < sizeof(GUI_ITEMS4_PAGE::item_slots); i++) {
+    for (int i = 0; i < 4; i++) {
       if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].label_id) {
         if (touch_data->pressed) {
           EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
@@ -183,7 +183,7 @@ void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data)
     }
 
     // Handle scene save buttons
-    for (int i = 0; i < sizeof(GUI_ITEMS4_PAGE::item_slots); i++) {
+    for (int i = 0; i < 4; i++) {
       if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].button_id) {
         if (touch_data->pressed) {
           for (int j = 0; j < EntitiesPage::_current_entities_page->n_entities; j++) {
@@ -206,7 +206,7 @@ void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data)
     }
   } else {
     // Handle entities and not scenes
-    for (int i = 0; i < sizeof(GUI_ITEMS4_PAGE::item_slots); i++) {
+    for (int i = 0; i < 4; i++) {
       if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].button_id) {
         if (touch_data->pressed) {
           EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
@@ -251,7 +251,7 @@ void EntitiesPage::_handle_items8_touch_event(nextion_event_touch_t *touch_data)
   if (EntitiesPage::_is_showing_scenes) {
     // When displaying scenes we don't want to send the toggle command when pressing the icon above/beside the button.
     // We want to send the toggle command when pressing the text itself as the icon is for saving applicable scenes.
-    for (int i = 0; i < sizeof(GUI_ITEMS8_PAGE::item_slots); i++) {
+    for (int i = 0; i < 8; i++) {
       if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].label_id) {
         if (touch_data->pressed) {
           EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
@@ -259,9 +259,32 @@ void EntitiesPage::_handle_items8_touch_event(nextion_event_touch_t *touch_data)
         return; // Found match, no need to continue.
       }
     }
+
+    // Handle scene save buttons
+    for (int i = 0; i < 8; i++) {
+      if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].button_id) {
+        if (touch_data->pressed) {
+          for (int j = 0; j < EntitiesPage::_current_entities_page->n_entities; j++) {
+            if (EntitiesPage::_current_entities_page->entities[j] != nullptr) {
+              if (EntitiesPage::_current_entities_page->entities[j]->room_view_position == i && EntitiesPage::_current_entities_page->entities[j]->can_save_scene && EntitiesPage::_save_scene_task_handle == NULL) {
+                // This is a scene we can actually save. Start save scene process.
+                ESP_LOGD("EntitiesPage", "Entity in slot %ld can save scene.", EntitiesPage::_current_entities_page->entities[j]->room_view_position);
+                EntitiesPage::_save_scene = true;
+                int32_t *scene_slot = new int32_t(EntitiesPage::_current_entities_page->entities[j]->room_view_position);
+                xTaskCreatePinnedToCore(EntitiesPage::_task_save_scene_progress, "save_scene", 4096, (void *)scene_slot, 1, &EntitiesPage::_save_scene_task_handle, 1);
+              }
+            }
+          }
+        } else {
+          // User released the button
+          EntitiesPage::_save_scene = false;
+        }
+        return; // Found match, no need to continue.
+      }
+    }
   } else {
     // Handle entities and not scenes
-    for (int i = 0; i < sizeof(GUI_ITEMS8_PAGE::item_slots); i++) {
+    for (int i = 0; i < 8; i++) {
       if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].button_id) {
         if (touch_data->pressed) {
           EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
@@ -306,7 +329,7 @@ void EntitiesPage::_handle_items12_touch_event(nextion_event_touch_t *touch_data
   if (EntitiesPage::_is_showing_scenes) {
     // When displaying scenes we don't want to send the toggle command when pressing the icon above/beside the button.
     // We want to send the toggle command when pressing the text itself as the icon is for saving applicable scenes.
-    for (int i = 0; i < sizeof(GUI_ITEMS12_PAGE::item_slots); i++) {
+    for (int i = 0; i < 12; i++) {
       if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].label_id) {
         if (touch_data->pressed) {
           EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
@@ -314,9 +337,32 @@ void EntitiesPage::_handle_items12_touch_event(nextion_event_touch_t *touch_data
         return; // Found match, no need to continue.
       }
     }
+
+    // Handle scene save buttons
+    for (int i = 0; i < 12; i++) {
+      if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].button_id) {
+        if (touch_data->pressed) {
+          for (int j = 0; j < EntitiesPage::_current_entities_page->n_entities; j++) {
+            if (EntitiesPage::_current_entities_page->entities[j] != nullptr) {
+              if (EntitiesPage::_current_entities_page->entities[j]->room_view_position == i && EntitiesPage::_current_entities_page->entities[j]->can_save_scene && EntitiesPage::_save_scene_task_handle == NULL) {
+                // This is a scene we can actually save. Start save scene process.
+                ESP_LOGD("EntitiesPage", "Entity in slot %ld can save scene.", EntitiesPage::_current_entities_page->entities[j]->room_view_position);
+                EntitiesPage::_save_scene = true;
+                int32_t *scene_slot = new int32_t(EntitiesPage::_current_entities_page->entities[j]->room_view_position);
+                xTaskCreatePinnedToCore(EntitiesPage::_task_save_scene_progress, "save_scene", 4096, (void *)scene_slot, 1, &EntitiesPage::_save_scene_task_handle, 1);
+              }
+            }
+          }
+        } else {
+          // User released the button
+          EntitiesPage::_save_scene = false;
+        }
+        return; // Found match, no need to continue.
+      }
+    }
   } else {
     // Handle entities and not scenes
-    for (int i = 0; i < sizeof(GUI_ITEMS12_PAGE::item_slots); i++) {
+    for (int i = 0; i < 12; i++) {
       if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].button_id) {
         if (touch_data->pressed) {
           EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
@@ -356,12 +402,12 @@ void EntitiesPage::_handle_items12_touch_event(nextion_event_touch_t *touch_data
   }
 }
 
-void EntitiesPage::_send_entity_toggle_command_to_manager(uint32_t entity_page_id, uint8_t entity_slot) {
+void EntitiesPage::_send_entity_toggle_command_to_manager(uint32_t entity_page_id, uint32_t entity_slot) {
   NSPanelMQTTManagerCommand__ToggleEntityFromEntitiesPage toggle_cmd = NSPANEL_MQTTMANAGER_COMMAND__TOGGLE_ENTITY_FROM_ENTITIES_PAGE__INIT;
   toggle_cmd.entity_page_id = entity_page_id;
   toggle_cmd.entity_slot = entity_slot;
 
-  ESP_LOGD("EntitiesPage", "Sending command to toggle entity in slot %d from entity page with ID %ld.", entity_slot, entity_page_id);
+  ESP_LOGD("EntitiesPage", "Sending command to toggle entity in slot %ld from entity page with ID %ld.", entity_slot, entity_page_id);
 
   NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
   cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_TOGGLE_ENTITY_FROM_ENTITIES_PAGE;
