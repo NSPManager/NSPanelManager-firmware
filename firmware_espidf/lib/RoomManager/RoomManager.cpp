@@ -597,6 +597,24 @@ void RoomManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
     } else {
       ESP_LOGE("RoomManager", "Got new status for entities page but failed to unpack it.");
     }
+  } else if (topic_string.compare(RoomManager::_all_rooms_state_topic) == 0) {
+    NSPanelRoomStatus *all_room_status = nspanel_room_status__unpack(NULL, event->data_len, (const uint8_t *)event->data);
+    if (all_room_status != NULL) {
+      if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
+        ESP_LOGD("RoomManager", "Received new home page state update for 'All rooms' mode.");
+        RoomManager::_home_page_all_rooms = std::shared_ptr<NSPanelRoomStatus>(all_room_status, &RoomManager::_nspanel_room_status_shared_ptr_deleter);
+        xSemaphoreGive(RoomManager::_home_page_mutex);
+
+        if (esp_event_post_to(RoomManager::_local_event_loop, ROOMMANAGER_EVENT, roommanager_event_t::HOME_PAGE_ALL_ROOMS_UPDATED, NULL, 0, pdMS_TO_TICKS(250)) != ESP_OK) {
+          ESP_LOGW("RoomManager", "Failed to publish event that new home page data is available when receiving 'All rooms' data.");
+        }
+      } else {
+        ESP_LOGE("RoomManager", "Got new status for 'All rooms' for home page but couldn't take mutex to update it! Will free new state.");
+        nspanel_room_status__free_unpacked(all_room_status, NULL);
+      }
+    } else {
+      ESP_LOGE("RoomManager", "Got new status for 'All rooms' for home page but failed to unpack it.");
+    }
   }
 }
 
@@ -618,6 +636,15 @@ void RoomManager::_event_handler(void *arg, esp_event_base_t event_base, int32_t
 
         // Config loaded, go to default room
         RoomManager::go_to_default_room();
+
+        // Subscribe to the 'All rooms' status topic.
+        RoomManager::_all_rooms_state_topic = "nspanel/mqttmanager_";
+        RoomManager::_all_rooms_state_topic.append(NSPM_ConfigManager::get_manager_address());
+        RoomManager::_all_rooms_state_topic.append("/all_rooms_status");
+        while (MqttManager::subscribe(RoomManager::_all_rooms_state_topic) != ESP_OK) {
+          ESP_LOGE("RoomManager", "Failed to subscribe to 'All rooms' state topic %s. Will try again in 200ms.", RoomManager::_all_rooms_state_topic.c_str());
+          vTaskDelay(pdMS_TO_TICKS(200));
+        }
       }
     }
   }

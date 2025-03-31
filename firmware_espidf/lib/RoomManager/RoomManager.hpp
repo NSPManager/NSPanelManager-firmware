@@ -189,6 +189,9 @@ private:
   // The currently selected room ID
   static inline std::atomic<uint32_t> _current_room_id;
 
+  // The MQTT topic for the "All roms" mode state topic.
+  static inline std::string _all_rooms_state_topic;
+
   // Status of home page for all rooms
   static inline std::shared_ptr<NSPanelRoomStatus> _home_page_all_rooms;
 

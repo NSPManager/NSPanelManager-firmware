@@ -201,7 +201,9 @@ void HomePage::_update_display() {
 }
 
 void HomePage::_handle_roommanager_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-  if (event_id == roommanager_event_t::HOME_PAGE_UPDATED) {
+  if (event_id == roommanager_event_t::HOME_PAGE_UPDATED && HomePage::_current_affect_mode == HomePageAffectMode::ROOM) {
+    HomePage::_update_display();
+  } else if (event_id == roommanager_event_t::HOME_PAGE_ALL_ROOMS_UPDATED && HomePage::_current_affect_mode == HomePageAffectMode::ALL) {
     HomePage::_update_display();
   }
 }
