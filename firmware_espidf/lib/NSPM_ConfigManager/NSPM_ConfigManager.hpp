@@ -1,7 +1,11 @@
 #pragma once
 
+#include <esp_err.h>
 #include <esp_event_base.h>
 #include <esp_task.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
 #include <memory>
 #include <protobuf_nspanel.pb-c.h>
 #include <string>

@@ -252,7 +252,7 @@ void UpdateManager::update_firmware(void *param) {
 
         UpdateManager::update_littlefs(NULL, true);
 
-        ESP_LOGI("UpdateManager", "Update complete. Will start in 2 seconds");
+        ESP_LOGI("UpdateManager", "Update complete. Will restart in 2 seconds");
         vTaskDelay(pdMS_TO_TICKS(2000));
         esp_restart();
       }

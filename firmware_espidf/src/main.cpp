@@ -1,3 +1,4 @@
+#include <ButtonManager.hpp>
 #include <ConfigManager.hpp>
 #include <InterfaceManager.hpp>
 #include <LittleFS.hpp>
@@ -118,6 +119,9 @@ extern "C" void app_main() {
       WiFiManager::start_client(&ConfigManager::wifi_ssid, &ConfigManager::wifi_psk, &ConfigManager::wifi_hostname);
     }
   }
+
+  // Setup ButtonManager to handle physical buttons and relays
+  ButtonManager::init();
 
   // Only start managers for actual functionality if MQTT is configured.
   if (!ConfigManager::mqtt_server.empty()) {
