@@ -24,6 +24,11 @@ public:
    */
   static void call_unshow_callback();
 
+  /**
+   * Show the user selected default page
+   */
+  static void show_default_page();
+
 private:
   /**
    * @brief Handle any event trigger from the Nextion display
@@ -44,6 +49,11 @@ private:
    * @brief Handle any event trigger from the RoomManager
    */
   static void _room_manager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
+  /**
+   * @brief Handle data received over MQTT and apply new interface manager settings if applicable.
+   */
+  static void _mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
   /**
    * Unshow the currently showing page by starting a task to prevent the running task from removing
@@ -67,4 +77,14 @@ private:
 
   // Current NSPanelConfig. Primarily used to check if current screensaver timeout has changed and if so update the interval.
   static inline std::shared_ptr<NSPanelConfig> _nspm_cur_config;
+
+  // MQTT Topics
+  static inline std::string _screen_on_off_command_topic;
+  static inline std::string _screen_on_off_state_topic;
+  static inline std::string _screen_brightness_command_topic;
+  static inline std::string _screen_brightness_state_topic;
+  static inline std::string _screensaver_brightness_command_topic;
+  static inline std::string _screensaver_brightness_state_topic;
+  static inline std::string _screensaver_mode_command_topic;
+  static inline std::string _screensaver_mode_state_topic;
 };

@@ -22,6 +22,11 @@ public:
    */
   static void unshow();
 
+  /**
+   * Is the screensaver page currently being shown?
+   */
+  static bool showing();
+
 private:
   /**
    * Update the display with new values for time and AM/PM
@@ -69,6 +74,9 @@ private:
   static void _shared_ptr_weather_update_cleanup(NSPanelWeatherUpdate *data);
 
   // Vars:
+  // The current config/last known config of the panel. Used to compare with new config to determine changes.
+  static inline std::shared_ptr<NSPanelConfig> _nspanel_current_config;
+
   // The most current weather data for forecast and current weather
   static inline std::shared_ptr<NSPanelWeatherUpdate> _weather_update_data = nullptr;
   static inline std::vector<uint8_t> _weather_update_mqtt_data; // Raw data received from MQTT

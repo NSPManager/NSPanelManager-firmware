@@ -1,4 +1,5 @@
 #include <ConfigManager.hpp>
+#include <EntitiesPage.hpp>
 #include <GUI_data.hpp>
 #include <HomePage.hpp>
 #include <InterfaceManager.hpp>
@@ -15,6 +16,7 @@
 #include <WiFiManager.hpp>
 #include <cmath>
 #include <esp_log.h>
+#include <format>
 #include <protobuf_nspanel.pb-c.h>
 
 void InterfaceManager::init() {
@@ -27,9 +29,35 @@ void InterfaceManager::init() {
     return;
   }
 
+  std::string base_topic = "nspanel/";
+  base_topic.append(WiFiManager::mac_string());
+  InterfaceManager::_screen_on_off_command_topic = base_topic;
+  InterfaceManager::_screen_on_off_state_topic = base_topic;
+  InterfaceManager::_screen_brightness_command_topic = base_topic;
+  InterfaceManager::_screen_brightness_state_topic = base_topic;
+  InterfaceManager::_screensaver_brightness_command_topic = base_topic;
+  InterfaceManager::_screensaver_brightness_state_topic = base_topic;
+  InterfaceManager::_screensaver_mode_command_topic = base_topic;
+  InterfaceManager::_screensaver_mode_state_topic = base_topic;
+
+  InterfaceManager::_screen_on_off_command_topic.append("/screen_cmd");
+  InterfaceManager::_screen_on_off_state_topic.append("/screen_state");
+  InterfaceManager::_screen_brightness_command_topic.append("/brightness_cmd");
+  InterfaceManager::_screen_brightness_state_topic.append("/brightness_state");
+  InterfaceManager::_screensaver_brightness_command_topic.append("/brightness_screensaver_cmd");
+  InterfaceManager::_screensaver_brightness_state_topic.append("/brightness_screensaver_state");
+  InterfaceManager::_screensaver_mode_command_topic.append("/screensaver_mode_cmd");
+  InterfaceManager::_screensaver_mode_state_topic.append("/screensaver_mode_state");
+
+  MqttManager::subscribe(InterfaceManager::_screen_on_off_command_topic);
+  MqttManager::subscribe(InterfaceManager::_screen_brightness_command_topic);
+  MqttManager::subscribe(InterfaceManager::_screensaver_brightness_command_topic);
+  MqttManager::subscribe(InterfaceManager::_screensaver_mode_command_topic);
+
   esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_nextion_event_handler, NULL);
   esp_event_handler_register(UPDATEMANAGER_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_update_manager_event_handler, NULL);
   esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_nspm_configmanager_event_handler, NULL);
+  MqttManager::register_handler(MQTT_EVENT_DATA, &InterfaceManager::_mqtt_event_handler, NULL);
   RoomManager::register_handler(ESP_EVENT_ANY_ID, InterfaceManager::_room_manager_event_handler, NULL);
 
   // Show boot page
@@ -112,6 +140,36 @@ void InterfaceManager::call_unshow_callback() {
   }
 }
 
+void InterfaceManager::show_default_page() {
+  std::shared_ptr<NSPanelConfig> config;
+  if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+    switch (config->default_page) {
+    case NSPanelConfig__NSPanelDefaultPage::NSPANEL_CONFIG__NSPANEL_DEFAULT_PAGE__HOME: {
+      HomePage::show();
+      break;
+    }
+
+    case NSPanelConfig__NSPanelDefaultPage::NSPANEL_CONFIG__NSPANEL_DEFAULT_PAGE__SCENES: {
+      EntitiesPage::show(true);
+      break;
+    }
+
+    case NSPanelConfig__NSPanelDefaultPage::NSPANEL_CONFIG__NSPANEL_DEFAULT_PAGE__ENTITIES: {
+      EntitiesPage::show(false);
+      break;
+    }
+
+    default: {
+      ESP_LOGE("InterfaceManager", "Unknown default page %ld, will default to home page!", static_cast<uint32_t>(config->default_page));
+      HomePage::show();
+      break;
+    }
+    }
+  } else {
+    ESP_LOGE("InterfaceManager", "Failed to get config while trying to display the default page.");
+  }
+}
+
 void InterfaceManager::_task_unshow_page(void *param) {
   std::function<void()> unshow_handle;
   while (xQueueReceive(InterfaceManager::_unshow_queue, &unshow_handle, pdMS_TO_TICKS(250)) == pdPASS) {
@@ -127,6 +185,7 @@ void InterfaceManager::_nextion_event_handler(void *arg, esp_event_base_t event_
       ESP_LOGD("InterfaceManager", "Got sleep event from InterfaceManager and screensaver is not blocked. Will switch to screensaver page.");
       ScreensaverPage::show();
     }
+    MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "0", strlen("0"), true);
     break;
   }
 
@@ -135,15 +194,11 @@ void InterfaceManager::_nextion_event_handler(void *arg, esp_event_base_t event_
     std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
       Nextion::set_brightness_level(config->screen_dim_level, 1000);
-      if (config->default_page == 0) { // TODO: Convert to protobuf ENUM for clarity
-        HomePage::show();              // TODO: Show the user selected first page
-      } else {
-        ESP_LOGE("InterfaceManager", "Unknown default page %ld, will default to home page!", config->default_page);
-        HomePage::show();
-      }
     } else {
       ESP_LOGE("InterfaceManager", "Failed to get NSPanel Config when unshowing screensaver page!");
     }
+    InterfaceManager::show_default_page();
+    MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "1", strlen("1"), true);
     break;
   }
 
@@ -238,6 +293,52 @@ void InterfaceManager::_nspm_configmanager_event_handler(void *arg, esp_event_ba
           ESP_LOGE("InterfaceManager", "Failed to update timer value for screensaver timeout.");
         }
       }
+
+      if (ScreensaverPage::showing()) {
+        Nextion::set_brightness_level(config->screensaver_dim_level, 1000);
+      } else {
+        Nextion::set_brightness_level(config->screen_dim_level, 1000);
+      }
+
+      // Update MQTT state topics
+      std::string screen_brightness = std::to_string(config->screen_dim_level);
+      std::string screensaver_brightness = std::to_string(config->screensaver_dim_level);
+      MqttManager::publish(std::string(InterfaceManager::_screen_brightness_state_topic), screen_brightness.c_str(), screen_brightness.size(), true);
+      MqttManager::publish(std::string(InterfaceManager::_screensaver_brightness_state_topic), screensaver_brightness.c_str(), screensaver_brightness.size(), true);
+
+      switch (config->screensaver_mode) {
+      case NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITH_BACKGROUND:
+        MqttManager::publish(InterfaceManager::_screensaver_mode_state_topic, "with_background", strlen("with_background"), true);
+        break;
+
+      case NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITHOUT_BACKGROUND:
+        MqttManager::publish(InterfaceManager::_screensaver_mode_state_topic, "without_background", strlen("without_background"), true);
+        break;
+
+      case NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__DATETIME_WITH_BACKGROUND:
+        MqttManager::publish(InterfaceManager::_screensaver_mode_state_topic, "datetime_with_background", strlen("datetime_with_background"), true);
+        break;
+
+      case NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__DATETIME_WITHOUT_BACKGROUND:
+        MqttManager::publish(InterfaceManager::_screensaver_mode_state_topic, "datetime_without_background", strlen("datetime_without_background"), true);
+        break;
+
+      case NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__NO_SCREENSAVER:
+        MqttManager::publish(InterfaceManager::_screensaver_mode_state_topic, "no_screensaver", strlen("no_screensaver"), true);
+        break;
+
+      default:
+        ESP_LOGE("InterfaceManager", "Unknown screensaver mode. Will not send state update.");
+        break;
+      }
+
+      // Go to new default page if it has changed
+      if (InterfaceManager::_nspm_cur_config != nullptr) {
+        if (InterfaceManager::_nspm_cur_config->default_page != config->default_page && !ScreensaverPage::showing()) {
+          InterfaceManager::show_default_page();
+        }
+      }
+
       InterfaceManager::_nspm_cur_config = config;
     } else {
       ESP_LOGW("InterfaceManager", "Failed to get config when received new config. Will not be able to update screensaver timeout!");
@@ -264,5 +365,100 @@ void InterfaceManager::_room_manager_event_handler(void *arg, esp_event_base_t e
       // Initialize Screensaver page so that it's read when it's time to show it.
       ScreensaverPage::init();
     }
+  }
+}
+
+void InterfaceManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
+  esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
+  if (event->data_len == 0) {
+    return;
+  }
+
+  std::string topic_string = std::string(event->topic, event->topic_len);
+  std::string data = std::string(event->data, event->data_len);
+  // esp_mqtt_client_handle_t client = event->client;
+
+  switch ((esp_mqtt_event_id_t)event_id) {
+  case MQTT_EVENT_DATA: {
+    if (topic_string.compare(InterfaceManager::_screen_brightness_command_topic) == 0) {
+      std::shared_ptr<NSPanelConfig> mutable_config;
+      if (NSPM_ConfigManager::get_mutable_config(&mutable_config) == ESP_OK) [[likely]] {
+        uint8_t new_brightness = std::stoi(data);
+        if (new_brightness > 100) [[unlikely]] { // Clamp value to a max of 100%
+          new_brightness = 100;
+        }
+        mutable_config->screen_dim_level = new_brightness;
+        if (!ScreensaverPage::showing()) { // We are not on screensaver, update screen brightness
+          Nextion::set_brightness_level(new_brightness, 1000);
+        }
+        std::string send_data = std::to_string(new_brightness).c_str();
+        MqttManager::publish(std::string(InterfaceManager::_screen_brightness_state_topic), data.c_str(), send_data.length(), true);
+        NSPM_ConfigManager::replace_config(&mutable_config);
+      } else {
+        ESP_LOGE("InterfaceManager", "Failed to get mutable config while trying to process config update data from MQTT topic %s.", topic_string.c_str());
+      }
+    } else if (topic_string.compare(InterfaceManager::_screensaver_brightness_command_topic) == 0) {
+      std::shared_ptr<NSPanelConfig> mutable_config;
+      if (NSPM_ConfigManager::get_mutable_config(&mutable_config) == ESP_OK) [[likely]] {
+        uint8_t new_brightness = std::stoi(data);
+        if (new_brightness > 100) [[unlikely]] { // Clamp value to a max of 100%
+          new_brightness = 100;
+        }
+        mutable_config->screensaver_dim_level = new_brightness;
+        if (ScreensaverPage::showing()) { // We are not on screensaver, update screen brightness
+          Nextion::set_brightness_level(new_brightness, 1000);
+        }
+        std::string send_data = std::to_string(new_brightness).c_str();
+        MqttManager::publish(std::string(InterfaceManager::_screensaver_brightness_state_topic), data.c_str(), send_data.length(), true);
+        NSPM_ConfigManager::replace_config(&mutable_config);
+      } else {
+        ESP_LOGE("InterfaceManager", "Failed to get mutable config while trying to process config update data from MQTT topic %s.", topic_string.c_str());
+      }
+    } else if (topic_string.compare(InterfaceManager::_screen_on_off_command_topic) == 0) {
+      std::shared_ptr<NSPanelConfig> config;
+      if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+        if (data.compare("0") == 0) {
+          ScreensaverPage::show();
+          MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "0", strlen("0"), true);
+        } else if (data.compare("1") == 0) {
+          Nextion::set_brightness_level(config->screen_dim_level, 1000);
+          InterfaceManager::show_default_page();
+          MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "1", strlen("1"), true);
+        } else {
+          ESP_LOGE("InterfaceManager", "Got request to turn screen on/off but got unknown data: '%s'. Valid data is 0 or 1", data.c_str());
+        }
+      } else {
+        ESP_LOGE("InterfaceManager", "Failed to get config while trying to turn screen on or off.");
+      }
+    } else if (topic_string.compare(InterfaceManager::_screensaver_mode_command_topic) == 0) {
+      std::shared_ptr<NSPanelConfig> mutable_config;
+      if (NSPM_ConfigManager::get_mutable_config(&mutable_config) == ESP_OK) [[likely]] {
+        if (data.compare("with_background") == 0) {
+          mutable_config->screensaver_mode = NSPanelConfig__NSPanelScreensaverMode::NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITH_BACKGROUND;
+          NSPM_ConfigManager::replace_config(&mutable_config);
+        } else if (data.compare("without_background") == 0) {
+          mutable_config->screensaver_mode = NSPanelConfig__NSPanelScreensaverMode::NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITHOUT_BACKGROUND;
+          NSPM_ConfigManager::replace_config(&mutable_config);
+        } else if (data.compare("datetime_with_background") == 0) {
+          mutable_config->screensaver_mode = NSPanelConfig__NSPanelScreensaverMode::NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__DATETIME_WITH_BACKGROUND;
+          NSPM_ConfigManager::replace_config(&mutable_config);
+        } else if (data.compare("datetime_without_background") == 0) {
+          mutable_config->screensaver_mode = NSPanelConfig__NSPanelScreensaverMode::NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__DATETIME_WITHOUT_BACKGROUND;
+          NSPM_ConfigManager::replace_config(&mutable_config);
+        } else if (data.compare("no_screensaver") == 0) {
+          mutable_config->screensaver_mode = NSPanelConfig__NSPanelScreensaverMode::NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__NO_SCREENSAVER;
+          NSPM_ConfigManager::replace_config(&mutable_config);
+        } else {
+          ESP_LOGE("InterfaceManager", "Got request to update screensaver mode to '%s' but that is not a valid screensaver mode!", data.c_str());
+        }
+      } else {
+        ESP_LOGE("InterfaceManager", "Failed to get mutable config while trying to process config update data from MQTT topic %s.", topic_string.c_str());
+      }
+    }
+    break;
+  }
+
+  default:
+    break;
   }
 }

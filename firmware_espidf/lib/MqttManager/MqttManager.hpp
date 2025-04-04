@@ -1,6 +1,7 @@
 #pragma once
 #include <mqtt_client.h>
 #include <string>
+#include <vector>
 
 class MqttManager {
 public:
@@ -70,6 +71,11 @@ private:
   static void _send_mqtt_online_update();
 
   /**
+   * Resubscribe to all topics
+   */
+  static void _task_resubscribe(void *param);
+
+  /**
    * The configuration used to init and setup the MQTT client.
    */
   static inline esp_mqtt_client_config_t _mqtt_config;
@@ -78,6 +84,11 @@ private:
    * The underlying MQTT client that is used
    */
   static inline esp_mqtt_client_handle_t _mqtt_client;
+
+  /**
+   * List of subscribed topics so that we can resubscribe in case we disconnect
+   */
+  static inline std::vector<std::string> _subscribed_topics;
 
   /**
    * Are we connected to the MQTT manager?

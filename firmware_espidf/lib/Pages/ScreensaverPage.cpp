@@ -79,6 +79,10 @@ void ScreensaverPage::unshow() {
   ScreensaverPage::_currently_shown = false;
 }
 
+bool ScreensaverPage::showing() {
+  return ScreensaverPage::_currently_shown;
+}
+
 void ScreensaverPage::_mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
   esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
   std::string topic_string = std::string(event->topic, event->topic_len);
@@ -128,13 +132,24 @@ void ScreensaverPage::_nspm_config_event_handler(void *arg, esp_event_base_t eve
   case nspm_configmanager_event::CONFIG_LOADED: { // New config loaded while showing screensaver. Update screen
     ScreensaverPage::init();
     if (ScreensaverPage::_currently_shown) {
-      ScreensaverPage::_go_to_nextion_page();
-      ScreensaverPage::_update_displayed_date();
-      ScreensaverPage::_update_displayed_time();
-      xTaskCreatePinnedToCore(ScreensaverPage::_task_update_displayed_weather_data, "update_weather_data", 4096, NULL, 2, NULL, 1);
+      std::shared_ptr<NSPanelConfig> new_config;
+      if (NSPM_ConfigManager::get_config(&new_config) == ESP_OK) [[likely]] {
+        if (ScreensaverPage::_nspanel_current_config == nullptr || ScreensaverPage::_nspanel_current_config->screensaver_mode != new_config->screensaver_mode) {
+          ScreensaverPage::_go_to_nextion_page();
+          ScreensaverPage::_update_displayed_date();
+          ScreensaverPage::_update_displayed_time();
+          xTaskCreatePinnedToCore(ScreensaverPage::_task_update_displayed_weather_data, "update_weather_data", 4096, NULL, 2, NULL, 1);
+        }
+      } else {
+        ESP_LOGE("ScreensaverPage", "Failed to get config while processing 'new config event'. May become out of sync with manager until next config update.");
+      }
     }
 
     RoomManager::go_to_default_room(); // Go to default room so that it is the room that is shown when the screensaver is hidden.
+
+    if (NSPM_ConfigManager::get_config(&ScreensaverPage::_nspanel_current_config) != ESP_OK) [[unlikely]] {
+      ESP_LOGW("ScreensaverPage", "Failed to update local reference to current config. May become out of sync with manager until next config update.");
+    }
     break;
   }
 
@@ -178,6 +193,8 @@ void ScreensaverPage::_update_displayed_date() {
     Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_day_name, ScreensaverPage::_current_date.get().c_str(), 250);
   } else if (ScreensaverPage::_current_screensaver_mode.get() == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__DATETIME_WITH_BACKGROUND || ScreensaverPage::_current_screensaver_mode.get() == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__DATETIME_WITHOUT_BACKGROUND) {
     Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_screensaver_minimal_current_day_name, ScreensaverPage::_current_date.get().c_str(), 250);
+  } else if (ScreensaverPage::_current_screensaver_mode.get() == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__NO_SCREENSAVER) {
+    // Perform nothing and do not show error message below.
   } else {
     ESP_LOGE("ScreensaverPage", "Unknown screensaver mode %d while processing new date from MQTT.", (int)ScreensaverPage::_current_screensaver_mode.get());
   }

@@ -19,13 +19,24 @@ public:
 
   /**
    * @brief Get a copy of the config object in order to read data from it.
-   * This is done so that the internal mutex can handle any collisions even though this is suboptimal.
-   * It would be better to return a pointer to the config but that leaves the risk of it becoming invalid
-   * as a new config is loaded.
    * @param config: The place to copy the NSPanelConfig object to
    * @return ESP_OK if everything was done correctly, otherwise ESP_ERR_NOT_FINISHED
    */
   static esp_err_t get_config(std::shared_ptr<NSPanelConfig> *config);
+
+  /**
+   * @brief Get a copy of the config object in order to manipulate it and later push it in as a new config.
+   * @param config: The place to copy the NSPanelConfig object to
+   * @return ESP_OK if everything was done correctly, otherwise ESP_ERR_NOT_FINISHED
+   */
+  static esp_err_t get_mutable_config(std::shared_ptr<NSPanelConfig> *config);
+
+  /**
+   * @brief Replace the current config object with a new one
+   * @param config: The new config
+   * @return ESP_OK if everything was done correctly, otherwise ESP_ERR_NOT_FINISHED
+   */
+  static esp_err_t replace_config(std::shared_ptr<NSPanelConfig> *config);
 
   /**
    * @brief Get the manager IP address

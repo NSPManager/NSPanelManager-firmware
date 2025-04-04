@@ -146,6 +146,44 @@ esp_err_t NSPM_ConfigManager::get_config(std::shared_ptr<NSPanelConfig> *config)
   return ESP_ERR_NOT_FINISHED;
 }
 
+esp_err_t NSPM_ConfigManager::get_mutable_config(std::shared_ptr<NSPanelConfig> *config) {
+  if (NSPM_ConfigManager::_config != NULL) {
+    if (xSemaphoreTake(NSPM_ConfigManager::_config_mutex, pdMS_TO_TICKS(5000))) {
+      size_t config_pack_size = nspanel_config__get_packed_size(NSPM_ConfigManager::_config.get());
+      std::vector<uint8_t> buffer(config_pack_size);
+      nspanel_config__pack(NSPM_ConfigManager::_config.get(), buffer.data());
+      NSPanelConfig *temp_config;
+
+      temp_config = nspanel_config__unpack(NULL, config_pack_size, buffer.data());
+      if (temp_config != NULL) [[likely]] {
+        xSemaphoreGive(NSPM_ConfigManager::_config_mutex);
+        (*config) = std::shared_ptr<NSPanelConfig>(temp_config, &NSPM_ConfigManager::_delete_nspanelconfig_object_from_shared_ptr);
+        return ESP_OK;
+      } else {
+        xSemaphoreGive(NSPM_ConfigManager::_config_mutex);
+        return ESP_ERR_NOT_FINISHED;
+      }
+    } else {
+      ESP_LOGE("NSPM_ConfigManager", "Failed to gain config mutex while processing request for mutable config from other task!");
+    }
+  }
+  return ESP_ERR_NOT_FINISHED;
+}
+
+esp_err_t NSPM_ConfigManager::replace_config(std::shared_ptr<NSPanelConfig> *config) {
+  if (NSPM_ConfigManager::_config != NULL) {
+    if (xSemaphoreTake(NSPM_ConfigManager::_config_mutex, pdMS_TO_TICKS(5000))) {
+      NSPM_ConfigManager::_config = *config;
+      xSemaphoreGive(NSPM_ConfigManager::_config_mutex);
+      esp_event_post(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, NULL, 0, pdMS_TO_TICKS(250));
+      return ESP_OK;
+    } else {
+      ESP_LOGE("NSPM_ConfigManager", "Failed to gain config mutex while replacing config from other task!");
+    }
+  }
+  return ESP_ERR_NOT_FINISHED;
+}
+
 std::string NSPM_ConfigManager::get_manager_address() {
   return NSPM_ConfigManager::_manager_address;
 }
