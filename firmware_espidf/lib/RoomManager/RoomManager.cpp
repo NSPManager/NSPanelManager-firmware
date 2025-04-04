@@ -287,12 +287,6 @@ esp_err_t RoomManager::get_current_room_entities_page_status(std::shared_ptr<NSP
 esp_err_t RoomManager::go_to_entities_page_id(uint32_t page_id) {
   if (xSemaphoreTake(RoomManager::_entities_page_mutex, pdMS_TO_TICKS(250) == pdPASS)) {
     ESP_LOGD("RoomManager", "Request to navigate to entities page ID %lu", page_id);
-    std::string current_entities_page_topic = RoomManager::_current_entities_page_status_topic.get();
-    if (!current_entities_page_topic.empty()) [[likely]] {
-      if (MqttManager::unsubscribe(current_entities_page_topic) != ESP_OK) [[unlikely]] {
-        ESP_LOGW("RoomManager", "Failed to unsubscribe from current room status topic.");
-      }
-    }
 
     std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
@@ -326,12 +320,30 @@ esp_err_t RoomManager::go_to_entities_page_id(uint32_t page_id) {
       new_mqtt_entities_page_status_topic.append("/entity_pages/");
       new_mqtt_entities_page_status_topic.append(std::to_string(page_id));
       new_mqtt_entities_page_status_topic.append("/state");
-      RoomManager::_current_entities_page_status_topic.set(new_mqtt_entities_page_status_topic);
-      while (MqttManager::subscribe(new_mqtt_entities_page_status_topic) != ESP_OK) {
-        ESP_LOGE("RoomManager", "Failed to subscribe to new MQTT topic for entity page state updates. Will try again in 200ms.");
-        vTaskDelay(pdMS_TO_TICKS(200));
+
+      std::string current_topic = std::string(RoomManager::_current_entities_page_status_topic.get());
+      ESP_LOGD("RoomManager", "Current topic: %s", current_topic.c_str());
+      ESP_LOGD("RoomManager", "New topic:     %s", new_mqtt_entities_page_status_topic.c_str());
+      if (new_mqtt_entities_page_status_topic.compare(current_topic) == 0) {
+        ESP_LOGD("RoomManager", "Already on correct topic, send event.");
+        // We are navigating to the same already selected page, simply trigger the event.
+        xSemaphoreGive(RoomManager::_entities_page_mutex);
+        esp_event_post_to(RoomManager::_local_event_loop, ROOMMANAGER_EVENT, roommanager_event_t::ROOM_ENTITIES_PAGE_UPDATED, NULL, 0, pdMS_TO_TICKS(250));
+      } else {
+        ESP_LOGD("RoomManager", "Navigate to new topic.");
+        if (!current_topic.empty()) [[likely]] {
+          if (MqttManager::unsubscribe(current_topic) != ESP_OK) [[unlikely]] {
+            ESP_LOGW("RoomManager", "Failed to unsubscribe from current room status topic.");
+          }
+        }
+
+        RoomManager::_current_entities_page_status_topic.set(new_mqtt_entities_page_status_topic);
+        while (MqttManager::subscribe(new_mqtt_entities_page_status_topic) != ESP_OK) {
+          ESP_LOGE("RoomManager", "Failed to subscribe to new MQTT topic for entity page state updates. Will try again in 200ms.");
+          vTaskDelay(pdMS_TO_TICKS(200));
+        }
+        xSemaphoreGive(RoomManager::_entities_page_mutex);
       }
-      xSemaphoreGive(RoomManager::_entities_page_mutex);
       RoomManager::_current_entities_page_id = page_id;
       return ESP_OK;
     }

@@ -18,6 +18,10 @@ void EntitiesPage::show(bool scene_page) {
   InterfaceManager::call_unshow_callback();
   InterfaceManager::current_page_unshow_callback.set(EntitiesPage::unshow);
 
+  // EntitiesPage::_update_display();
+  RoomManager::register_handler(ESP_EVENT_ANY_ID, EntitiesPage::_handle_roommanager_event, NULL);
+  esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, EntitiesPage::_handle_nextion_event, NULL);
+
   // If current room has an entities page, go to it and if not, show the next available entities page.
   if (scene_page) {
     RoomManager::go_to_first_scenes_page();
@@ -30,10 +34,6 @@ void EntitiesPage::show(bool scene_page) {
     HomePage::show();
     return;
   }
-
-  EntitiesPage::_update_display();
-  RoomManager::register_handler(ESP_EVENT_ANY_ID, EntitiesPage::_handle_roommanager_event, NULL);
-  esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, EntitiesPage::_handle_nextion_event, NULL);
 }
 
 void EntitiesPage::unshow() {

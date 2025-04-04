@@ -66,25 +66,27 @@ void ButtonManager::_interrupt_handle_task(void *param) {
         }
 
         case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__NOTIFY_MANAGER: {
-          std::shared_ptr<NSPanelConfig> config;
-          if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
-            NSPanelMQTTManagerCommand command = NSPANEL_MQTTMANAGER_COMMAND__INIT;
-            NSPanelMQTTManagerCommand__ButtonPressed pressed_command = NSPANEL_MQTTMANAGER_COMMAND__BUTTON_PRESSED__INIT;
-            pressed_command.button_id = 1;
-            pressed_command.nspanel_id = config->nspanel_id;
-            command.button_pressed = &pressed_command;
-            command.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_BUTTON_PRESSED;
+          if (!current_state) { // Only toggle on button press and not release
+            std::shared_ptr<NSPanelConfig> config;
+            if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+              NSPanelMQTTManagerCommand command = NSPANEL_MQTTMANAGER_COMMAND__INIT;
+              NSPanelMQTTManagerCommand__ButtonPressed pressed_command = NSPANEL_MQTTMANAGER_COMMAND__BUTTON_PRESSED__INIT;
+              pressed_command.button_id = 1;
+              pressed_command.nspanel_id = config->nspanel_id;
+              command.button_pressed = &pressed_command;
+              command.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_BUTTON_PRESSED;
 
-            uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&command);
-            std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
-            size_t packed_data_size = nspanel_mqttmanager_command__pack(&command, buffer.data());
-            if (packed_data_size == packed_length) [[likely]] {
-              if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) [[unlikely]] {
-                ESP_LOGE("ButtonManager", "Failed to publish command that button was pressed.");
+              uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&command);
+              std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
+              size_t packed_data_size = nspanel_mqttmanager_command__pack(&command, buffer.data());
+              if (packed_data_size == packed_length) [[likely]] {
+                if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) [[unlikely]] {
+                  ESP_LOGE("ButtonManager", "Failed to publish command that button was pressed.");
+                }
               }
+            } else {
+              ESP_LOGE("ButtonManager", "Failed to get config while trying to process button press event and as such could not sent event to manager for further handling.");
             }
-          } else {
-            ESP_LOGE("ButtonManager", "Failed to get config while trying to process button press event and as such could not sent event to manager for further handling.");
           }
           break;
         }
@@ -108,25 +110,27 @@ void ButtonManager::_interrupt_handle_task(void *param) {
         }
 
         case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__NOTIFY_MANAGER: {
-          std::shared_ptr<NSPanelConfig> config;
-          if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
-            NSPanelMQTTManagerCommand command = NSPANEL_MQTTMANAGER_COMMAND__INIT;
-            NSPanelMQTTManagerCommand__ButtonPressed pressed_command = NSPANEL_MQTTMANAGER_COMMAND__BUTTON_PRESSED__INIT;
-            pressed_command.button_id = 2;
-            pressed_command.nspanel_id = config->nspanel_id;
-            command.button_pressed = &pressed_command;
-            command.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_BUTTON_PRESSED;
+          if (!current_state) { // Only toggle on button press and not release
+            std::shared_ptr<NSPanelConfig> config;
+            if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+              NSPanelMQTTManagerCommand command = NSPANEL_MQTTMANAGER_COMMAND__INIT;
+              NSPanelMQTTManagerCommand__ButtonPressed pressed_command = NSPANEL_MQTTMANAGER_COMMAND__BUTTON_PRESSED__INIT;
+              pressed_command.button_id = 2;
+              pressed_command.nspanel_id = config->nspanel_id;
+              command.button_pressed = &pressed_command;
+              command.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_BUTTON_PRESSED;
 
-            uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&command);
-            std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
-            size_t packed_data_size = nspanel_mqttmanager_command__pack(&command, buffer.data());
-            if (packed_data_size == packed_length) [[likely]] {
-              if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) [[unlikely]] {
-                ESP_LOGE("ButtonManager", "Failed to publish command that button was pressed.");
+              uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&command);
+              std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
+              size_t packed_data_size = nspanel_mqttmanager_command__pack(&command, buffer.data());
+              if (packed_data_size == packed_length) [[likely]] {
+                if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) [[unlikely]] {
+                  ESP_LOGE("ButtonManager", "Failed to publish command that button was pressed.");
+                }
               }
+            } else {
+              ESP_LOGE("ButtonManager", "Failed to get config while trying to process button press event and as such could not sent event to manager for further handling.");
             }
-          } else {
-            ESP_LOGE("ButtonManager", "Failed to get config while trying to process button press event and as such could not sent event to manager for further handling.");
           }
           break;
         }
