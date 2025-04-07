@@ -247,7 +247,11 @@ void ScreensaverPage::_go_to_nextion_page() {
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
     ScreensaverPage::_current_screensaver_mode.set(config->screensaver_mode);
-    ScreensaverPage::_screensaver_brightness = config->screensaver_dim_level;
+    if (ScreensaverPage::_current_screensaver_mode.get() == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__NO_SCREENSAVER) {
+      ScreensaverPage::_screensaver_brightness = 0; // No screensaver is to be shown, simply set brightness to 0
+    } else {
+      ScreensaverPage::_screensaver_brightness = config->screensaver_dim_level;
+    }
     ScreensaverPage::_update_display_brightness();
   } else {
     ESP_LOGE("ScreensaverPage", "Failed to get NSPanel Config when showing screensaver page! Will cancel operation.");
@@ -296,6 +300,11 @@ void ScreensaverPage::_go_to_nextion_page() {
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_screensaver_minimal_current_room_temperature_icon_name, config->show_screensaver_inside_temperature, 250);
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_screensaver_minimal_current_temperature_name, config->show_screensaver_outside_temperature, 250);
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_screensaver_minimal_current_weather_icon_name, config->show_screensaver_outside_temperature, 250);
+    break;
+
+  case NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__NO_SCREENSAVER:
+    Nextion::go_to_page(GUI_SCREENSAVER_PAGE::screensaver_minimal_page_name, 250);
+    ScreensaverPage::_currently_shown = true;
     break;
 
     // TODO: Implement "No screensaver"
