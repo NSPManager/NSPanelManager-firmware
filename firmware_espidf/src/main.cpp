@@ -91,7 +91,12 @@ extern "C" void app_main() {
 
   // xTaskCreatePinnedToCore(task_print_mem_usage, "task_mem_debug", 4096, NULL, 3, NULL, 1);
 
-  nvs_flash_init();
+  esp_err_t nvs_flash_init_res = nvs_flash_init();
+  if (nvs_flash_init_res != ESP_OK) {
+    ESP_LOGE("Main", "Failed to init NVS! Error %s", esp_err_to_name(nvs_flash_init_res));
+  }
+  ESP_ERROR_CHECK(nvs_flash_init_res);
+
   if (LittleFS::mount() != ESP_OK) {
     ESP_LOGE("Main", "Failed to mount LittleFS!");
   }
@@ -99,7 +104,7 @@ extern "C" void app_main() {
   ConfigManager::create_default(); // Set default values on all config entities
   if (ConfigManager::load_config() != ESP_OK) {
     ESP_LOGE("Main", "Failed to load config from LittleFS. If this is the first time running the panel this is normal as not config has been saved yet.");
-    ESP_LOGI("Main", "Default config values has been applied, will save those to create a config file.");
+    ESP_LOGI("Main", "Default config values has been applied, will save t§se to create a config file.");
     esp_err_t config_save_result = ConfigManager::save_config();
     if (config_save_result != ESP_OK) {
       ESP_LOGE("Main", "Failed to save config to LittleFS, got error %s!", esp_err_to_name(config_save_result));
@@ -127,6 +132,9 @@ extern "C" void app_main() {
   if (!ConfigManager::mqtt_server.empty()) {
     // Start task that handles MQTT connection
     MqttManager::start(&ConfigManager::mqtt_server, &ConfigManager::mqtt_port, &ConfigManager::mqtt_username, &ConfigManager::mqtt_password);
+
+    // Now that we have created the MQTT client we can register callbacks from it, register ButtonManager
+    ButtonManager::init_mqtt();
 
     // MQTT is now setup, enable custom logging through MQTT
     publish_mqtt_log_messages_queue = xQueueCreate(16, sizeof(char *));

@@ -60,6 +60,12 @@ public:
   // MD5 checksum for installed gui, used to check if new gui update is available in manager
   static inline std::string md5_gui;
 
+  // Should relay 1 be on or off on boot?
+  static inline bool relay1_default_mode = false;
+
+  // Should relay 2 be on or off on boot?
+  static inline bool relay2_default_mode = false;
+
   // Used to indicate that the stored checksum for the firmware should be updated on next reboot.
   static inline bool has_updated;
 };

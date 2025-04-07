@@ -60,6 +60,8 @@ void HomePage::unshow() {
   RoomManager::unregister_handler(ESP_EVENT_ANY_ID, HomePage::_handle_roommanager_event);
   esp_event_handler_unregister(NEXTION_EVENT, ESP_EVENT_ANY_ID, HomePage::_handle_nextion_event);
   esp_event_handler_unregister(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, HomePage::_handle_config_update);
+  HomePage::_current_affect_mode = HomePageAffectMode::ROOM;
+  HomePage::_current_edit_mode = HomePageEditMode::ALL_LIGHTS;
 }
 
 void HomePage::set_current_affect_mode(HomePageAffectMode mode) {

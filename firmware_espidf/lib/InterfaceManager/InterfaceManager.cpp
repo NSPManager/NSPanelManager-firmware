@@ -191,13 +191,13 @@ void InterfaceManager::_nextion_event_handler(void *arg, esp_event_base_t event_
 
   case nextion_event_t::WAKE_EVENT: {
     // Someone touched the screensaver, unshow it and go to the default page, whatever is selected in the manager
+    InterfaceManager::show_default_page();
     std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
       Nextion::set_brightness_level(config->screen_dim_level, 1000);
     } else {
       ESP_LOGE("InterfaceManager", "Failed to get NSPanel Config when unshowing screensaver page!");
     }
-    InterfaceManager::show_default_page();
     MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "1", strlen("1"), true);
     break;
   }
@@ -294,9 +294,7 @@ void InterfaceManager::_nspm_configmanager_event_handler(void *arg, esp_event_ba
         }
       }
 
-      if (ScreensaverPage::showing()) {
-        Nextion::set_brightness_level(config->screensaver_dim_level, 1000);
-      } else {
+      if (!ScreensaverPage::showing()) {
         Nextion::set_brightness_level(config->screen_dim_level, 1000);
       }
 

@@ -72,7 +72,11 @@ void WiFiManager::start_ap(std::string *ssid) {
   esp_netif_create_default_wifi_ap();
 
   WiFiManager::_init_config = WIFI_INIT_CONFIG_DEFAULT();
-  esp_wifi_init(&WiFiManager::_init_config);
+  esp_err_t wifi_init_res = esp_wifi_init(&WiFiManager::_init_config);
+  if (wifi_init_res != ESP_OK) {
+    ESP_LOGE("WiFiManager", "Failed to init WiFi, error: %s", esp_err_to_name(wifi_init_res));
+  }
+  ESP_ERROR_CHECK(wifi_init_res);
 
   esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
 
@@ -92,9 +96,23 @@ void WiFiManager::start_ap(std::string *ssid) {
   WiFiManager::_config.ap.max_connection = 4;
   WiFiManager::_config.ap.authmode = wifi_auth_mode_t::WIFI_AUTH_OPEN;
 
-  ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
-  ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &WiFiManager::_config));
-  ESP_ERROR_CHECK(esp_wifi_start());
+  esp_err_t wifi_mode_res = esp_wifi_set_mode(WIFI_MODE_APSTA);
+  if (wifi_mode_res != ESP_OK) {
+    ESP_LOGE("WiFiManager", "Failed to set WiFi mode, error: %s", esp_err_to_name(wifi_mode_res));
+  }
+  ESP_ERROR_CHECK(wifi_mode_res);
+
+  esp_err_t wifi_config_res = esp_wifi_set_config(WIFI_IF_AP, &WiFiManager::_config);
+  if (wifi_config_res != ESP_OK) {
+    ESP_LOGE("WiFiManager", "Failed to config WiFi, error: %s", esp_err_to_name(wifi_config_res));
+  }
+  ESP_ERROR_CHECK(wifi_config_res);
+
+  esp_err_t wifi_start_res = esp_wifi_start();
+  if (wifi_start_res != ESP_OK) {
+    ESP_LOGE("WiFiManager", "Failed to start WiFi, error: %s", esp_err_to_name(wifi_start_res));
+  }
+  ESP_ERROR_CHECK(wifi_start_res);
 
   // WiFi started, start DHCP-server
   // esp_netif_dhcps_start(esp_netif_get_handle_from_ifkey("WIFI_AP_DEF"));

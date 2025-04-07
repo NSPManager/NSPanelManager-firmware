@@ -91,6 +91,16 @@ esp_err_t ConfigManager::load_config() {
     ConfigManager::md5_gui = item->valuestring;
   }
 
+  item = cJSON_GetObjectItem(json, "relay1_default_mode");
+  if (cJSON_IsBool(item)) {
+    ConfigManager::relay1_default_mode = cJSON_IsTrue(item);
+  }
+
+  item = cJSON_GetObjectItem(json, "relay2_default_mode");
+  if (cJSON_IsBool(item)) {
+    ConfigManager::relay2_default_mode = cJSON_IsTrue(item);
+  }
+
   item = cJSON_GetObjectItem(json, "use_new_upload_protocol");
   if (cJSON_IsBool(item)) {
     ConfigManager::use_latest_nextion_upload_protocol = cJSON_IsTrue(item);
@@ -161,6 +171,8 @@ esp_err_t ConfigManager::save_config() {
   cJSON_AddStringToObject(json, "md5_firmware", ConfigManager::md5_firmware.c_str());
   cJSON_AddStringToObject(json, "md5_data_file", ConfigManager::md5_data_file.c_str());
   cJSON_AddStringToObject(json, "md5_gui", ConfigManager::md5_gui.c_str());
+  cJSON_AddBoolToObject(json, "relay1_default_mode", ConfigManager::relay1_default_mode);
+  cJSON_AddBoolToObject(json, "relay2_default_mode", ConfigManager::relay2_default_mode);
 
   if (ConfigManager::use_latest_nextion_upload_protocol) {
     cJSON_AddTrueToObject(json, "use_new_upload_protocol");

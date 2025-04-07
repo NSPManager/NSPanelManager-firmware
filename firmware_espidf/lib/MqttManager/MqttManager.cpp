@@ -161,9 +161,15 @@ void MqttManager::_task_resubscribe(void *param) {
   // Resubscribe to all topics
   ESP_LOGD("MqttManager", "Starting resubscribe of all topics.");
   vTaskDelay(pdMS_TO_TICKS(500)); // Wait for things to settle before resubscrbing
-  for (auto it = MqttManager::_subscribed_topics.begin(); it != MqttManager::_subscribed_topics.end(); it++) {
-    MqttManager::subscribe(std::string(*it));
-    vTaskDelay(pdMS_TO_TICKS(250));
+  for (auto topic = MqttManager::_subscribed_topics.begin(); topic != MqttManager::_subscribed_topics.end(); topic++) {
+    for (;;) { // Retry until successful
+      if (esp_mqtt_client_subscribe_single(MqttManager::_mqtt_client, topic->c_str(), 0) >= 0) {
+        break;
+      } else {
+        ESP_LOGE("MqttManager", "Failed to resubscribe to topic %s, will try again in 500ms.", topic->c_str());
+        vTaskDelay(pdMS_TO_TICKS(500));
+      }
+    }
   }
 
   vTaskDelete(NULL);
@@ -177,11 +183,12 @@ esp_err_t MqttManager::subscribe(std::string topic) {
   ESP_LOGD("MqttManager", "Subscribing to '%s'", topic.c_str());
   bool topic_already_in_list = false;
   for (auto it = MqttManager::_subscribed_topics.begin(); it != MqttManager::_subscribed_topics.end(); it++) {
-    if (it->compare(topic) == 0) {
+    if (topic.compare(*it) == 0) {
       topic_already_in_list = true;
       break;
     }
   }
+
   if (!topic_already_in_list) {
     MqttManager::_subscribed_topics.push_back(topic);
   }
@@ -205,7 +212,7 @@ esp_err_t MqttManager::unsubscribe(std::string topic) {
     if (result_code >= 0) {
       // Find and delete the topic from the list of currently subscribed topics
       for (auto it = MqttManager::_subscribed_topics.begin(); it != MqttManager::_subscribed_topics.end(); it++) {
-        if (it->compare(topic) == 0) {
+        if (topic.compare(*it) == 0) {
           MqttManager::_subscribed_topics.erase(it);
           break;
         }

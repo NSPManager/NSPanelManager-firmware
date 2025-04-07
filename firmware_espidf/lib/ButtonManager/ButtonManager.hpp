@@ -14,6 +14,8 @@ class ButtonManager {
 public:
   static void init();
 
+  static void init_mqtt();
+
 private:
   static void IRAM_ATTR _interrupt_triggered(void *param);
 
@@ -25,7 +27,7 @@ private:
   /**
    * Set the state of a relay and send state update to MQTT
    */
-  static void _set_relay_state(uint8_t relay, bool state);
+  static void _set_relay_state(uint8_t relay, bool state, bool send_mqtt_update);
 
   /**
    * Get the current output state of a relay
@@ -36,6 +38,11 @@ private:
    * @brief Handle any event trigger from the NSPM_ConfigManager
    */
   static void _nspm_configmanager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
+  /**
+   * @brief Handle data received over MQTT
+   */
+  static void _mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
   // Settings
   static inline std::atomic<bool> _reverse_relays = false;      // Should relays be reversed/flipped?

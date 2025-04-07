@@ -1,14 +1,20 @@
 #include <ButtonManager.hpp>
+#include <ConfigManager.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp> // Forward declared to allow compilation to succeed.
 #include <NSPM_ConfigManager_event.hpp>
+#include <WiFiManager.hpp>
 #include <driver/gpio.h>
 #include <esp_log.h>
+#include <format>
 #include <vector>
 
 void ButtonManager::init() {
   esp_log_level_set("ButtonManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
   ButtonManager::_interrupt_queue = xQueueCreate(4, sizeof(uint32_t));
+
+  ButtonManager::_relay1_default_mode = ConfigManager::relay1_default_mode;
+  ButtonManager::_relay2_default_mode = ConfigManager::relay2_default_mode;
 
   esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, ButtonManager::_nspm_configmanager_event_handler, NULL);
 
@@ -37,6 +43,15 @@ void ButtonManager::init() {
   gpio_isr_handler_add(ButtonManager::_button2_pin, ButtonManager::_interrupt_triggered, (void *)ButtonManager::_button2_pin);
 }
 
+void ButtonManager::init_mqtt() {
+  // Setup and subscribe to MQTT
+  std::string relay1_topic = std::format("nspanel/{}/relay1_cmd", WiFiManager::mac_string());
+  std::string relay2_topic = std::format("nspanel/{}/relay2_cmd", WiFiManager::mac_string());
+  MqttManager::register_handler(MQTT_EVENT_DATA, &ButtonManager::_mqtt_event_handler, NULL);
+  MqttManager::subscribe(relay1_topic);
+  MqttManager::subscribe(relay2_topic);
+}
+
 void ButtonManager::_interrupt_triggered(void *param) {
   uint32_t gpio_num = (uint32_t)param;
   xQueueSendFromISR(ButtonManager::_interrupt_queue, &gpio_num, NULL);
@@ -49,19 +64,19 @@ void ButtonManager::_interrupt_handle_task(void *param) {
       bool current_state = gpio_get_level(static_cast<gpio_num_t>(io_num));
 
       // Received a new interrupt, check level of button GPIO
-      ESP_LOGD("ButtonManager", "Got button %ld event, new state: %s.", io_num, !current_state ? "ON" : " OFF");
+      // ESP_LOGD("ButtonManager", "Got button %ld event, new state: %s.", io_num, !current_state ? "ON" : " OFF");
 
       if (io_num == ButtonManager::_button1_pin) {
         switch (ButtonManager::_button1_mode) {
         case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT: {
-          if (!current_state) {                                                      // Only toggle on button press and not release
-            ButtonManager::_set_relay_state(1, !ButtonManager::_get_relay_state(1)); // Toggle output
+          if (!current_state) {                                                            // Only toggle on button press and not release
+            ButtonManager::_set_relay_state(1, !ButtonManager::_get_relay_state(1), true); // Toggle output
           }
           break;
         }
 
         case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__FOLLOW: {
-          ButtonManager::_set_relay_state(1, !current_state); // When button is pressed, activate relay
+          ButtonManager::_set_relay_state(1, !current_state, true); // When button is pressed, activate relay
           break;
         }
 
@@ -98,14 +113,14 @@ void ButtonManager::_interrupt_handle_task(void *param) {
       } else if (io_num == ButtonManager::_button2_pin) {
         switch (ButtonManager::_button2_mode) {
         case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT: {
-          if (!current_state) {                                                      // Only toggle on button press and not release
-            ButtonManager::_set_relay_state(2, !ButtonManager::_get_relay_state(2)); // Toggle output
+          if (!current_state) {                                                            // Only toggle on button press and not release
+            ButtonManager::_set_relay_state(2, !ButtonManager::_get_relay_state(2), true); // Toggle output
           }
           break;
         }
 
         case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__FOLLOW: {
-          ButtonManager::_set_relay_state(2, !current_state); // When button is pressed, activate relay
+          ButtonManager::_set_relay_state(2, !current_state, true); // When button is pressed, activate relay
           break;
         }
 
@@ -144,7 +159,7 @@ void ButtonManager::_interrupt_handle_task(void *param) {
   }
 }
 
-void ButtonManager::_set_relay_state(uint8_t relay, bool state) {
+void ButtonManager::_set_relay_state(uint8_t relay, bool state, bool send_mqtt_update) {
   if (relay == 1) {
     if (!ButtonManager::_reverse_relays) {
       ESP_LOGD("ButtonManager", "Setting output of relay 1 (left) relay to %s", state ? "ON" : " OFF");
@@ -155,6 +170,10 @@ void ButtonManager::_set_relay_state(uint8_t relay, bool state) {
       ButtonManager::_relay2_current_state = state;
       gpio_set_level(ButtonManager::_relay2_pin, state ? 1 : 0);
     }
+
+    if (send_mqtt_update) {
+      MqttManager::publish(std::format("nspanel/{}/relay1_state", WiFiManager::mac_string()), state ? "1" : "0", strlen(state ? "1" : "0"), true);
+    }
   } else if (relay == 2) {
     if (!ButtonManager::_reverse_relays) {
       ESP_LOGD("ButtonManager", "Setting output of relay 2 (right) relay to %s", state ? "ON" : " OFF");
@@ -164,6 +183,10 @@ void ButtonManager::_set_relay_state(uint8_t relay, bool state) {
       ESP_LOGD("ButtonManager", "Setting output of relay 1 (left|reversed) relay to %s", state ? "ON" : " OFF");
       ButtonManager::_relay1_current_state = state;
       gpio_set_level(ButtonManager::_relay1_pin, state ? 1 : 0);
+    }
+
+    if (send_mqtt_update) {
+      MqttManager::publish(std::format("nspanel/{}/relay2_state", WiFiManager::mac_string()), state ? "1" : "0", strlen(state ? "1" : "0"), true);
     }
   }
 }
@@ -188,8 +211,60 @@ bool ButtonManager::_get_relay_state(uint8_t relay) {
 void ButtonManager::_nspm_configmanager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+    bool save = false;
+    if (config->relay1_default_mode != ButtonManager::_relay1_default_mode) {
+      ConfigManager::relay1_default_mode = config->relay1_default_mode;
+      ButtonManager::_set_relay_state(1, config->relay1_default_mode, true);
+      save = true;
+    }
+    if (config->relay2_default_mode != ButtonManager::_relay2_default_mode) {
+      ConfigManager::relay2_default_mode = config->relay2_default_mode;
+      ButtonManager::_set_relay_state(1, config->relay2_default_mode, true);
+      save = true;
+    }
+    if (save) {
+      ConfigManager::save_config();
+    }
+
     ButtonManager::_reverse_relays = config->reverse_relays;
     ButtonManager::_button1_mode = config->button1_mode;
     ButtonManager::_button2_mode = config->button2_mode;
+  } else {
+    ESP_LOGE("ButtonManager", "Got new config update but ButtonManager failed to read config. Cannot update internal values.");
+  }
+}
+
+void ButtonManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
+  esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
+  if (event->data_len == 0) {
+    return;
+  }
+
+  std::string topic_string = std::string(event->topic, event->topic_len);
+  std::string data = std::string(event->data, event->data_len);
+
+  std::string relay1_topic = std::format("nspanel/{}/relay1_cmd", WiFiManager::mac_string());
+  std::string relay2_topic = std::format("nspanel/{}/relay2_cmd", WiFiManager::mac_string());
+
+  if (topic_string.compare(relay1_topic) == 0) {
+    if (data.compare("0") == 0) {
+      ButtonManager::_set_relay_state(1, false, true);
+    } else if (data.compare("1") == 0) {
+      ButtonManager::_set_relay_state(1, true, true);
+    } else if (data.compare("2") == 0) {
+      ButtonManager::_set_relay_state(1, !ButtonManager::_relay1_current_state, true);
+    } else {
+      ESP_LOGE("ButtonManager", "Got command to set relay1 state but command data was not recognized.");
+    }
+  } else if (topic_string.compare(relay2_topic) == 0) {
+    if (data.compare("0") == 0) {
+      ButtonManager::_set_relay_state(2, false, true);
+    } else if (data.compare("1") == 0) {
+      ButtonManager::_set_relay_state(2, true, true);
+    } else if (data.compare("2") == 0) {
+      ButtonManager::_set_relay_state(2, !ButtonManager::_relay1_current_state, true);
+    } else {
+      ESP_LOGE("ButtonManager", "Got command to set relay2 state but command data was not recognized.");
+    }
   }
 }

@@ -4,6 +4,7 @@
 #include <esp_log.h>
 
 esp_err_t LittleFS::mount() {
+  esp_log_level_set("LittleFS", esp_log_level_t::ESP_LOG_DEBUG);
   ESP_LOGI("LittleFS", "Initializing LittleFS.");
   LittleFS::_is_mounted = false;
 
