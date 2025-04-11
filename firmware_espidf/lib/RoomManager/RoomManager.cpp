@@ -1,4 +1,5 @@
 #include "RoomManager.hpp"
+#include <ConfigManager.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
 #include <NSPM_ConfigManager_event.hpp>
@@ -14,7 +15,7 @@ ESP_EVENT_DEFINE_BASE(ROOMMANAGER_EVENT);
 
 void RoomManager::init() {
   ESP_LOGI("RoomManager", "Initializing RoomManager.");
-  esp_log_level_set("RoomManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Read from config
+  esp_log_level_set("RoomManager", ConfigManager::log_level);
   RoomManager::_home_page_mutex = xSemaphoreCreateMutex();
   RoomManager::_entities_page_mutex = xSemaphoreCreateMutex();
   RoomManager::_load_all_rooms_task_handle = NULL;
@@ -315,8 +316,6 @@ esp_err_t RoomManager::go_to_entities_page_id(uint32_t page_id) {
 
       std::string new_mqtt_entities_page_status_topic = "nspanel/mqttmanager_";
       new_mqtt_entities_page_status_topic.append(NSPM_ConfigManager::get_manager_address());
-      new_mqtt_entities_page_status_topic.append("/room/");
-      new_mqtt_entities_page_status_topic.append(std::to_string(entities_page_room_id));
       new_mqtt_entities_page_status_topic.append("/entity_pages/");
       new_mqtt_entities_page_status_topic.append(std::to_string(page_id));
       new_mqtt_entities_page_status_topic.append("/state");

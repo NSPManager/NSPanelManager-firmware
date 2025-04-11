@@ -1,3 +1,4 @@
+#include <ConfigManager.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
 #include <WiFiManager.hpp>
@@ -5,7 +6,7 @@
 #include <esp_log.h>
 
 void MqttManager::start(std::string *server, uint16_t *port, std::string *username, std::string *password) {
-  esp_log_level_set("MqttManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
+  esp_log_level_set("MqttManager", ConfigManager::log_level);
   ESP_LOGI("MqttManager", "Starting MQTTManager, will connect to %s:%d", server->c_str(), *port);
   MqttManager::_connected = false;
   MqttManager::_mqtt_config.broker.address.hostname = server->c_str();
@@ -162,13 +163,24 @@ void MqttManager::_task_resubscribe(void *param) {
   ESP_LOGD("MqttManager", "Starting resubscribe of all topics.");
   vTaskDelay(pdMS_TO_TICKS(500)); // Wait for things to settle before resubscrbing
   for (auto topic = MqttManager::_subscribed_topics.begin(); topic != MqttManager::_subscribed_topics.end(); topic++) {
-    for (;;) { // Retry until successful
-      if (esp_mqtt_client_subscribe_single(MqttManager::_mqtt_client, topic->c_str(), 0) >= 0) {
-        break;
-      } else {
-        ESP_LOGE("MqttManager", "Failed to resubscribe to topic %s, will try again in 500ms.", topic->c_str());
-        vTaskDelay(pdMS_TO_TICKS(500));
+    if (!topic->empty()) [[likely]] {
+      uint8_t tries = 0;
+      for (;;) { // Retry until successful max 5 attempts
+        if (esp_mqtt_client_subscribe_single(MqttManager::_mqtt_client, topic->c_str(), 0) >= 0) {
+          break;
+        } else {
+          tries++;
+          if (tries == 5) {
+            ESP_LOGE("MqttManager", "Failed to resubscribe to topic '%s'. Tried 5 times, will cancel and go to next topic.", topic->c_str());
+            break;
+          } else {
+            ESP_LOGE("MqttManager", "Failed to resubscribe to topic '%s', will try again in 500ms.", topic->c_str());
+            vTaskDelay(pdMS_TO_TICKS(500));
+          }
+        }
       }
+    } else {
+      MqttManager::_subscribed_topics.erase(topic++);
     }
   }
 

@@ -1,3 +1,4 @@
+#include <ConfigManager.hpp>
 #include <EntitiesPage.hpp>
 #include <GUI_data.hpp>
 #include <HomePage.hpp>
@@ -15,7 +16,7 @@
 #include <vector>
 
 void HomePage::show() {
-  esp_log_level_set("HomePage", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
+  esp_log_level_set("HomePage", ConfigManager::log_level);
 
   InterfaceManager::call_unshow_callback();
   InterfaceManager::current_page_unshow_callback.set(HomePage::unshow);
@@ -230,9 +231,19 @@ void HomePage::_handle_nextion_event(void *arg, esp_event_base_t event_base, int
       }
     } else if (data->component_id == GUI_HOME_PAGE::button_next_mode_id) {
       switch (HomePage::_current_affect_mode) {
-      case HomePage::HomePageAffectMode::ROOM:
-        HomePage::set_current_affect_mode(HomePageAffectMode::ALL);
+      case HomePage::HomePageAffectMode::ROOM: {
+        std::shared_ptr<NSPanelConfig> config;
+        if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+          if (!config->locked_to_default_room) {
+            HomePage::set_current_affect_mode(HomePageAffectMode::ALL);
+          } else {
+            ESP_LOGW("HomePage", "Tried to enter 'All rooms' mode but panel is not allowed to control other rooms than the default.");
+          }
+        } else {
+          ESP_LOGE("HomePage", "Failed to get config while checking if panel is allowed to access other rooms.");
+        }
         break;
+      }
 
       case HomePage::HomePageAffectMode::ALL:
         HomePage::set_current_affect_mode(HomePageAffectMode::ROOM);

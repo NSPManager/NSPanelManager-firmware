@@ -1,3 +1,4 @@
+#include <ConfigManager.hpp>
 #include <Nextion.hpp>
 #include <Nextion_constans.hpp>
 #include <Nextion_event.hpp>
@@ -10,7 +11,7 @@
 ESP_EVENT_DEFINE_BASE(NEXTION_EVENT);
 
 esp_err_t Nextion::init() {
-  esp_log_level_set("Nextion", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
+  esp_log_level_set("Nextion", ConfigManager::log_level);
   ESP_LOGI("Nextion", "Initializing Nextion display.");
 
   // Setup initial values and create mutexes:
@@ -696,10 +697,21 @@ esp_err_t Nextion::start_update(uint32_t upload_baudrate, bool use_new_upload_pr
       xSemaphoreGive(Nextion::_uart_write_mutex);
       return ESP_ERR_NOT_FINISHED;
     }
+
     Nextion::restart();
 
     // Wait for panel to start
     vTaskDelay(pdMS_TO_TICKS(5000));
+
+    // Send command sequence to clear NSPanel buffer
+    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
+    uart_write_bytes(UART_NUM_2, "DRAKJHSUYDGBNCJHGJKSHBDN", strlen("DRAKJHSUYDGBNCJHGJKSHBDN"));
+    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
+    vTaskDelay(pdMS_TO_TICKS(50));
+
+    uart_write_bytes(UART_NUM_2, "connect", strlen("connect"));
+    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
+    vTaskDelay(pdMS_TO_TICKS(50));
 
     ESP_LOGI("Nextion", "Will try to init Nextion update process. New TFT file size: %llu", upload_file_size);
     std::string init_upload_command = use_new_upload_protocol ? "whmi-wris " : "whmi-wri ";
@@ -711,7 +723,6 @@ esp_err_t Nextion::start_update(uint32_t upload_baudrate, bool use_new_upload_pr
 
     ESP_LOGD("Nextion", "Sending update init command to Nextion display: %s", init_upload_command.c_str());
 
-    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
     uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
 
     uart_wait_tx_done(UART_NUM_2, pdMS_TO_TICKS(1000)); // Wait up to 1 second for TX buffer to clear.

@@ -1,3 +1,4 @@
+#include <ConfigManager.hpp>
 #include <GUI_data.hpp>
 #include <HomePage.hpp>
 #include <InterfaceManager.hpp>
@@ -17,7 +18,7 @@ void ScreensaverPage::init() {
 
   // This is the first time showing the screensaver page.
   if (ScreensaverPage::_weather_update_data_mutex == NULL) {
-    esp_log_level_set("ScreensaverPage", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Set from config.
+    esp_log_level_set("ScreensaverPage", ConfigManager::log_level);
 
     ScreensaverPage::_weather_update_data_mutex = xSemaphoreCreateMutex();
   }

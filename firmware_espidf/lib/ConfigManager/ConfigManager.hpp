@@ -1,5 +1,6 @@
 #pragma once
 #include <esp_err.h>
+#include <esp_log.h>
 #include <string>
 
 class ConfigManager {
@@ -48,9 +49,6 @@ public:
   // Nextion upload protocol baudrate
   static inline uint32_t nextion_upload_baudrate;
 
-  // Selected log level
-  static inline uint8_t log_level;
-
   // MD5 checksum for installed firmware, used to check if new firmware update is available in manager
   static inline std::string md5_firmware;
 
@@ -68,4 +66,10 @@ public:
 
   // Used to indicate that the stored checksum for the firmware should be updated on next reboot.
   static inline bool has_updated;
+
+  // Global log level to set for all components
+  static inline esp_log_level_t log_level = esp_log_level_t::ESP_LOG_INFO;
+
+  // Number of boots that latest less then 3 seconds. Used to reset panel when turning it off/on/off many times in a row.
+  static inline uint8_t num_failed_boots = 0;
 };

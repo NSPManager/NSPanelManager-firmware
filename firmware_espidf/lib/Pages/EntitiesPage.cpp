@@ -1,3 +1,4 @@
+#include <ConfigManager.hpp>
 #include <EntitiesPage.hpp>
 #include <GUI_data.hpp>
 #include <HomePage.hpp>
@@ -12,7 +13,7 @@
 #include <format>
 
 void EntitiesPage::show(bool scene_page) {
-  esp_log_level_set("EntitiesPage", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
+  esp_log_level_set("EntitiesPage", ConfigManager::log_level);
   EntitiesPage::_is_showing_scenes = scene_page;
 
   InterfaceManager::call_unshow_callback();

@@ -20,7 +20,7 @@
 #include <protobuf_nspanel.pb-c.h>
 
 void InterfaceManager::init() {
-  esp_log_level_set("InterfaceManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
+  esp_log_level_set("InterfaceManager", ConfigManager::log_level);
   current_page_unshow_callback.set(NULL);
   InterfaceManager::_unshow_queue = xQueueCreate(4, sizeof(std::function<void()>));
   esp_err_t nextion_init_result = Nextion::init();

@@ -38,7 +38,7 @@ esp_err_t ConfigManager::load_config() {
 
   cJSON *item = cJSON_GetObjectItem(json, "log_level");
   if (cJSON_IsNumber(item)) {
-    ConfigManager::log_level = item->valueint;
+    ConfigManager::log_level = static_cast<esp_log_level_t>(item->valueint);
   }
 
   item = cJSON_GetObjectItem(json, "wifi_hostname");
@@ -118,6 +118,11 @@ esp_err_t ConfigManager::load_config() {
     ConfigManager::nextion_upload_baudrate = item->valueint;
   }
 
+  item = cJSON_GetObjectItem(json, "num_failed_boots");
+  if (cJSON_IsNumber(item)) {
+    ConfigManager::num_failed_boots = item->valueint;
+  }
+
   cJSON_Delete(json);
   free(read_buffer);
 
@@ -160,7 +165,7 @@ esp_err_t ConfigManager::save_config() {
   }
 
   cJSON *json = cJSON_CreateObject();
-  cJSON_AddNumberToObject(json, "log_level", ConfigManager::log_level);
+  cJSON_AddNumberToObject(json, "log_level", static_cast<int>(ConfigManager::log_level));
   cJSON_AddStringToObject(json, "wifi_hostname", ConfigManager::wifi_hostname.c_str());
   cJSON_AddStringToObject(json, "wifi_ssid", ConfigManager::wifi_ssid.c_str());
   cJSON_AddStringToObject(json, "wifi_psk", ConfigManager::wifi_psk.c_str());
@@ -187,6 +192,7 @@ esp_err_t ConfigManager::save_config() {
   }
 
   cJSON_AddNumberToObject(json, "upload_baud", ConfigManager::nextion_upload_baudrate);
+  cJSON_AddNumberToObject(json, "num_failed_boots", ConfigManager::num_failed_boots);
 
   char *json_string = cJSON_Print(json);
   size_t bytes_written = fwrite(json_string, sizeof(char), strlen(json_string), f);

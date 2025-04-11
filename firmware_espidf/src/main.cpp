@@ -102,6 +102,8 @@ extern "C" void app_main() {
   }
 
   ConfigManager::create_default(); // Set default values on all config entities
+  ConfigManager::num_failed_boots++;
+
   if (ConfigManager::load_config() != ESP_OK) {
     ESP_LOGE("Main", "Failed to load config from LittleFS. If this is the first time running the panel this is normal as not config has been saved yet.");
     ESP_LOGI("Main", "Default config values has been applied, will save t§se to create a config file.");
@@ -110,15 +112,13 @@ extern "C" void app_main() {
       ESP_LOGE("Main", "Failed to save config to LittleFS, got error %s!", esp_err_to_name(config_save_result));
     }
   } else {
-    if (ConfigManager::wifi_ssid.empty()) {
+    if (ConfigManager::wifi_ssid.empty() || ConfigManager::num_failed_boots >= 5) {
       ESP_LOGE("Main", "Successfully loaded config from LittleFS but the config is not valid. Empty WiFi SSID, will load default values and start Access Point.");
       ConfigManager::create_default();
 
       WiFiManager::start_ap(&ConfigManager::wifi_hostname);
     } else {
       ESP_LOGI("Main", "Config loaded successfully. Starting NSPanel as '%s'.", ConfigManager::wifi_hostname.c_str());
-      // Set global log level
-      // esp_log_level_set("*", static_cast<esp_log_level_t>(ConfigManager::log_level));
 
       // Start task that handles WiFi connection
       WiFiManager::start_client(&ConfigManager::wifi_ssid, &ConfigManager::wifi_psk, &ConfigManager::wifi_hostname);
@@ -165,4 +165,9 @@ extern "C" void app_main() {
 
   ESP_LOGI("Main", "Init complete. Will mark boot as complete as we've registered to manager.");
   UpdateManager::mark_boot_successful();
+
+  vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5
+  ESP_LOGI("Main", "Boot has been active more than 5 seconds and we have been accepted at a manager, mark as successful.");
+  ConfigManager::num_failed_boots = 0;
+  ConfigManager::save_config();
 }

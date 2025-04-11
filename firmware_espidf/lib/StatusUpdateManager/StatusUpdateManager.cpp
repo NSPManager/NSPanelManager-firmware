@@ -18,7 +18,7 @@
 ESP_EVENT_DEFINE_BASE(STATUSUPDATEMANAGER_EVENT);
 
 void StatusUpdateManager::init() {
-  esp_log_level_set("StatusUpdateManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
+  esp_log_level_set("StatusUpdateManager", ConfigManager::log_level);
 
   esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, ESP_EVENT_ANY_ID, StatusUpdateManager::_event_handler, NULL);
   esp_event_handler_register(UPDATEMANAGER_EVENT, ESP_EVENT_ANY_ID, StatusUpdateManager::_update_manager_event_handler, NULL);

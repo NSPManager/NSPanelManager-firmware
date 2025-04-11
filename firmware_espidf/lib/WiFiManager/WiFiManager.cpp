@@ -1,3 +1,4 @@
+#include <ConfigManager.hpp>
 #include <WiFiManager.hpp>
 #include <esp_event.h>
 #include <esp_log.h>
@@ -9,7 +10,7 @@
 #define min(a, b) ((a) < (b) ? (a) : (b))
 
 void WiFiManager::start_client(std::string *ssid, std::string *psk, std::string *hostname) {
-  esp_log_level_set("WiFiManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config.
+  esp_log_level_set("WiFiManager", ConfigManager::log_level);
 
   WiFiManager::_connected = false;
   WiFiManager::_ip_info.set({

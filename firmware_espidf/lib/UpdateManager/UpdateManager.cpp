@@ -17,7 +17,7 @@
 ESP_EVENT_DEFINE_BASE(UPDATEMANAGER_EVENT);
 
 void UpdateManager::init() {
-  esp_log_level_set("UpdateManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Read from config
+  esp_log_level_set("UpdateManager", ConfigManager::log_level);
   UpdateManager::_download_data_store_mutex = xSemaphoreCreateMutex();
 
   MqttManager::register_handler(MQTT_EVENT_DATA, UpdateManager::_mqtt_event_handler, NULL);

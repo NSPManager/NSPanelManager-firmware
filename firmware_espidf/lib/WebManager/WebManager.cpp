@@ -85,7 +85,7 @@ esp_err_t WebManager::_handle_uri_save_config(httpd_req_t *req) {
   }
 
   if (result.find("log_level") != result.end()) {
-    ConfigManager::log_level = atoi(result["log_level"].c_str());
+    ConfigManager::log_level = static_cast<esp_log_level_t>(atoi(result["log_level"].c_str()));
   } else {
     ESP_LOGE("WebManager", "Could not find field name 'log_level' while saving config from web post request!");
   }

@@ -10,7 +10,7 @@
 #include <vector>
 
 void ButtonManager::init() {
-  esp_log_level_set("ButtonManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config
+  esp_log_level_set("ButtonManager", ConfigManager::log_level);
   ButtonManager::_interrupt_queue = xQueueCreate(4, sizeof(uint32_t));
 
   ButtonManager::_relay1_default_mode = ConfigManager::relay1_default_mode;
