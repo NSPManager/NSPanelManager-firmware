@@ -307,6 +307,11 @@ esp_err_t RoomManager::go_to_entities_page_id(uint32_t page_id) {
           }
         }
       }
+      for (int i = 0; i < config->n_global_scene_entity_page_ids && !valid_page_id; i++) {
+        if (config->global_scene_entity_page_ids[i] == page_id) {
+          valid_page_id = true;
+        }
+      }
 
       if (!valid_page_id) [[unlikely]] {
         ESP_LOGW("RoomManager", "Requested to go to entities page id %lu but not such ID was found in config. Will abort.", page_id);
@@ -540,6 +545,80 @@ esp_err_t RoomManager::go_to_next_scenes_page() {
           }
           return RoomManager::go_to_entities_page_id(config->room_infos[i]->scene_page_ids[j]);
         }
+      }
+    } else {
+      ESP_LOGE("RoomManager", "Did not find currently selected page within config. Aborting.");
+    }
+  } else {
+    ESP_LOGE("RoomManager", "Failed to get config while trying to go to next entities page.");
+  }
+
+  return ESP_ERR_NOT_FINISHED;
+}
+
+esp_err_t RoomManager::go_to_first_global_scenes_page() {
+  std::shared_ptr<NSPanelConfig> config;
+  if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+    if (config->n_global_scene_entity_page_ids > 0) {
+      return RoomManager::go_to_entities_page_id(config->global_scene_entity_page_ids[0]);
+    } else {
+      ESP_LOGE("RoomManager", "Failed to navigate to first global scenes page, no global scenes pages loaded.");
+    }
+  } else {
+    ESP_LOGE("RoomManager", "Failed to get config while trying to go to first entities page for room.");
+  }
+  return ESP_ERR_NOT_FINISHED;
+}
+
+esp_err_t RoomManager::go_to_previous_global_scenes_page() {
+  std::shared_ptr<NSPanelConfig> config;
+  if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+    bool select_next_entity_page = false;
+    for (size_t i = config->n_global_scene_entity_page_ids; i-- > 0;) {
+      if (config->global_scene_entity_page_ids[i] == RoomManager::_current_entities_page_id) {
+        select_next_entity_page = true;
+      } else if (select_next_entity_page) {
+        return RoomManager::go_to_entities_page_id(config->global_scene_entity_page_ids[i]);
+      }
+    }
+
+    if (select_next_entity_page) {
+      // Did not find any entity page after currently selected, try from end ie. "wrap" around
+      if (config->n_global_scene_entity_page_ids > 0) {
+        return RoomManager::go_to_entities_page_id(config->global_scene_entity_page_ids[config->n_global_scene_entity_page_ids - 1]);
+      } else {
+        ESP_LOGE("RoomManager", "No global entity pages loaded. Aborting.");
+      }
+    } else {
+      ESP_LOGE("RoomManager", "Did not find currently selected page within config. Aborting.");
+    }
+  } else {
+    ESP_LOGE("RoomManager", "Failed to get config while trying to go to previous entities page.");
+  }
+
+  return ESP_ERR_NOT_FINISHED;
+}
+
+esp_err_t RoomManager::go_to_next_global_scenes_page() {
+  std::shared_ptr<NSPanelConfig> config;
+  if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+    bool select_next_entity_page = false;
+    for (int i = 0; i < config->n_global_scene_entity_page_ids; i++) {
+      if (config->global_scene_entity_page_ids[i] == RoomManager::_current_entities_page_id) {
+        select_next_entity_page = true;
+      } else if (select_next_entity_page) {
+        return RoomManager::go_to_entities_page_id(config->global_scene_entity_page_ids[i]);
+      }
+    }
+
+    ESP_LOGD("RoomManager", "Num loaded global scenes: %zu", config->n_global_scene_entity_page_ids);
+
+    if (select_next_entity_page) {
+      // Did not find any entity page after currently selected, try from beginning ie. "wrap" around
+      if (config->n_global_scene_entity_page_ids > 0) {
+        return RoomManager::go_to_entities_page_id(config->global_scene_entity_page_ids[0]);
+      } else {
+        ESP_LOGE("RoomManager", "No global entity pages loaded. Aborting.");
       }
     } else {
       ESP_LOGE("RoomManager", "Did not find currently selected page within config. Aborting.");

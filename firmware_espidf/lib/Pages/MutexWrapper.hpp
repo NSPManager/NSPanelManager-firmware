@@ -6,31 +6,28 @@ template <typename T>
 class MutexWrapped {
 public:
   MutexWrapped() {
-    this->_mutex = xSemaphoreCreateMutex();
+    this->_mutex = portMUX_INITIALIZER_UNLOCKED;
   }
 
   MutexWrapped(T value) {
-    this->_mutex = xSemaphoreCreateMutex();
+    this->_mutex = portMUX_INITIALIZER_UNLOCKED;
     this->_value = value;
   }
 
   T get() {
-    // Wait indefinefly to take mutex and return contained value.
-    while ((xSemaphoreTake(this->_mutex, portMAX_DELAY) != pdPASS)) {
-    }
+    portENTER_CRITICAL(&this->_mutex);
     T current_value = this->_value;
-    xSemaphoreGive(this->_mutex);
+    portEXIT_CRITICAL(&this->_mutex);
     return current_value;
   }
 
   void set(T new_value) {
-    if (xSemaphoreTake(this->_mutex, portMAX_DELAY) == pdPASS) {
-      this->_value = new_value;
-      xSemaphoreGive(this->_mutex);
-    }
+    portENTER_CRITICAL(&this->_mutex);
+    this->_value = new_value;
+    portEXIT_CRITICAL(&this->_mutex);
   }
 
 private:
   T _value;
-  SemaphoreHandle_t _mutex;
+  portMUX_TYPE _mutex;
 };

@@ -164,6 +164,7 @@ void MqttManager::_task_resubscribe(void *param) {
   vTaskDelay(pdMS_TO_TICKS(500)); // Wait for things to settle before resubscrbing
   for (auto topic = MqttManager::_subscribed_topics.begin(); topic != MqttManager::_subscribed_topics.end(); topic++) {
     if (!topic->empty()) [[likely]] {
+      ESP_LOGD("MqttManager", "Subscribing to topic: %s", topic->c_str());
       uint8_t tries = 0;
       for (;;) { // Retry until successful max 5 attempts
         if (esp_mqtt_client_subscribe_single(MqttManager::_mqtt_client, topic->c_str(), 0) >= 0) {
@@ -179,6 +180,7 @@ void MqttManager::_task_resubscribe(void *param) {
           }
         }
       }
+      vTaskDelay(pdMS_TO_TICKS(50)); // Wait 50ms between each subscribe to allow panel to process any retained messages
     } else {
       MqttManager::_subscribed_topics.erase(topic++);
     }

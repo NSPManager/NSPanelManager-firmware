@@ -137,6 +137,24 @@ public:
   static esp_err_t go_to_next_scenes_page();
 
   /**
+   * @brief Go to the first global scenes page.
+   * @return ESP_OK if operation was successful, otherwise ESP_ERR_NOT_FINISHED
+   */
+  static esp_err_t go_to_first_global_scenes_page();
+
+  /**
+   * @brief Navigate to the previous global scenes page in order and if needed wrap around to end.
+   * @return ESP_OK if operation was successful, otherwise ESP_ERR_NOT_FINISHED or ESP_ERR_NOT_FOUND
+   */
+  static esp_err_t go_to_previous_global_scenes_page();
+
+  /**
+   * @brief Navigate to the next scenes page in order and if needed, wrap around to beginning.
+   * @return ESP_OK if operation was successful, otherwise ESP_ERR_NOT_FINISHED or ESP_ERR_NOT_FOUND
+   */
+  static esp_err_t go_to_next_global_scenes_page();
+
+  /**
    * @brief Register event handler for events.
    * @param event_id: The event id to subscribe to.
    * @param event_handler: The event handler callback to register
@@ -181,7 +199,7 @@ private:
 
   // Vars:
   // Status of home page for currently selected room
-  static inline std::shared_ptr<NSPanelRoomStatus> _home_page;
+  static inline std::shared_ptr<NSPanelRoomStatus> _home_page = nullptr;
 
   // The MQTT topic to receive the NSPanelRoomStatus protobuf object from.
   static inline MutexWrapped<std::string> _current_home_page_status_topic;
@@ -193,7 +211,7 @@ private:
   static inline std::string _all_rooms_state_topic;
 
   // Status of home page for all rooms
-  static inline std::shared_ptr<NSPanelRoomStatus> _home_page_all_rooms;
+  static inline std::shared_ptr<NSPanelRoomStatus> _home_page_all_rooms = nullptr;
 
   // Mutex to only allow one task at the time to access the status of the home page
   static inline SemaphoreHandle_t _home_page_mutex;

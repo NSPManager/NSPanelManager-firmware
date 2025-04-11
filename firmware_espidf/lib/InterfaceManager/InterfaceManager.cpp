@@ -150,12 +150,12 @@ void InterfaceManager::show_default_page() {
     }
 
     case NSPanelConfig__NSPanelDefaultPage::NSPANEL_CONFIG__NSPANEL_DEFAULT_PAGE__SCENES: {
-      EntitiesPage::show(true);
+      EntitiesPage::show(EntitiesPage::display_type_t::SCENES);
       break;
     }
 
     case NSPanelConfig__NSPanelDefaultPage::NSPANEL_CONFIG__NSPANEL_DEFAULT_PAGE__ENTITIES: {
-      EntitiesPage::show(false);
+      EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
       break;
     }
 

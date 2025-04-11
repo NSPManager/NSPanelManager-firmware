@@ -32,7 +32,7 @@ public:
   static inline constexpr const char *button_scenes_name = "home.b_scenes";
   static inline constexpr uint8_t button_scenes_id = 17;
   static inline constexpr uint8_t button_scenes_room_pic = 59;
-  static inline constexpr uint8_t button_scenes_room_pic2 = 50;
+  static inline constexpr uint8_t button_scenes_room_pic2 = 60;
   static inline constexpr uint8_t button_scenes_all_rooms_pic = 61;
   static inline constexpr uint8_t button_scenes_all_rooms_pic2 = 62;
 

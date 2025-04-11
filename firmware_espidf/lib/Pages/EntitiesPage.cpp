@@ -12,9 +12,9 @@
 #include <esp_log.h>
 #include <format>
 
-void EntitiesPage::show(bool scene_page) {
+void EntitiesPage::show(display_type_t display_type) {
   esp_log_level_set("EntitiesPage", ConfigManager::log_level);
-  EntitiesPage::_is_showing_scenes = scene_page;
+  EntitiesPage::_display_type = display_type;
 
   InterfaceManager::call_unshow_callback();
   InterfaceManager::current_page_unshow_callback.set(EntitiesPage::unshow);
@@ -24,14 +24,26 @@ void EntitiesPage::show(bool scene_page) {
   esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, EntitiesPage::_handle_nextion_event, NULL);
 
   // If current room has an entities page, go to it and if not, show the next available entities page.
-  if (scene_page) {
-    RoomManager::go_to_first_scenes_page();
-  } else {
+  switch (display_type) {
+  case display_type_t::ENTITIES:
     RoomManager::go_to_first_entities_page();
+    break;
+
+  case display_type_t::SCENES:
+    RoomManager::go_to_first_scenes_page();
+    break;
+
+  case display_type_t::GLOBAL_SCENES:
+    RoomManager::go_to_first_global_scenes_page();
+    break;
+
+  default:
+    ESP_LOGE("EntitiesPage", "Unknown display type!");
+    break;
   }
 
   if (RoomManager::get_current_room_entities_page_status(&EntitiesPage::_current_entities_page) != ESP_OK) [[unlikely]] {
-    ESP_LOGE("EntitiesPage", "Failed to get current room entities. Will return to HomePage.");
+    ESP_LOGE("EntitiesPage", "Failed to get current entities page. Will return to HomePage.");
     HomePage::show();
     return;
   }
@@ -171,7 +183,7 @@ void EntitiesPage::_handle_nextion_event(void *arg, esp_event_base_t event_base,
 
 void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data) {
   // First check if we actually pressed an entity toggle button or an entity name
-  if (EntitiesPage::_is_showing_scenes) {
+  if (EntitiesPage::_display_type == display_type_t::SCENES || EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
     // When displaying scenes we don't want to send the toggle command when pressing the icon above/beside the button.
     // We want to send the toggle command when pressing the text itself as the icon is for saving applicable scenes.
     for (int i = 0; i < 4; i++) {
@@ -224,8 +236,10 @@ void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data)
     break;
 
   case GUI_ITEMS4_PAGE::button_previous_page_id: {
-    if (EntitiesPage::_is_showing_scenes) {
+    if (EntitiesPage::_display_type == display_type_t::SCENES) {
       RoomManager::go_to_previous_scenes_page();
+    } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+      RoomManager::go_to_previous_global_scenes_page();
     } else {
       RoomManager::go_to_previous_entities_page();
     }
@@ -233,8 +247,10 @@ void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data)
   }
 
   case GUI_ITEMS4_PAGE::button_next_page_id: {
-    if (EntitiesPage::_is_showing_scenes) {
+    if (EntitiesPage::_display_type == display_type_t::SCENES) {
       RoomManager::go_to_next_scenes_page();
+    } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+      RoomManager::go_to_next_global_scenes_page();
     } else {
       RoomManager::go_to_next_entities_page();
     }
@@ -249,7 +265,7 @@ void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data)
 
 void EntitiesPage::_handle_items8_touch_event(nextion_event_touch_t *touch_data) {
   // First check if we actually pressed an entity toggle button or an entity name
-  if (EntitiesPage::_is_showing_scenes) {
+  if (EntitiesPage::_display_type == display_type_t::SCENES || EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
     // When displaying scenes we don't want to send the toggle command when pressing the icon above/beside the button.
     // We want to send the toggle command when pressing the text itself as the icon is for saving applicable scenes.
     for (int i = 0; i < 8; i++) {
@@ -302,8 +318,10 @@ void EntitiesPage::_handle_items8_touch_event(nextion_event_touch_t *touch_data)
     break;
 
   case GUI_ITEMS8_PAGE::button_previous_page_id: {
-    if (EntitiesPage::_is_showing_scenes) {
+    if (EntitiesPage::_display_type == display_type_t::SCENES) {
       RoomManager::go_to_previous_scenes_page();
+    } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+      RoomManager::go_to_previous_global_scenes_page();
     } else {
       RoomManager::go_to_previous_entities_page();
     }
@@ -311,8 +329,10 @@ void EntitiesPage::_handle_items8_touch_event(nextion_event_touch_t *touch_data)
   }
 
   case GUI_ITEMS8_PAGE::button_next_page_id: {
-    if (EntitiesPage::_is_showing_scenes) {
+    if (EntitiesPage::_display_type == display_type_t::SCENES) {
       RoomManager::go_to_next_scenes_page();
+    } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+      RoomManager::go_to_next_global_scenes_page();
     } else {
       RoomManager::go_to_next_entities_page();
     }
@@ -327,7 +347,7 @@ void EntitiesPage::_handle_items8_touch_event(nextion_event_touch_t *touch_data)
 
 void EntitiesPage::_handle_items12_touch_event(nextion_event_touch_t *touch_data) {
   // First check if we actually pressed an entity toggle button or an entity name
-  if (EntitiesPage::_is_showing_scenes) {
+  if (EntitiesPage::_display_type == display_type_t::SCENES || EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
     // When displaying scenes we don't want to send the toggle command when pressing the icon above/beside the button.
     // We want to send the toggle command when pressing the text itself as the icon is for saving applicable scenes.
     for (int i = 0; i < 12; i++) {
@@ -380,8 +400,10 @@ void EntitiesPage::_handle_items12_touch_event(nextion_event_touch_t *touch_data
     break;
 
   case GUI_ITEMS12_PAGE::button_previous_page_id: {
-    if (EntitiesPage::_is_showing_scenes) {
+    if (EntitiesPage::_display_type == display_type_t::SCENES) {
       RoomManager::go_to_previous_scenes_page();
+    } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+      RoomManager::go_to_previous_global_scenes_page();
     } else {
       RoomManager::go_to_previous_entities_page();
     }
@@ -389,8 +411,10 @@ void EntitiesPage::_handle_items12_touch_event(nextion_event_touch_t *touch_data
   }
 
   case GUI_ITEMS12_PAGE::button_next_page_id: {
-    if (EntitiesPage::_is_showing_scenes) {
+    if (EntitiesPage::_display_type == display_type_t::SCENES) {
       RoomManager::go_to_next_scenes_page();
+    } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+      RoomManager::go_to_next_global_scenes_page();
     } else {
       RoomManager::go_to_next_entities_page();
     }

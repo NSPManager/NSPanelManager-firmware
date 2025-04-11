@@ -114,7 +114,6 @@ extern "C" void app_main() {
   } else {
     if (ConfigManager::wifi_ssid.empty() || ConfigManager::num_failed_boots >= 5) {
       ESP_LOGE("Main", "Successfully loaded config from LittleFS but the config is not valid. Empty WiFi SSID, will load default values and start Access Point.");
-      ConfigManager::create_default();
 
       WiFiManager::start_ap(&ConfigManager::wifi_hostname);
     } else {

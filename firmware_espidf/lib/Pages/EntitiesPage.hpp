@@ -10,11 +10,17 @@
 
 class EntitiesPage {
 public:
+  enum display_type_t {
+    ENTITIES,
+    SCENES,
+    GLOBAL_SCENES
+  };
+
   /**
    * Show the entities page for entity control
-   * @param scene_page: False if we should show entities and true if we should show scenes
+   * @param display_type: What should be displayed
    */
-  static void show(bool scene_page);
+  static void show(display_type_t display_type);
 
   /**
    * Unshow the loading page
@@ -80,8 +86,7 @@ private:
   // Set to 4, 8 or 12. Used to determine if we should send the command to switch page on Nextion display.
   static inline std::atomic<uint8_t> _currently_showing_page_type = 0;
 
-  // Set to 4, 8 or 12. Used to determine if we should send the command to switch page on Nextion display.
-  static inline std::atomic<bool> _is_showing_scenes = false;
+  static inline std::atomic<display_type_t> _display_type = display_type_t::ENTITIES;
 
   // What is the currently displayed header text. Used to determine if we should update header text.
   static inline MutexWrapped<std::string> _currently_showing_header_text;
