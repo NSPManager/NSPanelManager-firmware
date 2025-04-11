@@ -114,7 +114,6 @@ void NSPM_ConfigManager::_handle_new_config_data(const char *data, size_t data_l
     if (new_config != NULL) [[likely]] {
       NSPM_ConfigManager::_config = std::shared_ptr<NSPanelConfig>(new_config, &NSPM_ConfigManager::_delete_nspanelconfig_object_from_shared_ptr);
       trigger_new_config_event = true;
-      ESP_LOGD("NSPM_ConfigManager", "New screensaver timeout: %ld", new_config->screensaver_activation_timeout);
     } else {
       ESP_LOGE("NSPM_ConfigManager", "Received new config but failed to parse into protobuf object.");
     }

@@ -90,6 +90,15 @@ public:
   static esp_err_t set_component_pic1(const char *component_id, uint8_t value, uint16_t mutex_timeout);
 
   /**
+   * @brief Set the "pressed" picture value of the given component (ie. the "pic2" field in Nextion editor)
+   * @param component_id: The component to change
+   * @param value: The new value for the component
+   * @param mutex_timeout: Timeout (in ms) of how long to wait for UART mutex
+   * @return ESP_OK or ESP_ERR_TIMEOUT
+   */
+  static esp_err_t set_component_pic2(const char *component_id, uint8_t value, uint16_t mutex_timeout);
+
+  /**
    * @brief Set the component foreground color
    * @param component_id: The component to change
    * @param value: The new foreground color

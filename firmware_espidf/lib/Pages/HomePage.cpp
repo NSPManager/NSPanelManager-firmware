@@ -84,6 +84,7 @@ void HomePage::_update_display() {
       Nextion::set_component_text(GUI_HOME_PAGE::mode_label_name, "Room lights", 100);
       Nextion::set_component_text(GUI_HOME_PAGE::room_label_name, status->name, 100);
       Nextion::set_component_pic(GUI_HOME_PAGE::button_scenes_name, GUI_HOME_PAGE::button_scenes_room_pic, 250);
+      Nextion::set_component_pic2(GUI_HOME_PAGE::button_scenes_name, GUI_HOME_PAGE::button_scenes_room_pic2, 250);
     } else {
       ESP_LOGE("HomePage", "Failed to get status object for home page. Will abort update.");
       return;
@@ -93,6 +94,7 @@ void HomePage::_update_display() {
       Nextion::set_component_text(GUI_HOME_PAGE::mode_label_name, "All lights", 100);
       Nextion::set_component_text(GUI_HOME_PAGE::room_label_name, "All", 100);
       Nextion::set_component_pic(GUI_HOME_PAGE::button_scenes_name, GUI_HOME_PAGE::button_scenes_all_rooms_pic, 250);
+      Nextion::set_component_pic2(GUI_HOME_PAGE::button_scenes_name, GUI_HOME_PAGE::button_scenes_all_rooms_pic2, 250);
     } else {
       ESP_LOGE("HomePage", "Failed to get status object for home page (all rooms). Will abort update.");
       return;
@@ -277,6 +279,7 @@ void HomePage::_handle_config_update(void *arg, esp_event_base_t event_base, int
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
     if (HomePage::_nspm_cur_config != nullptr && config->default_room != HomePage::_nspm_cur_config->default_room) { // Has the default page changed
       if (RoomManager::get_current_room_id() == HomePage::_nspm_cur_config->default_room) {                          // Are we currently displaying the 'default page'? If so, go to new default page.
+        ESP_LOGD("HomePage", "Default room page changed. Navigating to new default room.");
         RoomManager::go_to_room_id(config->default_room);
       }
     }

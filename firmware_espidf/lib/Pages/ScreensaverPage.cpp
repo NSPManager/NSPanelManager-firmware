@@ -144,9 +144,9 @@ void ScreensaverPage::_nspm_config_event_handler(void *arg, esp_event_base_t eve
       } else {
         ESP_LOGE("ScreensaverPage", "Failed to get config while processing 'new config event'. May become out of sync with manager until next config update.");
       }
-    }
 
-    RoomManager::go_to_default_room(); // Go to default room so that it is the room that is shown when the screensaver is hidden.
+      RoomManager::go_to_default_room(); // Go to default room so that it is the room that is shown when the screensaver is hidden.
+    }
 
     if (NSPM_ConfigManager::get_config(&ScreensaverPage::_nspanel_current_config) != ESP_OK) [[unlikely]] {
       ESP_LOGW("ScreensaverPage", "Failed to update local reference to current config. May become out of sync with manager until next config update.");
