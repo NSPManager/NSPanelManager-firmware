@@ -85,7 +85,8 @@ extern "C" void app_main() {
   // Set global log level initially. This is later set from saved config.
   // esp_log_level_set("*", ESP_LOG_DEBUG);
 
-  ESP_LOGI("Main", "Starting NSPanel Manager firmware. Version " NSPM_VERSION ".");
+  ESP_LOGI("Main", "Starting NSPanel Manager firmware. Version " NSPM_VERSION ". Marking boot as successful.");
+  UpdateManager::mark_boot_successful();
 
   esp_event_loop_create_default();
 
@@ -144,7 +145,7 @@ extern "C" void app_main() {
     // Start RoomManager
     RoomManager::init();
 
-    // Start manager to handles temperature and status updates
+    // Start manager that handles temperature and status updates
     StatusUpdateManager::init();
   }
 
@@ -162,8 +163,8 @@ extern "C" void app_main() {
   // Hook into update manager
   UpdateManager::init();
 
-  ESP_LOGI("Main", "Init complete. Will mark boot as complete as we've registered to manager.");
-  UpdateManager::mark_boot_successful();
+  // We have been accepted, update internal stored checksum of installed software if needed
+  UpdateManager::update_internal_firmware_checksum();
 
   vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5
   ESP_LOGI("Main", "Boot has been active more than 5 seconds and we have been accepted at a manager, mark as successful.");

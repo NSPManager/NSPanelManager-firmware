@@ -159,32 +159,33 @@ void MqttManager::_send_mqtt_online_update() {
 }
 
 void MqttManager::_task_resubscribe(void *param) {
+  // TODO: Resubscribe in each component/manager that requires MQTT
   // Resubscribe to all topics
-  ESP_LOGD("MqttManager", "Starting resubscribe of all topics.");
-  vTaskDelay(pdMS_TO_TICKS(500)); // Wait for things to settle before resubscrbing
-  for (auto topic = MqttManager::_subscribed_topics.begin(); topic != MqttManager::_subscribed_topics.end(); topic++) {
-    if (!topic->empty()) [[likely]] {
-      ESP_LOGD("MqttManager", "Subscribing to topic: %s", topic->c_str());
-      uint8_t tries = 0;
-      for (;;) { // Retry until successful max 5 attempts
-        if (esp_mqtt_client_subscribe_single(MqttManager::_mqtt_client, topic->c_str(), 0) >= 0) {
-          break;
-        } else {
-          tries++;
-          if (tries == 5) {
-            ESP_LOGE("MqttManager", "Failed to resubscribe to topic '%s'. Tried 5 times, will cancel and go to next topic.", topic->c_str());
-            break;
-          } else {
-            ESP_LOGE("MqttManager", "Failed to resubscribe to topic '%s', will try again in 500ms.", topic->c_str());
-            vTaskDelay(pdMS_TO_TICKS(500));
-          }
-        }
-      }
-      vTaskDelay(pdMS_TO_TICKS(50)); // Wait 50ms between each subscribe to allow panel to process any retained messages
-    } else {
-      MqttManager::_subscribed_topics.erase(topic++);
-    }
-  }
+  // ESP_LOGD("MqttManager", "Starting resubscribe of all topics.");
+  // vTaskDelay(pdMS_TO_TICKS(500)); // Wait for things to settle before resubscrbing
+  // for (auto topic = MqttManager::_subscribed_topics.begin(); topic != MqttManager::_subscribed_topics.end(); topic++) {
+  //   if (!topic->empty()) [[likely]] {
+  //     ESP_LOGD("MqttManager", "Subscribing to topic: %s", topic->c_str());
+  //     uint8_t tries = 0;
+  //     for (;;) { // Retry until successful max 5 attempts
+  //       if (esp_mqtt_client_subscribe_single(MqttManager::_mqtt_client, topic->c_str(), 0) >= 0) {
+  //         break;
+  //       } else {
+  //         tries++;
+  //         if (tries == 5) {
+  //           ESP_LOGE("MqttManager", "Failed to resubscribe to topic '%s'. Tried 5 times, will cancel and go to next topic.", topic->c_str());
+  //           break;
+  //         } else {
+  //           ESP_LOGE("MqttManager", "Failed to resubscribe to topic '%s', will try again in 500ms.", topic->c_str());
+  //           vTaskDelay(pdMS_TO_TICKS(500));
+  //         }
+  //       }
+  //     }
+  //     vTaskDelay(pdMS_TO_TICKS(50)); // Wait 50ms between each subscribe to allow panel to process any retained messages
+  //   } else {
+  //     MqttManager::_subscribed_topics.erase(topic++);
+  //   }
+  // }
 
   vTaskDelete(NULL);
 }

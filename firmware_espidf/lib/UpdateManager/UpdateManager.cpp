@@ -306,14 +306,16 @@ void UpdateManager::update_littlefs(void *param, bool force_update) {
 void UpdateManager::mark_boot_successful() {
   esp_ota_mark_app_valid_cancel_rollback();
   ESP_LOGI("UpdateManager", "Current boot marked as successful, will not rollback on reboot. Updating stored FW checksum in LittleFS.");
+}
 
-  std::string firmware_md5_string = "http://";
-  firmware_md5_string.append(NSPM_ConfigManager::get_manager_address());
-  firmware_md5_string.append(":");
-  firmware_md5_string.append(std::to_string(NSPM_ConfigManager::get_manager_port()));
-  firmware_md5_string.append("/checksum_firmware");
-
+void UpdateManager::update_internal_firmware_checksum() {
   if (ConfigManager::has_updated) {
+    std::string firmware_md5_string = "http://";
+    firmware_md5_string.append(NSPM_ConfigManager::get_manager_address());
+    firmware_md5_string.append(":");
+    firmware_md5_string.append(std::to_string(NSPM_ConfigManager::get_manager_port()));
+    firmware_md5_string.append("/checksum_firmware");
+
     std::vector<uint8_t> data;
     if (UpdateManager::_download_data(&data, firmware_md5_string.c_str(), -1, -1) == ESP_OK) {
       std::string md5_string = std::string((char *)data.data(), data.size());

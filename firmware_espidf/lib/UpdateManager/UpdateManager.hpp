@@ -38,6 +38,11 @@ public:
    */
   static void mark_boot_successful();
 
+  /*
+   * Update the stored checksum in config for what firmware is installed. This will pull the checksum from the manager.
+   */
+  static void update_internal_firmware_checksum();
+
 private:
   /**
    * @brief Handle events triggered from MQTT places.

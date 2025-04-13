@@ -35,6 +35,11 @@ private:
   static bool _get_relay_state(uint8_t relay);
 
   /**
+   * Subscribe/Unsubscribe from relay groups for relays
+   */
+  static void _handle_mqtt_relay_group_topics();
+
+  /**
    * @brief Handle any event trigger from the NSPM_ConfigManager
    */
   static void _nspm_configmanager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
@@ -67,6 +72,9 @@ private:
   static constexpr const gpio_num_t _relay1_pin = gpio_num_t::GPIO_NUM_22;
   static constexpr const gpio_num_t _relay2_pin = gpio_num_t::GPIO_NUM_19;
   static constexpr const uint32_t _relay_pin_mask = ((1ULL << _relay1_pin) | (1ULL << _relay2_pin));
+
+  // The current/previous config. Used to compare and check for changes.
+  static inline std::shared_ptr<NSPanelConfig> _current_config = nullptr;
 };
 
 #endif

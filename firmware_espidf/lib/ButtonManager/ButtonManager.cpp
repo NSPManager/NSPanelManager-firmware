@@ -45,9 +45,10 @@ void ButtonManager::init() {
 
 void ButtonManager::init_mqtt() {
   // Setup and subscribe to MQTT
+  MqttManager::register_handler(MQTT_EVENT_ANY, &ButtonManager::_mqtt_event_handler, NULL);
+
   std::string relay1_topic = std::format("nspanel/{}/relay1_cmd", WiFiManager::mac_string());
   std::string relay2_topic = std::format("nspanel/{}/relay2_cmd", WiFiManager::mac_string());
-  MqttManager::register_handler(MQTT_EVENT_DATA, &ButtonManager::_mqtt_event_handler, NULL);
   MqttManager::subscribe(relay1_topic);
   MqttManager::subscribe(relay2_topic);
 }
@@ -173,6 +174,21 @@ void ButtonManager::_set_relay_state(uint8_t relay, bool state, bool send_mqtt_u
 
     if (send_mqtt_update) {
       MqttManager::publish(std::format("nspanel/{}/relay1_state", WiFiManager::mac_string()), state ? "1" : "0", strlen(state ? "1" : "0"), true);
+
+      std::shared_ptr<NSPanelConfig> config;
+      if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+        std::string relay_group_base_topic = "nspanel/mqttmanager_";
+        relay_group_base_topic.append(NSPM_ConfigManager::get_manager_address());
+        relay_group_base_topic.append("/relay_groups/");
+        std::string relay_group_topic;
+        for (int i = 0; i < config->n_relay1_relay_group; i++) {
+          relay_group_topic = relay_group_base_topic;
+          relay_group_topic.append(std::to_string(config->relay1_relay_group[i]));
+          relay_group_topic.append("/state");
+
+          MqttManager::publish(relay_group_topic, state ? "1" : "0", strlen(state ? "1" : "0"), true);
+        }
+      }
     }
   } else if (relay == 2) {
     if (!ButtonManager::_reverse_relays) {
@@ -187,6 +203,21 @@ void ButtonManager::_set_relay_state(uint8_t relay, bool state, bool send_mqtt_u
 
     if (send_mqtt_update) {
       MqttManager::publish(std::format("nspanel/{}/relay2_state", WiFiManager::mac_string()), state ? "1" : "0", strlen(state ? "1" : "0"), true);
+
+      std::shared_ptr<NSPanelConfig> config;
+      if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+        std::string relay_group_base_topic = "nspanel/mqttmanager_";
+        relay_group_base_topic.append(NSPM_ConfigManager::get_manager_address());
+        relay_group_base_topic.append("/relay_groups/");
+        std::string relay_group_topic;
+        for (int i = 0; i < config->n_relay2_relay_group; i++) {
+          relay_group_topic = relay_group_base_topic;
+          relay_group_topic.append(std::to_string(config->relay2_relay_group[i]));
+          relay_group_topic.append("/state");
+
+          MqttManager::publish(relay_group_topic, state ? "1" : "0", strlen(state ? "1" : "0"), true);
+        }
+      }
     }
   }
 }
@@ -208,7 +239,121 @@ bool ButtonManager::_get_relay_state(uint8_t relay) {
   return false; // Should never be reached
 }
 
+void ButtonManager::_handle_mqtt_relay_group_topics() {
+  std::vector<int32_t> current_relay1_group_ids;
+  std::vector<int32_t> current_relay2_group_ids;
+  if (ButtonManager::_current_config != nullptr) {
+    for (int i = 0; i < ButtonManager::_current_config->n_relay1_relay_group; i++) {
+      current_relay1_group_ids.push_back(ButtonManager::_current_config->relay1_relay_group[i]);
+    }
+    for (int i = 0; i < ButtonManager::_current_config->n_relay2_relay_group; i++) {
+      current_relay2_group_ids.push_back(ButtonManager::_current_config->relay2_relay_group[i]);
+    }
+  }
+
+  std::vector<int32_t> new_relay1_group_ids;
+  std::vector<int32_t> new_relay2_group_ids;
+  std::shared_ptr<NSPanelConfig> config;
+  if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+    for (int i = 0; i < config->n_relay1_relay_group; i++) {
+      new_relay1_group_ids.push_back(config->relay1_relay_group[i]);
+    }
+    for (int i = 0; i < config->n_relay2_relay_group; i++) {
+      new_relay2_group_ids.push_back(config->relay2_relay_group[i]);
+    }
+  } else {
+    ESP_LOGE("ButtonManager", "Failed to get current config while trying to subscribe/unsubscribe from relay group topics.");
+    return;
+  }
+
+  // Unsubscribe from any removed relay1 group
+  for (int i = 0; i < current_relay1_group_ids.size(); i++) {
+    bool group_found = false;
+    for (int j = 0; j < new_relay1_group_ids.size(); j++) {
+      if (new_relay1_group_ids[j] == current_relay1_group_ids[i]) {
+        group_found = true;
+        break;
+      }
+    }
+
+    if (!group_found) {
+      ESP_LOGI("ButtonManager", "Removing relay group %ld from relay1 binding.", current_relay1_group_ids[i]);
+      std::string relay_group_topic = "nspanel/mqttmanager_";
+      relay_group_topic.append(NSPM_ConfigManager::get_manager_address());
+      relay_group_topic.append("/relay_groups/");
+      relay_group_topic.append(std::to_string(current_relay1_group_ids[i]));
+      relay_group_topic.append("/state");
+      MqttManager::unsubscribe(relay_group_topic);
+    }
+  }
+
+  // Unsubscribe from any removed relay2 group
+  for (int i = 0; i < current_relay2_group_ids.size(); i++) {
+    bool group_found = false;
+    for (int j = 0; j < new_relay2_group_ids.size(); j++) {
+      if (new_relay2_group_ids[j] == current_relay2_group_ids[i]) {
+        group_found = true;
+        break;
+      }
+    }
+
+    if (!group_found) {
+      ESP_LOGI("ButtonManager", "Removing relay group %ld from relay2 binding.", current_relay2_group_ids[i]);
+      std::string relay_group_topic = "nspanel/mqttmanager_";
+      relay_group_topic.append(NSPM_ConfigManager::get_manager_address());
+      relay_group_topic.append("/relay_groups/");
+      relay_group_topic.append(std::to_string(current_relay2_group_ids[i]));
+      relay_group_topic.append("/state");
+      MqttManager::unsubscribe(relay_group_topic);
+    }
+  }
+
+  // Subscribe to any added relay1 group
+  for (int i = 0; i < new_relay1_group_ids.size(); i++) {
+    bool already_subscribed = false;
+    for (int j = 0; j < current_relay1_group_ids.size(); j++) {
+      if (new_relay2_group_ids[j] == current_relay2_group_ids[i]) {
+        already_subscribed = true;
+        break;
+      }
+    }
+
+    if (!already_subscribed) {
+      ESP_LOGI("ButtonManager", "Adding relay group %ld to relay1 binding.", new_relay1_group_ids[i]);
+      std::string relay_group_topic = "nspanel/mqttmanager_";
+      relay_group_topic.append(NSPM_ConfigManager::get_manager_address());
+      relay_group_topic.append("/relay_groups/");
+      relay_group_topic.append(std::to_string(new_relay1_group_ids[i]));
+      relay_group_topic.append("/state");
+      MqttManager::subscribe(relay_group_topic);
+    }
+  }
+
+  // Subscribe to any added relay2 group
+  for (int i = 0; i < new_relay2_group_ids.size(); i++) {
+    bool already_subscribed = false;
+    for (int j = 0; j < current_relay2_group_ids.size(); j++) {
+      if (new_relay2_group_ids[j] == current_relay2_group_ids[i]) {
+        already_subscribed = true;
+        break;
+      }
+    }
+
+    if (!already_subscribed) {
+      ESP_LOGI("ButtonManager", "Adding relay group %ld to relay2 binding.", new_relay2_group_ids[i]);
+      std::string relay_group_topic = "nspanel/mqttmanager_";
+      relay_group_topic.append(NSPM_ConfigManager::get_manager_address());
+      relay_group_topic.append("/relay_groups/");
+      relay_group_topic.append(std::to_string(new_relay1_group_ids[i]));
+      relay_group_topic.append("/state");
+      MqttManager::subscribe(relay_group_topic);
+    }
+  }
+}
+
 void ButtonManager::_nspm_configmanager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
+  ButtonManager::_handle_mqtt_relay_group_topics();
+
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
     bool save = false;
@@ -229,42 +374,108 @@ void ButtonManager::_nspm_configmanager_event_handler(void *arg, esp_event_base_
     ButtonManager::_reverse_relays = config->reverse_relays;
     ButtonManager::_button1_mode = config->button1_mode;
     ButtonManager::_button2_mode = config->button2_mode;
+
+    ButtonManager::_current_config = config;
   } else {
     ESP_LOGE("ButtonManager", "Got new config update but ButtonManager failed to read config. Cannot update internal values.");
   }
 }
 
 void ButtonManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-  esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
-  if (event->data_len == 0) {
-    return;
-  }
-
-  std::string topic_string = std::string(event->topic, event->topic_len);
-  std::string data = std::string(event->data, event->data_len);
-
-  std::string relay1_topic = std::format("nspanel/{}/relay1_cmd", WiFiManager::mac_string());
-  std::string relay2_topic = std::format("nspanel/{}/relay2_cmd", WiFiManager::mac_string());
-
-  if (topic_string.compare(relay1_topic) == 0) {
-    if (data.compare("0") == 0) {
-      ButtonManager::_set_relay_state(1, false, true);
-    } else if (data.compare("1") == 0) {
-      ButtonManager::_set_relay_state(1, true, true);
-    } else if (data.compare("2") == 0) {
-      ButtonManager::_set_relay_state(1, !ButtonManager::_relay1_current_state, true);
-    } else {
-      ESP_LOGE("ButtonManager", "Got command to set relay1 state but command data was not recognized.");
+  if (event_id == MQTT_EVENT_DATA) {
+    esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
+    if (event->data_len == 0) {
+      return;
     }
-  } else if (topic_string.compare(relay2_topic) == 0) {
-    if (data.compare("0") == 0) {
-      ButtonManager::_set_relay_state(2, false, true);
-    } else if (data.compare("1") == 0) {
-      ButtonManager::_set_relay_state(2, true, true);
-    } else if (data.compare("2") == 0) {
-      ButtonManager::_set_relay_state(2, !ButtonManager::_relay1_current_state, true);
-    } else {
-      ESP_LOGE("ButtonManager", "Got command to set relay2 state but command data was not recognized.");
+
+    std::string topic_string = std::string(event->topic, event->topic_len);
+    std::string data = std::string(event->data, event->data_len);
+
+    std::string relay1_topic = std::format("nspanel/{}/relay1_cmd", WiFiManager::mac_string());
+    std::string relay2_topic = std::format("nspanel/{}/relay2_cmd", WiFiManager::mac_string());
+
+    if (topic_string.compare(relay1_topic) == 0) {
+      if (data.compare("0") == 0) {
+        ButtonManager::_set_relay_state(1, false, true);
+      } else if (data.compare("1") == 0) {
+        ButtonManager::_set_relay_state(1, true, true);
+      } else if (data.compare("2") == 0) {
+        ButtonManager::_set_relay_state(1, !ButtonManager::_relay1_current_state, true);
+      } else {
+        ESP_LOGE("ButtonManager", "Got command to set relay1 state but command data was not recognized.");
+      }
+    } else if (topic_string.compare(relay2_topic) == 0) {
+      if (data.compare("0") == 0) {
+        ButtonManager::_set_relay_state(2, false, true);
+      } else if (data.compare("1") == 0) {
+        ButtonManager::_set_relay_state(2, true, true);
+      } else if (data.compare("2") == 0) {
+        ButtonManager::_set_relay_state(2, !ButtonManager::_relay2_current_state, true);
+      } else {
+        ESP_LOGE("ButtonManager", "Got command to set relay2 state but command data was not recognized.");
+      }
     }
+
+    // Check if it is a relay1 bound group
+    std::shared_ptr<NSPanelConfig> config;
+    if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+      std::string relay_group_base_topic = "nspanel/mqttmanager_";
+      relay_group_base_topic.append(NSPM_ConfigManager::get_manager_address());
+      relay_group_base_topic.append("/relay_groups/");
+      std::string relay_group_topic;
+
+      for (int i = 0; i < config->n_relay1_relay_group; i++) {
+        relay_group_topic = relay_group_base_topic;
+        relay_group_topic.append(std::to_string(config->relay1_relay_group[i]));
+        relay_group_topic.append("/state");
+
+        if (topic_string.compare(relay_group_topic) == 0) {
+          if (data.compare("0") == 0) {
+            if (ButtonManager::_get_relay_state(1)) { // Relay 1 is on, turn off.
+              ESP_LOGD("ButtonManager", "Received update from relay group %ld, new state OFF.", config->relay1_relay_group[i]);
+              ButtonManager::_set_relay_state(1, false, true);
+            }
+          } else if (data.compare("1") == 0) {
+            if (!ButtonManager::_get_relay_state(1)) { // Relay 1 is off, turn off.
+              ESP_LOGD("ButtonManager", "Received update from relay group %ld, new state ON.", config->relay1_relay_group[i]);
+              ButtonManager::_set_relay_state(1, true, true);
+            }
+          } else {
+            ESP_LOGE("ButtonManager", "Found matching relay group topic but failed to determine state.");
+          }
+        }
+        break;
+      }
+
+      // Check if it is a relay2 bound group
+      for (int i = 0; i < config->n_relay2_relay_group; i++) {
+        relay_group_topic = relay_group_base_topic;
+        relay_group_topic.append(std::to_string(config->relay2_relay_group[i]));
+        relay_group_topic.append("/state");
+
+        if (topic_string.compare(relay_group_topic) == 0) {
+          if (data.compare("0") == 0) {
+            if (ButtonManager::_get_relay_state(2)) { // Relay 2 is on, turn off.
+              ESP_LOGD("ButtonManager", "Received update from relay group %ld, new state OFF.", config->relay2_relay_group[i]);
+              ButtonManager::_set_relay_state(2, false, true);
+            }
+          } else if (data.compare("1") == 0) {
+            if (!ButtonManager::_get_relay_state(2)) { // Relay 2 is off, turn off.
+              ESP_LOGD("ButtonManager", "Received update from relay group %ld, new state ON.", config->relay2_relay_group[i]);
+              ButtonManager::_set_relay_state(2, true, true);
+            }
+          } else {
+            ESP_LOGE("ButtonManager", "Found matching relay group topic but failed to determine state.");
+          }
+        }
+        break;
+      }
+    } else {
+      ESP_LOGE("ButtonManager", "Failed to get config while processing MQTT message. Unable to determine if message was relay group binding state.");
+    }
+  } else if (event_id == MQTT_EVENT_CONNECTED) {
+    ESP_LOGD("ButtonManager", "MQTT connected, resubscribing to topics.");
+    ButtonManager::init_mqtt();
+    ButtonManager::_handle_mqtt_relay_group_topics();
   }
 }
