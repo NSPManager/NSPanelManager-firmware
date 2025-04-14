@@ -325,7 +325,7 @@ void ButtonManager::_handle_mqtt_relay_group_topics() {
     std::string relay_group_topic = "nspanel/mqttmanager_";
     relay_group_topic.append(NSPM_ConfigManager::get_manager_address());
     relay_group_topic.append("/relay_groups/");
-    relay_group_topic.append(std::to_string(new_relay1_group_ids[i]));
+    relay_group_topic.append(std::to_string(new_relay2_group_ids[i]));
     relay_group_topic.append("/state");
     MqttManager::subscribe(relay_group_topic);
   }
