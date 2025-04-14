@@ -73,6 +73,11 @@ private:
    */
   static void _shared_ptr_weather_update_cleanup(NSPanelWeatherUpdate *data);
 
+  /**
+   * Subscribe to relevant MQTT topics
+   */
+  static void _subscribe_to_mqtt_topics();
+
   // Vars:
   // The current config/last known config of the panel. Used to compare with new config to determine changes.
   static inline std::shared_ptr<NSPanelConfig> _nspanel_current_config;

@@ -82,9 +82,6 @@ int custom_log_vprintf(const char *fmt, va_list args) {
 }
 
 extern "C" void app_main() {
-  // Set global log level initially. This is later set from saved config.
-  // esp_log_level_set("*", ESP_LOG_DEBUG);
-
   ESP_LOGI("Main", "Starting NSPanel Manager firmware. Version " NSPM_VERSION ". Marking boot as successful.");
   UpdateManager::mark_boot_successful();
 

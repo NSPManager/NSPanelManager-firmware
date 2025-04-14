@@ -12,7 +12,7 @@
 #include <esp_log.h>
 
 void ScreensaverPage::init() {
-  MqttManager::register_handler(MQTT_EVENT_DATA, ScreensaverPage::_mqtt_event_handler, NULL);
+  MqttManager::register_handler(MQTT_EVENT_ANY, ScreensaverPage::_mqtt_event_handler, NULL);
   esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, ESP_EVENT_ANY_ID, ScreensaverPage::_nspm_config_event_handler, NULL);
   esp_event_handler_register(STATUSUPDATEMANAGER_EVENT, statusupdatemanagerevent_t::AVERAGE_TEMP_UPDATE, ScreensaverPage::_new_temperature_event, NULL);
 
@@ -22,41 +22,7 @@ void ScreensaverPage::init() {
 
     ScreensaverPage::_weather_update_data_mutex = xSemaphoreCreateMutex();
   }
-
-  std::string manager_address = NSPM_ConfigManager::get_manager_address();
-  if (!manager_address.empty()) {
-    std::string mqtt_base_topic = "nspanel/mqttmanager_";
-    mqtt_base_topic.append(manager_address);
-
-    std::string time_topic = mqtt_base_topic;
-    time_topic.append("/status/time");
-    std::string date_topic = mqtt_base_topic;
-    date_topic.append("/status/date");
-    std::string ampm_topic = mqtt_base_topic;
-    ampm_topic.append("/status/ampm");
-    std::string weather_topic = mqtt_base_topic;
-    weather_topic.append("/status/weather");
-
-    while (MqttManager::subscribe(time_topic) != ESP_OK) {
-      ESP_LOGE("ScreensaverPage", "Failed to subscribe to time topic for screensaver page.");
-      vTaskDelay(pdMS_TO_TICKS(500));
-    }
-
-    while (MqttManager::subscribe(date_topic) != ESP_OK) {
-      ESP_LOGE("ScreensaverPage", "Failed to subscribe to date topic for screensaver page.");
-      vTaskDelay(pdMS_TO_TICKS(500));
-    }
-
-    while (MqttManager::subscribe(ampm_topic) != ESP_OK) {
-      ESP_LOGE("ScreensaverPage", "Failed to subscribe to AM/PM topic for screensaver page.");
-      vTaskDelay(pdMS_TO_TICKS(500));
-    }
-
-    while (MqttManager::subscribe(weather_topic) != ESP_OK) {
-      ESP_LOGE("ScreensaverPage", "Failed to subscribe to weather topic for screensaver page.");
-      vTaskDelay(pdMS_TO_TICKS(500));
-    }
-  }
+  ScreensaverPage::_subscribe_to_mqtt_topics();
 }
 
 void ScreensaverPage::show() {
@@ -85,46 +51,54 @@ bool ScreensaverPage::showing() {
 }
 
 void ScreensaverPage::_mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-  esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
-  std::string topic_string = std::string(event->topic, event->topic_len);
-
-  std::string manager_address = NSPM_ConfigManager::get_manager_address();
-  std::string mqtt_base_topic = "nspanel/mqttmanager_";
-  mqtt_base_topic.append(manager_address);
-
-  std::string time_topic = mqtt_base_topic;
-  time_topic.append("/status/time");
-  std::string date_topic = mqtt_base_topic;
-  date_topic.append("/status/date");
-  std::string ampm_topic = mqtt_base_topic;
-  ampm_topic.append("/status/ampm");
-  std::string weather_topic = mqtt_base_topic;
-  weather_topic.append("/status/weather");
-
-  if (topic_string.compare(time_topic) == 0) {
-    ScreensaverPage::_current_time = std::string(event->data, event->data_len);
-    ScreensaverPage::_update_displayed_time();
-  } else if (topic_string.compare(date_topic) == 0) {
-    // We got new date, update display:
-    ScreensaverPage::_current_date = std::string(event->data, event->data_len);
-    ScreensaverPage::_update_displayed_date();
-  } else if (topic_string.compare(ampm_topic) == 0) {
-    // We got new AM/PM, update display:
-    ScreensaverPage::_am_pm_string = std::string(event->data, event->data_len);
-    ScreensaverPage::_update_displayed_time();
-  } else if (topic_string.compare(weather_topic) == 0) {
-    if (ScreensaverPage::_weather_update_data_mutex != NULL) {
-      if (xSemaphoreTake(ScreensaverPage::_weather_update_data_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
-        ScreensaverPage::_weather_update_mqtt_data.insert(ScreensaverPage::_weather_update_mqtt_data.end(), event->data, event->data + event->data_len);
-        xSemaphoreGive(ScreensaverPage::_weather_update_data_mutex);
-        // New weather data loaded, update display.
-        xTaskCreatePinnedToCore(ScreensaverPage::_task_update_displayed_weather_data, "update_weather_data", 4096, NULL, 2, NULL, 1);
-      } else {
-        ESP_LOGW("ScreensaverPage", "Failed to take weather data mutex while processing new data from MQTT. Will wait for next forecast.");
-      }
-    } else {
-      ESP_LOGW("ScreensaverPage", "Weather update data mutex is NULL. Will wait for next forecast.");
+  if (event_id == MQTT_EVENT_DATA) {
+    esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
+    if (event->topic_len == 0 || event->data_len == 0) {
+      return; // Do not process empty messages
     }
+
+    std::string topic_string = std::string(event->topic, event->topic_len);
+
+    std::string manager_address = NSPM_ConfigManager::get_manager_address();
+    std::string mqtt_base_topic = "nspanel/mqttmanager_";
+    mqtt_base_topic.append(manager_address);
+
+    std::string time_topic = mqtt_base_topic;
+    time_topic.append("/status/time");
+    std::string date_topic = mqtt_base_topic;
+    date_topic.append("/status/date");
+    std::string ampm_topic = mqtt_base_topic;
+    ampm_topic.append("/status/ampm");
+    std::string weather_topic = mqtt_base_topic;
+    weather_topic.append("/status/weather");
+
+    if (topic_string.compare(time_topic) == 0) {
+      ScreensaverPage::_current_time = std::string(event->data, event->data_len);
+      ScreensaverPage::_update_displayed_time();
+    } else if (topic_string.compare(date_topic) == 0) {
+      // We got new date, update display:
+      ScreensaverPage::_current_date = std::string(event->data, event->data_len);
+      ScreensaverPage::_update_displayed_date();
+    } else if (topic_string.compare(ampm_topic) == 0) {
+      // We got new AM/PM, update display:
+      ScreensaverPage::_am_pm_string = std::string(event->data, event->data_len);
+      ScreensaverPage::_update_displayed_time();
+    } else if (topic_string.compare(weather_topic) == 0) {
+      if (ScreensaverPage::_weather_update_data_mutex != NULL) {
+        if (xSemaphoreTake(ScreensaverPage::_weather_update_data_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
+          ScreensaverPage::_weather_update_mqtt_data.insert(ScreensaverPage::_weather_update_mqtt_data.end(), event->data, event->data + event->data_len);
+          xSemaphoreGive(ScreensaverPage::_weather_update_data_mutex);
+          // New weather data loaded, update display.
+          xTaskCreatePinnedToCore(ScreensaverPage::_task_update_displayed_weather_data, "update_weather_data", 4096, NULL, 2, NULL, 1);
+        } else {
+          ESP_LOGW("ScreensaverPage", "Failed to take weather data mutex while processing new data from MQTT. Will wait for next forecast.");
+        }
+      } else {
+        ESP_LOGW("ScreensaverPage", "Weather update data mutex is NULL. Will wait for next forecast.");
+      }
+    }
+  } else if (event_id == MQTT_EVENT_CONNECTED) {
+    ScreensaverPage::_subscribe_to_mqtt_topics();
   }
 }
 
@@ -177,6 +151,46 @@ void ScreensaverPage::_new_temperature_event(void *arg, esp_event_base_t event_b
 
 void ScreensaverPage::_shared_ptr_weather_update_cleanup(NSPanelWeatherUpdate *data) {
   nspanel_weather_update__free_unpacked(data, NULL);
+}
+
+void ScreensaverPage::_subscribe_to_mqtt_topics() {
+  std::string manager_address = NSPM_ConfigManager::get_manager_address();
+
+  if (!manager_address.empty()) {
+    std::string mqtt_base_topic = "nspanel/mqttmanager_";
+    mqtt_base_topic.append(manager_address);
+
+    std::string time_topic = mqtt_base_topic;
+    time_topic.append("/status/time");
+    std::string date_topic = mqtt_base_topic;
+    date_topic.append("/status/date");
+    std::string ampm_topic = mqtt_base_topic;
+    ampm_topic.append("/status/ampm");
+    std::string weather_topic = mqtt_base_topic;
+    weather_topic.append("/status/weather");
+
+    while (MqttManager::subscribe(time_topic) != ESP_OK) {
+      ESP_LOGE("ScreensaverPage", "Failed to subscribe to time topic for screensaver page.");
+      vTaskDelay(pdMS_TO_TICKS(500));
+    }
+
+    while (MqttManager::subscribe(date_topic) != ESP_OK) {
+      ESP_LOGE("ScreensaverPage", "Failed to subscribe to date topic for screensaver page.");
+      vTaskDelay(pdMS_TO_TICKS(500));
+    }
+
+    while (MqttManager::subscribe(ampm_topic) != ESP_OK) {
+      ESP_LOGE("ScreensaverPage", "Failed to subscribe to AM/PM topic for screensaver page.");
+      vTaskDelay(pdMS_TO_TICKS(500));
+    }
+
+    while (MqttManager::subscribe(weather_topic) != ESP_OK) {
+      ESP_LOGE("ScreensaverPage", "Failed to subscribe to weather topic for screensaver page.");
+      vTaskDelay(pdMS_TO_TICKS(500));
+    }
+  } else {
+    ESP_LOGE("ScreensaverPage", "Failed to subscribe to relevant MQTT topics as no manager address is set.");
+  }
 }
 
 void ScreensaverPage::_update_displayed_time() {

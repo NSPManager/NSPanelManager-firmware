@@ -310,44 +310,24 @@ void ButtonManager::_handle_mqtt_relay_group_topics() {
 
   // Subscribe to any added relay1 group
   for (int i = 0; i < new_relay1_group_ids.size(); i++) {
-    bool already_subscribed = false;
-    for (int j = 0; j < current_relay1_group_ids.size(); j++) {
-      if (new_relay2_group_ids[j] == current_relay2_group_ids[i]) {
-        already_subscribed = true;
-        break;
-      }
-    }
-
-    if (!already_subscribed) {
-      ESP_LOGI("ButtonManager", "Adding relay group %ld to relay1 binding.", new_relay1_group_ids[i]);
-      std::string relay_group_topic = "nspanel/mqttmanager_";
-      relay_group_topic.append(NSPM_ConfigManager::get_manager_address());
-      relay_group_topic.append("/relay_groups/");
-      relay_group_topic.append(std::to_string(new_relay1_group_ids[i]));
-      relay_group_topic.append("/state");
-      MqttManager::subscribe(relay_group_topic);
-    }
+    ESP_LOGI("ButtonManager", "Adding relay1 to relay group ID %ld.", new_relay1_group_ids[i]);
+    std::string relay_group_topic = "nspanel/mqttmanager_";
+    relay_group_topic.append(NSPM_ConfigManager::get_manager_address());
+    relay_group_topic.append("/relay_groups/");
+    relay_group_topic.append(std::to_string(new_relay1_group_ids[i]));
+    relay_group_topic.append("/state");
+    MqttManager::subscribe(relay_group_topic);
   }
 
   // Subscribe to any added relay2 group
   for (int i = 0; i < new_relay2_group_ids.size(); i++) {
-    bool already_subscribed = false;
-    for (int j = 0; j < current_relay2_group_ids.size(); j++) {
-      if (new_relay2_group_ids[j] == current_relay2_group_ids[i]) {
-        already_subscribed = true;
-        break;
-      }
-    }
-
-    if (!already_subscribed) {
-      ESP_LOGI("ButtonManager", "Adding relay group %ld to relay2 binding.", new_relay2_group_ids[i]);
-      std::string relay_group_topic = "nspanel/mqttmanager_";
-      relay_group_topic.append(NSPM_ConfigManager::get_manager_address());
-      relay_group_topic.append("/relay_groups/");
-      relay_group_topic.append(std::to_string(new_relay1_group_ids[i]));
-      relay_group_topic.append("/state");
-      MqttManager::subscribe(relay_group_topic);
-    }
+    ESP_LOGI("ButtonManager", "Adding relay2 to relay group ID %ld.", new_relay2_group_ids[i]);
+    std::string relay_group_topic = "nspanel/mqttmanager_";
+    relay_group_topic.append(NSPM_ConfigManager::get_manager_address());
+    relay_group_topic.append("/relay_groups/");
+    relay_group_topic.append(std::to_string(new_relay1_group_ids[i]));
+    relay_group_topic.append("/state");
+    MqttManager::subscribe(relay_group_topic);
   }
 }
 

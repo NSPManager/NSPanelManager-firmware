@@ -55,6 +55,11 @@ private:
    */
   static void _mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
+  /*
+   * @brief Subscribe to relevant MQTT topics for InterfaceManager
+   */
+  static void _subscribe_to_relevant_mqtt_topics();
+
   /**
    * Unshow the currently showing page by starting a task to prevent the running task from removing
    * its own task handler from within. Doing so will cause a crash

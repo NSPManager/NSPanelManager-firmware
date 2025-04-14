@@ -20,7 +20,7 @@ void UpdateManager::init() {
   esp_log_level_set("UpdateManager", ConfigManager::log_level);
   UpdateManager::_download_data_store_mutex = xSemaphoreCreateMutex();
 
-  MqttManager::register_handler(MQTT_EVENT_DATA, UpdateManager::_mqtt_event_handler, NULL);
+  MqttManager::register_handler(MQTT_EVENT_ANY, UpdateManager::_mqtt_event_handler, NULL);
 
   std::string command_topic = "nspanel/";
   command_topic.append(WiFiManager::mac_string());
@@ -448,39 +448,45 @@ esp_err_t UpdateManager::_http_event_handler(esp_http_client_event_t *event) {
 void UpdateManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
   // TODO: Move all "command topic listening" to a separate "CommandManager" or something like that.
 
-  // We don't check what type of event it is because we only register to "ON DATA"-events
-  esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
-  std::string topic_string = std::string(event->topic, event->topic_len);
+  if (event_id == MQTT_EVENT_DATA) {
+    esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
+    std::string topic_string = std::string(event->topic, event->topic_len);
 
-  std::string command_topic = "nspanel/";
-  command_topic.append(WiFiManager::mac_string());
-  command_topic.append("/command");
+    std::string command_topic = "nspanel/";
+    command_topic.append(WiFiManager::mac_string());
+    command_topic.append("/command");
 
-  if (topic_string.compare(command_topic) == 0) {
-    cJSON *json = cJSON_ParseWithLength(event->data, event->data_len);
-    if (json == NULL) {
-      ESP_LOGW("UpgradeManager", "Failed to parse payload as JSON.");
-      // Failed to parse as JSON
-      return;
-    }
-
-    cJSON *item = cJSON_GetObjectItem(json, "command");
-    if (cJSON_IsString(item) && item->valuestring != NULL) {
-      std::string command_string = item->valuestring;
-
-      if (command_string.compare("reboot") == 0) { // TODO: Move to some place more fitting.
-        ESP_LOGI("UpgradeManager", "Received command to reboot. Will reboot NSPanel.");
-        esp_restart();
-      } else if (command_string.compare("firmware_update") == 0 && UpdateManager::_current_update_task == NULL) {
-        xTaskCreatePinnedToCore(UpdateManager::update_firmware, "update_firmware", 8192, NULL, 2, &UpdateManager::_current_update_task, 1);
-      } else if (command_string.compare("tft_update") == 0 && UpdateManager::_current_update_task == NULL) {
-        xTaskCreatePinnedToCore(UpdateManager::update_gui, "update_gui", 8192, NULL, 2, &UpdateManager::_current_update_task, 1);
-      } else {
-        ESP_LOGW("UpgradeManager", "Unknown command: %s", item->valuestring);
+    if (topic_string.compare(command_topic) == 0) {
+      cJSON *json = cJSON_ParseWithLength(event->data, event->data_len);
+      if (json == NULL) {
+        ESP_LOGW("UpgradeManager", "Failed to parse payload as JSON.");
+        // Failed to parse as JSON
+        return;
       }
-    }
 
-    cJSON_free(json);
+      cJSON *item = cJSON_GetObjectItem(json, "command");
+      if (cJSON_IsString(item) && item->valuestring != NULL) {
+        std::string command_string = item->valuestring;
+
+        if (command_string.compare("reboot") == 0) { // TODO: Move to some place more fitting.
+          ESP_LOGI("UpgradeManager", "Received command to reboot. Will reboot NSPanel.");
+          esp_restart();
+        } else if (command_string.compare("firmware_update") == 0 && UpdateManager::_current_update_task == NULL) {
+          xTaskCreatePinnedToCore(UpdateManager::update_firmware, "update_firmware", 8192, NULL, 2, &UpdateManager::_current_update_task, 1);
+        } else if (command_string.compare("tft_update") == 0 && UpdateManager::_current_update_task == NULL) {
+          xTaskCreatePinnedToCore(UpdateManager::update_gui, "update_gui", 8192, NULL, 2, &UpdateManager::_current_update_task, 1);
+        } else {
+          ESP_LOGW("UpgradeManager", "Unknown command: %s", item->valuestring);
+        }
+      }
+
+      cJSON_free(json);
+    }
+  } else if (event_id == MQTT_EVENT_CONNECTED) {
+    std::string command_topic = "nspanel/";
+    command_topic.append(WiFiManager::mac_string());
+    command_topic.append("/command");
+    MqttManager::subscribe(command_topic);
   }
 }
 

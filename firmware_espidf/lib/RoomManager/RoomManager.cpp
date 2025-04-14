@@ -30,7 +30,7 @@ void RoomManager::init() {
   esp_event_loop_create(&RoomManager::_local_event_loop_args, &RoomManager::_local_event_loop);
 
   // Hook into MQTT events
-  MqttManager::register_handler(MQTT_EVENT_DATA, RoomManager::_mqtt_event_handler, NULL);
+  MqttManager::register_handler(MQTT_EVENT_ANY, RoomManager::_mqtt_event_handler, NULL);
   // MqttManager::register_handler(MQTT_EVENT_CONNECTED, RoomManager::_mqtt_event_handler_connected, NULL);
   esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, &RoomManager::_event_handler, NULL);
 }
@@ -647,63 +647,89 @@ esp_err_t RoomManager::unregister_handler(int32_t event_id, esp_event_handler_t 
 }
 
 void RoomManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-  // This function is only registered for MQTT_EVENT_DATA, handle data config data:
-  esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
-  std::string topic_string = std::string(event->topic, event->topic_len);
+  if (event_id == MQTT_EVENT_DATA) {
+    // This function is only registered for MQTT_EVENT_DATA, handle data config data:
+    esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
+    std::string topic_string = std::string(event->topic, event->topic_len);
 
-  if (topic_string.compare(RoomManager::_current_home_page_status_topic.get()) == 0) {
-    NSPanelRoomStatus *room_status = nspanel_room_status__unpack(NULL, event->data_len, (const uint8_t *)event->data);
-    if (room_status != NULL) {
-      if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
-        ESP_LOGD("RoomManager", "Received new home page state update.");
-        RoomManager::_home_page = std::shared_ptr<NSPanelRoomStatus>(room_status, &RoomManager::_nspanel_room_status_shared_ptr_deleter);
-        xSemaphoreGive(RoomManager::_home_page_mutex);
+    if (topic_string.compare(RoomManager::_current_home_page_status_topic.get()) == 0) {
+      NSPanelRoomStatus *room_status = nspanel_room_status__unpack(NULL, event->data_len, (const uint8_t *)event->data);
+      if (room_status != NULL) {
+        if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
+          ESP_LOGD("RoomManager", "Received new home page state update.");
+          RoomManager::_home_page = std::shared_ptr<NSPanelRoomStatus>(room_status, &RoomManager::_nspanel_room_status_shared_ptr_deleter);
+          xSemaphoreGive(RoomManager::_home_page_mutex);
 
-        if (esp_event_post_to(RoomManager::_local_event_loop, ROOMMANAGER_EVENT, roommanager_event_t::HOME_PAGE_UPDATED, NULL, 0, pdMS_TO_TICKS(250)) != ESP_OK) {
-          ESP_LOGW("RoomManager", "Failed to publish event that new home page data is available.");
+          if (esp_event_post_to(RoomManager::_local_event_loop, ROOMMANAGER_EVENT, roommanager_event_t::HOME_PAGE_UPDATED, NULL, 0, pdMS_TO_TICKS(250)) != ESP_OK) {
+            ESP_LOGW("RoomManager", "Failed to publish event that new home page data is available.");
+          }
+        } else {
+          ESP_LOGE("RoomManager", "Got new status for home page but couldn't take mutex to update it! Will free new state.");
+          nspanel_room_status__free_unpacked(room_status, NULL);
         }
       } else {
-        ESP_LOGE("RoomManager", "Got new status for home page but couldn't take mutex to update it! Will free new state.");
-        nspanel_room_status__free_unpacked(room_status, NULL);
+        ESP_LOGE("RoomManager", "Got new status for home page but failed to unpack it.");
       }
-    } else {
-      ESP_LOGE("RoomManager", "Got new status for home page but failed to unpack it.");
+    } else if (topic_string.compare(RoomManager::_current_entities_page_status_topic.get()) == 0) {
+      NSPanelRoomEntitiesPage *entities_page = nspanel_room_entities_page__unpack(NULL, event->data_len, (const uint8_t *)event->data);
+      if (entities_page != NULL) {
+        if (xSemaphoreTake(RoomManager::_entities_page_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
+          ESP_LOGD("RoomManager", "Received new entities page state update.");
+          RoomManager::_entities_page = std::shared_ptr<NSPanelRoomEntitiesPage>(entities_page, &RoomManager::_nspanel_room_entities_page_shared_ptr_deleter);
+          xSemaphoreGive(RoomManager::_entities_page_mutex);
+
+          if (esp_event_post_to(RoomManager::_local_event_loop, ROOMMANAGER_EVENT, roommanager_event_t::ROOM_ENTITIES_PAGE_UPDATED, NULL, 0, pdMS_TO_TICKS(250)) != ESP_OK) {
+            ESP_LOGW("RoomManager", "Failed to publish event that new entities page is available.");
+          }
+        } else {
+          ESP_LOGE("RoomManager", "Got new status for entities page but couldn't take mutex to update it! Will free unpacked data.");
+          nspanel_room_entities_page__free_unpacked(entities_page, NULL);
+        }
+      } else {
+        ESP_LOGE("RoomManager", "Got new status for entities page but failed to unpack it.");
+      }
+    } else if (topic_string.compare(RoomManager::_all_rooms_state_topic) == 0) {
+      NSPanelRoomStatus *all_room_status = nspanel_room_status__unpack(NULL, event->data_len, (const uint8_t *)event->data);
+      if (all_room_status != NULL) {
+        if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
+          ESP_LOGD("RoomManager", "Received new home page state update for 'All rooms' mode.");
+          RoomManager::_home_page_all_rooms = std::shared_ptr<NSPanelRoomStatus>(all_room_status, &RoomManager::_nspanel_room_status_shared_ptr_deleter);
+          xSemaphoreGive(RoomManager::_home_page_mutex);
+
+          if (esp_event_post_to(RoomManager::_local_event_loop, ROOMMANAGER_EVENT, roommanager_event_t::HOME_PAGE_ALL_ROOMS_UPDATED, NULL, 0, pdMS_TO_TICKS(250)) != ESP_OK) {
+            ESP_LOGW("RoomManager", "Failed to publish event that new home page data is available when receiving 'All rooms' data.");
+          }
+        } else {
+          ESP_LOGE("RoomManager", "Got new status for 'All rooms' for home page but couldn't take mutex to update it! Will free new state.");
+          nspanel_room_status__free_unpacked(all_room_status, NULL);
+        }
+      } else {
+        ESP_LOGE("RoomManager", "Got new status for 'All rooms' for home page but failed to unpack it.");
+      }
     }
-  } else if (topic_string.compare(RoomManager::_current_entities_page_status_topic.get()) == 0) {
-    NSPanelRoomEntitiesPage *entities_page = nspanel_room_entities_page__unpack(NULL, event->data_len, (const uint8_t *)event->data);
-    if (entities_page != NULL) {
-      if (xSemaphoreTake(RoomManager::_entities_page_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
-        ESP_LOGD("RoomManager", "Received new entities page state update.");
-        RoomManager::_entities_page = std::shared_ptr<NSPanelRoomEntitiesPage>(entities_page, &RoomManager::_nspanel_room_entities_page_shared_ptr_deleter);
-        xSemaphoreGive(RoomManager::_entities_page_mutex);
-
-        if (esp_event_post_to(RoomManager::_local_event_loop, ROOMMANAGER_EVENT, roommanager_event_t::ROOM_ENTITIES_PAGE_UPDATED, NULL, 0, pdMS_TO_TICKS(250)) != ESP_OK) {
-          ESP_LOGW("RoomManager", "Failed to publish event that new entities page is available.");
-        }
-      } else {
-        ESP_LOGE("RoomManager", "Got new status for entities page but couldn't take mutex to update it! Will free unpacked data.");
-        nspanel_room_entities_page__free_unpacked(entities_page, NULL);
+  } else if (event_id == MQTT_EVENT_CONNECTED) {
+    if (!RoomManager::_current_home_page_status_topic.get().empty()) {
+      while (MqttManager::subscribe(RoomManager::_current_home_page_status_topic.get()) != ESP_OK) {
+        ESP_LOGE("RoomManager", "Failed to subscribe to room state topic %s. Will try again in 200ms.", RoomManager::_current_home_page_status_topic.get().c_str());
+        vTaskDelay(pdMS_TO_TICKS(200));
       }
-    } else {
-      ESP_LOGE("RoomManager", "Got new status for entities page but failed to unpack it.");
     }
-  } else if (topic_string.compare(RoomManager::_all_rooms_state_topic) == 0) {
-    NSPanelRoomStatus *all_room_status = nspanel_room_status__unpack(NULL, event->data_len, (const uint8_t *)event->data);
-    if (all_room_status != NULL) {
-      if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
-        ESP_LOGD("RoomManager", "Received new home page state update for 'All rooms' mode.");
-        RoomManager::_home_page_all_rooms = std::shared_ptr<NSPanelRoomStatus>(all_room_status, &RoomManager::_nspanel_room_status_shared_ptr_deleter);
-        xSemaphoreGive(RoomManager::_home_page_mutex);
 
-        if (esp_event_post_to(RoomManager::_local_event_loop, ROOMMANAGER_EVENT, roommanager_event_t::HOME_PAGE_ALL_ROOMS_UPDATED, NULL, 0, pdMS_TO_TICKS(250)) != ESP_OK) {
-          ESP_LOGW("RoomManager", "Failed to publish event that new home page data is available when receiving 'All rooms' data.");
-        }
-      } else {
-        ESP_LOGE("RoomManager", "Got new status for 'All rooms' for home page but couldn't take mutex to update it! Will free new state.");
-        nspanel_room_status__free_unpacked(all_room_status, NULL);
+    if (!RoomManager::_current_entities_page_status_topic.get().empty()) {
+      while (MqttManager::subscribe(RoomManager::_current_entities_page_status_topic.get()) != ESP_OK) {
+        ESP_LOGE("RoomManager", "Failed to subscribe to new MQTT topic for entity page state updates. Will try again in 200ms.");
+        vTaskDelay(pdMS_TO_TICKS(200));
       }
-    } else {
-      ESP_LOGE("RoomManager", "Got new status for 'All rooms' for home page but failed to unpack it.");
+    }
+
+    if (!NSPM_ConfigManager::get_manager_address().empty()) {
+      RoomManager::_all_rooms_state_topic = "nspanel/mqttmanager_";
+      RoomManager::_all_rooms_state_topic.append(NSPM_ConfigManager::get_manager_address());
+      RoomManager::_all_rooms_state_topic.append("/all_rooms_status");
+      while (MqttManager::subscribe(RoomManager::_all_rooms_state_topic) != ESP_OK) {
+        ESP_LOGE("RoomManager", "Failed to subscribe to 'All rooms' state topic %s. Will try again in 200ms.", RoomManager::_all_rooms_state_topic.c_str());
+        vTaskDelay(pdMS_TO_TICKS(200));
+      }
     }
   }
 }

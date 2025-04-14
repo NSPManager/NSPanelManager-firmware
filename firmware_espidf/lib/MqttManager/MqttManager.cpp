@@ -110,7 +110,6 @@ void MqttManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
     ESP_LOGI("MqttManager", "Connected to MQTT server.");
     MqttManager::_connected = true;
     MqttManager::_send_mqtt_online_update();
-    xTaskCreatePinnedToCore(&MqttManager::_task_resubscribe, "resubscribe", 4096, NULL, 1, NULL, 1);
     break;
 
   case MQTT_EVENT_DISCONNECTED:
@@ -158,56 +157,12 @@ void MqttManager::_send_mqtt_online_update() {
   }
 }
 
-void MqttManager::_task_resubscribe(void *param) {
-  // TODO: Resubscribe in each component/manager that requires MQTT
-  // Resubscribe to all topics
-  // ESP_LOGD("MqttManager", "Starting resubscribe of all topics.");
-  // vTaskDelay(pdMS_TO_TICKS(500)); // Wait for things to settle before resubscrbing
-  // for (auto topic = MqttManager::_subscribed_topics.begin(); topic != MqttManager::_subscribed_topics.end(); topic++) {
-  //   if (!topic->empty()) [[likely]] {
-  //     ESP_LOGD("MqttManager", "Subscribing to topic: %s", topic->c_str());
-  //     uint8_t tries = 0;
-  //     for (;;) { // Retry until successful max 5 attempts
-  //       if (esp_mqtt_client_subscribe_single(MqttManager::_mqtt_client, topic->c_str(), 0) >= 0) {
-  //         break;
-  //       } else {
-  //         tries++;
-  //         if (tries == 5) {
-  //           ESP_LOGE("MqttManager", "Failed to resubscribe to topic '%s'. Tried 5 times, will cancel and go to next topic.", topic->c_str());
-  //           break;
-  //         } else {
-  //           ESP_LOGE("MqttManager", "Failed to resubscribe to topic '%s', will try again in 500ms.", topic->c_str());
-  //           vTaskDelay(pdMS_TO_TICKS(500));
-  //         }
-  //       }
-  //     }
-  //     vTaskDelay(pdMS_TO_TICKS(50)); // Wait 50ms between each subscribe to allow panel to process any retained messages
-  //   } else {
-  //     MqttManager::_subscribed_topics.erase(topic++);
-  //   }
-  // }
-
-  vTaskDelete(NULL);
-}
-
 bool MqttManager::connected() {
   return MqttManager::_connected;
 }
 
 esp_err_t MqttManager::subscribe(std::string topic) {
   ESP_LOGD("MqttManager", "Subscribing to '%s'", topic.c_str());
-  bool topic_already_in_list = false;
-  for (auto it = MqttManager::_subscribed_topics.begin(); it != MqttManager::_subscribed_topics.end(); it++) {
-    if (topic.compare(*it) == 0) {
-      topic_already_in_list = true;
-      break;
-    }
-  }
-
-  if (!topic_already_in_list) {
-    MqttManager::_subscribed_topics.push_back(topic);
-  }
-
   if (MqttManager::connected()) {
     int result_code = esp_mqtt_client_subscribe_single(MqttManager::_mqtt_client, topic.c_str(), 2);
     if (result_code >= 0) {
@@ -225,13 +180,6 @@ esp_err_t MqttManager::unsubscribe(std::string topic) {
   if (MqttManager::connected()) {
     int result_code = esp_mqtt_client_unsubscribe(MqttManager::_mqtt_client, topic.c_str());
     if (result_code >= 0) {
-      // Find and delete the topic from the list of currently subscribed topics
-      for (auto it = MqttManager::_subscribed_topics.begin(); it != MqttManager::_subscribed_topics.end(); it++) {
-        if (topic.compare(*it) == 0) {
-          MqttManager::_subscribed_topics.erase(it);
-          break;
-        }
-      }
       return ESP_OK;
     } else {
       ESP_LOGE("MqttManager", "Failed to unsubscribe from '%s'. Got return code: %d", topic.c_str(), result_code);
