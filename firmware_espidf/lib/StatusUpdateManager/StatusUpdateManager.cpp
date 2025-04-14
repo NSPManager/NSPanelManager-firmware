@@ -140,7 +140,7 @@ void StatusUpdateManager::_update_from_config() {
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
     StatusUpdateManager::_measure_temperature_in_fahrenheit = config->use_fahrenheit;
-    StatusUpdateManager::_temperature_offset_calibration = config->temperature_calibration;
+    StatusUpdateManager::_temperature_offset_calibration = (config->temperature_calibration / 10);
   } else {
     ESP_LOGE("StatusUpdateManager", "Failed to get config to determine if we should measure temperature in C or F. Will assume C.");
   }
