@@ -384,3 +384,12 @@ public:
       },
   };
 };
+
+class GUI_ITEMS12_PAGE {
+public:
+  static inline constexpr const char *page_name = "items12";
+  static inline constexpr uint8_t slider_brightness = ? ? ;
+  static inline constexpr uint8_t slider_kelvin = ? ? ;
+
+  static inline constexpr uint8_t button_back_id = ? ? ;
+};
