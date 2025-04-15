@@ -385,7 +385,7 @@ public:
   };
 };
 
-class GUI_ITEMS12_PAGE {
+class GUI_LIGHT_CONTROL_PAGE {
 public:
   static inline constexpr const char *page_name = "items12";
   static inline constexpr uint8_t slider_brightness = ? ? ;
