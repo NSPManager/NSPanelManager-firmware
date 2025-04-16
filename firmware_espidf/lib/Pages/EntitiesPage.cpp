@@ -1,5 +1,6 @@
 #include <ConfigManager.hpp>
 #include <EntitiesPage.hpp>
+#include <EntityPage.hpp>
 #include <GUI_data.hpp>
 #include <HomePage.hpp>
 #include <InterfaceManager.hpp>
@@ -227,6 +228,20 @@ void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data)
         return; // Found match, no need to continue.
       }
     }
+
+    for (int i = 0; i < 4; i++) {
+      if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].label_id) {
+        if (touch_data->pressed) {
+          if (EntitiesPage::_current_entities_page->entities[i] != nullptr) [[likely]] {
+            std::string topic_string = EntitiesPage::_current_entities_page->entities[i]->mqtt_state_topic;
+            if (!topic_string.empty()) [[likely]] {
+              EntityPage::show(topic_string);
+            }
+          }
+        }
+        return; // Found match, no need to continue.
+      }
+    }
   }
 
   // We did not press an entity, check if we pressed any other button
@@ -309,6 +324,20 @@ void EntitiesPage::_handle_items8_touch_event(nextion_event_touch_t *touch_data)
         return; // Found match, no need to continue.
       }
     }
+
+    for (int i = 0; i < 8; i++) {
+      if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].label_id) {
+        if (touch_data->pressed) {
+          if (EntitiesPage::_current_entities_page->entities[i] != nullptr) [[likely]] {
+            std::string topic_string = EntitiesPage::_current_entities_page->entities[i]->mqtt_state_topic;
+            if (!topic_string.empty()) [[likely]] {
+              EntityPage::show(topic_string);
+            }
+          }
+        }
+        return; // Found match, no need to continue.
+      }
+    }
   }
 
   // We did not press an entity, check if we pressed any other button
@@ -387,6 +416,20 @@ void EntitiesPage::_handle_items12_touch_event(nextion_event_touch_t *touch_data
       if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].button_id) {
         if (touch_data->pressed) {
           EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
+        }
+        return; // Found match, no need to continue.
+      }
+    }
+
+    for (int i = 0; i < 12; i++) {
+      if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].label_id) {
+        if (touch_data->pressed) {
+          if (EntitiesPage::_current_entities_page->entities[i] != nullptr) [[likely]] {
+            std::string topic_string = EntitiesPage::_current_entities_page->entities[i]->mqtt_state_topic;
+            if (!topic_string.empty()) [[likely]] {
+              EntityPage::show(topic_string);
+            }
+          }
         }
         return; // Found match, no need to continue.
       }

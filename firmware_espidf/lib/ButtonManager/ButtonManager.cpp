@@ -397,8 +397,8 @@ void ButtonManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
     }
 
     // Check if it is a relay1 bound group
-    std::shared_ptr<NSPanelConfig> config;
-    if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+    std::shared_ptr<NSPanelConfig> config = ButtonManager::_current_config;
+    if (config != nullptr) [[likely]] {
       std::string relay_group_base_topic = "nspanel/mqttmanager_";
       relay_group_base_topic.append(NSPM_ConfigManager::get_manager_address());
       relay_group_base_topic.append("/relay_groups/");
@@ -451,7 +451,7 @@ void ButtonManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
         break;
       }
     } else {
-      ESP_LOGE("ButtonManager", "Failed to get config while processing MQTT message. Unable to determine if message was relay group binding state.");
+      ESP_LOGW("ButtonManager", "No config currently loaded/set. Unable to determine if received message was from a relay group. Will not change any relay state.");
     }
   } else if (event_id == MQTT_EVENT_CONNECTED) {
     ESP_LOGD("ButtonManager", "MQTT connected, resubscribing to topics.");

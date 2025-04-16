@@ -387,9 +387,25 @@ public:
 
 class GUI_LIGHT_CONTROL_PAGE {
 public:
-  static inline constexpr const char *page_name = "items12";
-  static inline constexpr uint8_t slider_brightness = ? ? ;
-  static inline constexpr uint8_t slider_kelvin = ? ? ;
+  static inline constexpr const uint8_t page_id = 5;
+  static inline constexpr const char *page_name = "lights";
 
-  static inline constexpr uint8_t button_back_id = ? ? ;
+  static inline constexpr const uint8_t back_button_id = 1;
+  static inline constexpr const uint8_t switch_mode_button_id = 8;
+  static inline constexpr const uint8_t brightness_slider_id = 7;
+  static inline constexpr const uint8_t kelvin_saturation_slider_id = 5; // Kelvin & Saturation slider depending on mode
+  static inline constexpr const uint8_t hue_slider_id = 6;
+
+  static inline constexpr const char *light_label_name = "currentLight";
+  static inline constexpr const char *switch_mode_button_name = "colormode";
+  static inline constexpr const char *brightness_slider_name = "brightness";
+  static inline constexpr const char *kelvin_saturation_slider_name = "kelvin_sat"; // Kelvin & Saturation slider depending on mode
+  static inline constexpr const char *hue_slider_name = "hue";
+
+  static inline constexpr const uint8_t kelvin_slider_pic = 78;      // pic for "slider"
+  static inline constexpr const uint8_t kelvin_slider_pic1 = 79;     // pic for "slider"
+  static inline constexpr const uint8_t saturation_slider_pic = 82;  // pic for "slider"
+  static inline constexpr const uint8_t saturation_slider_pic1 = 83; // pic for "slider"
+  static inline constexpr const uint8_t kelvin_mode_pic = 86;        // pic for mode button
+  static inline constexpr const uint8_t rgb_mode_pic = 87;           // pic for mode button
 };

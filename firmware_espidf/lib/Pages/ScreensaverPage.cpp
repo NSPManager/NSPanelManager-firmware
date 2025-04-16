@@ -92,6 +92,23 @@ void ScreensaverPage::_mqtt_event_handler(void *arg, esp_event_base_t event_base
           xTaskCreatePinnedToCore(ScreensaverPage::_task_update_displayed_weather_data, "update_weather_data", 4096, NULL, 2, NULL, 1);
         } else {
           ESP_LOGW("ScreensaverPage", "Failed to take weather data mutex while processing new data from MQTT. Will wait for next forecast.");
+
+          TaskHandle_t holder = xSemaphoreGetMutexHolder(ScreensaverPage::_weather_update_data_mutex);
+          if (holder != NULL) {
+            TaskStatus_t status;
+            vTaskGetInfo(/* The handle of the task being queried. */
+                         holder,
+                         /* The TaskStatus_t structure to complete with information
+                         on xTask. */
+                         &status,
+                         /* Include the stack high water mark value in the
+                         TaskStatus_t structure. */
+                         pdTRUE,
+                         /* Include the task state in the TaskStatus_t structure. */
+                         eInvalid);
+
+            ESP_LOGE("ScreensaverPage", "Holding task: %s", status.pcTaskName);
+          }
         }
       } else {
         ESP_LOGW("ScreensaverPage", "Weather update data mutex is NULL. Will wait for next forecast.");
@@ -220,6 +237,7 @@ void ScreensaverPage::_task_update_displayed_weather_data(void *param) {
     if (ScreensaverPage::_weather_update_mqtt_data.size() > 0) [[likely]] {
       NSPanelWeatherUpdate *new_weather_data = nspanel_weather_update__unpack(NULL, ScreensaverPage::_weather_update_mqtt_data.size(), ScreensaverPage::_weather_update_mqtt_data.data());
       if (new_weather_data != NULL) [[likely]] {
+        ESP_LOGD("ScreensaverPage", "Updating screensaver page data.");
         ScreensaverPage::_weather_update_data = std::shared_ptr<NSPanelWeatherUpdate>(new_weather_data, &ScreensaverPage::_shared_ptr_weather_update_cleanup);
         Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_weather_icon_name, ScreensaverPage::_weather_update_data->current_weather_icon, 250);
         Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_temperature_name, ScreensaverPage::_weather_update_data->current_temperature_string, 250);
@@ -230,6 +248,7 @@ void ScreensaverPage::_task_update_displayed_weather_data(void *param) {
         Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_max_min_temperature_name, ScreensaverPage::_weather_update_data->current_maxmin_temperature, 250);
         Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_rain_name, ScreensaverPage::_weather_update_data->current_precipitation_string, 250);
 
+        ESP_LOGD("ScreensaverPage", "Updating forecast.");
         for (int i = 0; i < ScreensaverPage::_weather_update_data->n_forecast_items && i < 5; i++) { // Update all available forecasts but no more than 5 as that's how many forecasts are displayed on the page
           auto item = ScreensaverPage::_weather_update_data->forecast_items[i];
           Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_names[i], item->display_string, 250);

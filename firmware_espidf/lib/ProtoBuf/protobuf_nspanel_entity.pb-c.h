@@ -21,17 +21,14 @@ typedef struct NSPanelEntityState__Light NSPanelEntityState__Light;
 
 /* --- enums --- */
 
-typedef enum _NSPanelEntityState__EntityType {
-  NSPANEL_ENTITY_STATE__ENTITY_TYPE__LIGHT = 0
-    PROTOBUF_C__FORCE_ENUM_TO_BE_INT_SIZE(NSPANEL_ENTITY_STATE__ENTITY_TYPE)
-} NSPanelEntityState__EntityType;
 
 /* --- messages --- */
 
 struct  NSPanelEntityState__Light
 {
   ProtobufCMessage base;
-  NSPanelEntityState__EntityType type;
+  int32_t light_id;
+  char *name;
   int32_t brightness;
   int32_t color_temp;
   int32_t hue;
@@ -41,7 +38,7 @@ struct  NSPanelEntityState__Light
 };
 #define NSPANEL_ENTITY_STATE__LIGHT__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&nspanel_entity_state__light__descriptor) \
-    , NSPANEL_ENTITY_STATE__ENTITY_TYPE__LIGHT, 0, 0, 0, 0, 0, 0 }
+    , 0, (char *)protobuf_c_empty_string, 0, 0, 0, 0, 0, 0 }
 
 
 typedef enum {
@@ -101,7 +98,6 @@ typedef void (*NSPanelEntityState_Closure)
 
 extern const ProtobufCMessageDescriptor nspanel_entity_state__descriptor;
 extern const ProtobufCMessageDescriptor nspanel_entity_state__light__descriptor;
-extern const ProtobufCEnumDescriptor    nspanel_entity_state__entity_type__descriptor;
 
 PROTOBUF_C__END_DECLS
 

@@ -41,6 +41,11 @@ private:
    */
   static void _update_display();
 
+  /**
+   * Delegate to the correct touch method
+   */
+  static void _handle_touch_event(uint16_t component_id, bool pressed);
+
   /*
    * Update displayed page and value of "Light" page.
    */
@@ -49,12 +54,19 @@ private:
   /*
    * Handle touch event for "Light" page.
    */
-  static void _handle_touch_event_light();
+  static void _handle_touch_event_light(uint16_t component_id, bool pressed);
 
   /**
    * properly delete pointer and clear old data when shared_ptr expires
    */
   static void _delete_nspanel_entity_state_object(NSPanelEntityState *object);
+
+  // What is the page currently showing
+  enum _entity_page_modes {
+    LIGHT_COLOR_TEMPERATURE,
+    LIGHT_RGB,
+  };
+  static inline std::atomic<_entity_page_modes> _current_mode;
 
   // Vars
   // The state topic of the given entity
@@ -62,6 +74,15 @@ private:
 
   // Are we currently displaying the page?
   static inline std::atomic<bool> _currently_showing = false;
+
+  // The last name to be updated on the display.
+  static inline std::string _last_displayed_name = "";
+
+  // Light specific variables
+  static inline uint8_t _last_brightness = 0;
+  static inline uint8_t _last_kelvin_pct = 0;
+  static inline uint8_t _last_hue = 0;
+  static inline uint8_t _last_saturation_pct = 0;
 
   static inline SemaphoreHandle_t _current_state_mutex = NULL;
   static inline std::shared_ptr<NSPanelEntityState> _current_state;
