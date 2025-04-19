@@ -332,19 +332,22 @@ void ButtonManager::_handle_mqtt_relay_group_topics() {
 }
 
 void ButtonManager::_nspm_configmanager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
+  ESP_LOGD("ButtonManager", "Received new config. Updating internal values.");
   ButtonManager::_handle_mqtt_relay_group_topics();
 
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
     bool save = false;
     if (config->relay1_default_mode != ButtonManager::_relay1_default_mode) {
+      ESP_LOGI("ButtonManager", "Relay1 default state changed. Setting new state.");
       ConfigManager::relay1_default_mode = config->relay1_default_mode;
       ButtonManager::_set_relay_state(1, config->relay1_default_mode, true);
       save = true;
     }
     if (config->relay2_default_mode != ButtonManager::_relay2_default_mode) {
+      ESP_LOGI("ButtonManager", "Relay2 default state changed. Setting new state.");
       ConfigManager::relay2_default_mode = config->relay2_default_mode;
-      ButtonManager::_set_relay_state(1, config->relay2_default_mode, true);
+      ButtonManager::_set_relay_state(2, config->relay2_default_mode, true);
       save = true;
     }
     if (save) {
@@ -457,5 +460,12 @@ void ButtonManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
     ESP_LOGD("ButtonManager", "MQTT connected, resubscribing to topics.");
     ButtonManager::init_mqtt();
     ButtonManager::_handle_mqtt_relay_group_topics();
+
+    // Publish current state to relay state topics
+    bool state = ButtonManager::_get_relay_state(1);
+    MqttManager::publish(std::format("nspanel/{}/relay1_state", WiFiManager::mac_string()), state ? "1" : "0", strlen(state ? "1" : "0"), true);
+
+    state = ButtonManager::_get_relay_state(2);
+    MqttManager::publish(std::format("nspanel/{}/relay2_state", WiFiManager::mac_string()), state ? "1" : "0", strlen(state ? "1" : "0"), true);
   }
 }
