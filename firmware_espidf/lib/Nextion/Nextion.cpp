@@ -713,7 +713,7 @@ void Nextion::restart() {
   gpio_set_level(NEXTION_ON_OFF_GPIO, 0); // Turn on power to the display
 }
 
-esp_err_t Nextion::start_update(uint32_t upload_baudrate, bool use_new_upload_protocol, uint64_t upload_file_size) {
+esp_err_t Nextion::start_update(uint32_t comms_baud, uint32_t upload_baudrate, bool use_new_upload_protocol, uint64_t upload_file_size) {
   if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(10000)) == pdTRUE) {
     if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(10000)) == pdTRUE) {
       Nextion::_current_nextion_state = nextion_state_t::UPDATING; // Set state to updating so that other functions won't write to the UART.
@@ -726,8 +726,10 @@ esp_err_t Nextion::start_update(uint32_t upload_baudrate, bool use_new_upload_pr
 
     Nextion::restart();
 
+    uart_set_baudrate(UART_NUM_2, comms_baud);
+
     // Wait for panel to start
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    vTaskDelay(pdMS_TO_TICKS(10000));
 
     // Send command sequence to clear NSPanel buffer
     uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
@@ -751,7 +753,7 @@ esp_err_t Nextion::start_update(uint32_t upload_baudrate, bool use_new_upload_pr
 
     uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
 
-    uart_wait_tx_done(UART_NUM_2, pdMS_TO_TICKS(1000)); // Wait up to 1 second for TX buffer to clear.
+    uart_wait_tx_done(UART_NUM_2, pdMS_TO_TICKS(5000)); // Wait up to 5 second for TX buffer to clear.
 
     // Switch uart to desired baud
     if (uart_set_baudrate(UART_NUM_2, upload_baudrate) != ESP_OK) {

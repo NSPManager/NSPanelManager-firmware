@@ -155,12 +155,13 @@ public:
 
   /**
    * Restart the Nextion display and start the update process.
+   * @param comms_baudrate: What serial baud rate to use when sending command to display to start update.
    * @param upload_baudrate: What serial baud rate to use when sending upload data to the screen.
    * @param use_new_upload_protocol: False: use upload protocol "v1.0". True: use upload protocol "v1.2".
    * @param upload_file_size: Size of the new TFT file to be uploaded to the Nextion display.
    * @return ESP_OK on success or ESP_ERR_NOT_FINISHED if failed to init update.
    */
-  static esp_err_t start_update(uint32_t upload_baudrate, bool use_new_upload_protocol, uint64_t upload_file_size);
+  static esp_err_t start_update(uint32_t comms_baud, uint32_t upload_baudrate, bool use_new_upload_protocol, uint64_t upload_file_size);
 
   /**
    * Write update data to the Nextion display.

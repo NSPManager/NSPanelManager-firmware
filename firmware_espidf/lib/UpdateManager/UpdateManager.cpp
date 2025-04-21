@@ -29,6 +29,8 @@ void UpdateManager::init() {
 }
 
 void UpdateManager::update_gui(void *param) {
+  uint32_t comms_baud = 115200;
+
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
     esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, UpdateManager::_nextion_event_handler, NULL);
@@ -52,7 +54,7 @@ void UpdateManager::update_gui(void *param) {
     }
 
     ESP_LOGI("UpdateManager", "Will start updating GUI. Remote file size: %zu bytes", remote_tft_file_size);
-    while (Nextion::start_update(ConfigManager::nextion_upload_baudrate, ConfigManager::use_latest_nextion_upload_protocol, remote_tft_file_size) != ESP_OK) {
+    while (Nextion::start_update(comms_baud, ConfigManager::nextion_upload_baudrate, ConfigManager::use_latest_nextion_upload_protocol, remote_tft_file_size) != ESP_OK) {
       ESP_LOGW("UpdateManager", "Failed to init update process with Nextion display. Will try again in 5000ms");
       vTaskDelay(pdMS_TO_TICKS(5000));
     }
@@ -99,6 +101,7 @@ void UpdateManager::update_gui(void *param) {
 
     // Update started. Wait for notifications and when they arrive, download data from offset into buffer and write to display.
     uint64_t last_task_delay = esp_timer_get_time(); // Wait for 250ms second every 2 seconds to allow for other tasks, especially the WiFi task to keep connection active.
+    uint8_t retries = 0;                             // Only wait up to 2*20 seconds before recalling Nextion::start_update
     float progress;
     for (;;) {
       if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(20000)) == pdPASS) {
@@ -189,7 +192,77 @@ void UpdateManager::update_gui(void *param) {
           break; // Update complete
         }
       } else {
-        ESP_LOGE("UpdateManager", "Have still not received a new Nextion update event while waiting for 20s. Will wait another 20s.");
+        retries++;
+
+        if (retries >= 2) { // We've tried 2 times at this baud, try next supported comms baudrate.
+          switch (comms_baud) {
+          case 2400:
+            comms_baud = 4800;
+            break;
+
+          case 4800:
+            comms_baud = 9600;
+            break;
+
+          case 9600:
+            comms_baud = 19200;
+            break;
+
+          case 19200:
+            comms_baud = 31250;
+            break;
+
+          case 31250:
+            comms_baud = 38400;
+            break;
+
+          case 38400:
+            comms_baud = 57600;
+            break;
+
+          case 57600:
+            comms_baud = 115200;
+            break;
+
+          case 115200:
+            comms_baud = 230400;
+            break;
+
+          case 230400:
+            comms_baud = 250000;
+            break;
+
+          case 250000:
+            comms_baud = 256000;
+            break;
+
+          case 256000:
+            comms_baud = 512000;
+            break;
+
+          case 512000:
+            comms_baud = 921600;
+            break;
+
+          case 921600: // We've reached the end. Wrap around to beginning
+            ESP_LOGI("UpdateManager", "Reached end of supported baud rates for Nextion display. Will wrap around to beginning and continue trying.");
+            comms_baud = 2400;
+            break;
+
+          default:
+            ESP_LOGW("UpdateManager", "Unknown baud rate when updating Nextion display. Resetting to default 115200 comms baud.");
+            comms_baud = 115200;
+            break;
+          }
+
+          retries = 0;
+        }
+
+        ESP_LOGE("UpdateManager", "Have still not received a new Nextion update event while waiting for 20s. Will retry with baud %lu", comms_baud);
+        while (Nextion::start_update(comms_baud, ConfigManager::nextion_upload_baudrate, ConfigManager::use_latest_nextion_upload_protocol, remote_tft_file_size) != ESP_OK) {
+          ESP_LOGW("UpdateManager", "Failed to init update process with Nextion display. Will try again in 5000ms");
+          vTaskDelay(pdMS_TO_TICKS(5000));
+        }
       }
     }
 
