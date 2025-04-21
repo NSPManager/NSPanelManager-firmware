@@ -13,6 +13,7 @@ void ButtonManager::init() {
   esp_log_level_set("ButtonManager", ConfigManager::log_level);
   ButtonManager::_interrupt_queue = xQueueCreate(4, sizeof(uint32_t));
 
+  ButtonManager::_reverse_relays = ConfigManager::reverse_relays;
   ButtonManager::_relay1_default_mode = ConfigManager::relay1_default_mode;
   ButtonManager::_relay2_default_mode = ConfigManager::relay2_default_mode;
 
@@ -41,6 +42,9 @@ void ButtonManager::init() {
   gpio_install_isr_service(0);
   gpio_isr_handler_add(ButtonManager::_button1_pin, ButtonManager::_interrupt_triggered, (void *)ButtonManager::_button1_pin);
   gpio_isr_handler_add(ButtonManager::_button2_pin, ButtonManager::_interrupt_triggered, (void *)ButtonManager::_button2_pin);
+
+  ButtonManager::_set_relay_state(1, ButtonManager::_relay1_default_mode, false); // Do not set MQTT update as MQTT is not connected or initialized when this is called
+  ButtonManager::_set_relay_state(2, ButtonManager::_relay2_default_mode, false); // Do not set MQTT update as MQTT is not connected or initialized when this is called
 }
 
 void ButtonManager::init_mqtt() {
@@ -337,26 +341,26 @@ void ButtonManager::_nspm_configmanager_event_handler(void *arg, esp_event_base_
 
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+    ButtonManager::_reverse_relays = config->reverse_relays;
+
     bool save = false;
     if (config->relay1_default_mode != ButtonManager::_relay1_default_mode) {
       ESP_LOGI("ButtonManager", "Relay1 default state changed. Setting new state.");
       ConfigManager::relay1_default_mode = config->relay1_default_mode;
+      ButtonManager::_relay1_default_mode = config->relay1_default_mode;
       ButtonManager::_set_relay_state(1, config->relay1_default_mode, true);
       save = true;
     }
     if (config->relay2_default_mode != ButtonManager::_relay2_default_mode) {
       ESP_LOGI("ButtonManager", "Relay2 default state changed. Setting new state.");
       ConfigManager::relay2_default_mode = config->relay2_default_mode;
+      ButtonManager::_relay2_default_mode = config->relay2_default_mode;
       ButtonManager::_set_relay_state(2, config->relay2_default_mode, true);
       save = true;
     }
     if (save) {
       ConfigManager::save_config();
     }
-
-    ButtonManager::_reverse_relays = config->reverse_relays;
-    ButtonManager::_button1_mode = config->button1_mode;
-    ButtonManager::_button2_mode = config->button2_mode;
 
     ButtonManager::_current_config = config;
   } else {

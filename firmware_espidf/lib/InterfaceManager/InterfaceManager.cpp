@@ -274,13 +274,17 @@ void InterfaceManager::_nspm_configmanager_event_handler(void *arg, esp_event_ba
   case nspm_configmanager_event::CONFIG_LOADED: {
     InterfaceManager::_nspm_config_loaded = true;
     if (InterfaceManager::_home_page_status_loaded && InterfaceManager::_nspm_config_loaded && LoadingPage::showing()) {
-      ESP_LOGI("InterfaceManager", "Home page status and base config loaded. Will go to home page on default room.");
-      RoomManager::go_to_default_room();
-      RoomManager::go_to_first_entities_page(); // Also select the first entities page for default room as this is the first time and no room is currently selected.
-      HomePage::show();                         // TODO: Show the user selected first page.
+      if (!ConfigManager::has_updated) [[likely]] {
+        ESP_LOGI("InterfaceManager", "Home page status and base config loaded. Will go to home page on default room.");
+        RoomManager::go_to_default_room();
+        RoomManager::go_to_first_entities_page(); // Also select the first entities page for default room as this is the first time and no room is currently selected.
+        InterfaceManager::show_default_page();
 
-      // Initialize Screensaver page so that it's read when it's time to show it.
-      ScreensaverPage::init();
+        // Initialize Screensaver page so that it's read when it's time to show it.
+        ScreensaverPage::init();
+      } else {
+        LoadingPage::set_loading_text("Updated checksums, rebooting.");
+      }
     }
 
     std::shared_ptr<NSPanelConfig> config;
@@ -352,13 +356,17 @@ void InterfaceManager::_room_manager_event_handler(void *arg, esp_event_base_t e
   if (event_id == roommanager_event_t::HOME_PAGE_UPDATED) {
     InterfaceManager::_home_page_status_loaded = true;
     if (InterfaceManager::_home_page_status_loaded && InterfaceManager::_nspm_config_loaded && LoadingPage::showing()) {
-      ESP_LOGI("InterfaceManager", "Home page status and base config loaded. Will go to home page.");
-      RoomManager::go_to_default_room();
-      RoomManager::go_to_first_entities_page(); // Also select the first entities page for default room as this is the first time and no room is currently selected.
-      HomePage::show();                         // TODO: Show the user selected first page.
+      if (!ConfigManager::has_updated) [[likely]] {
+        ESP_LOGI("InterfaceManager", "Home page status and base config loaded. Will go to home page.");
+        RoomManager::go_to_default_room();
+        RoomManager::go_to_first_entities_page(); // Also select the first entities page for default room as this is the first time and no room is currently selected.
+        HomePage::show();                         // TODO: Show the user selected first page.
 
-      // Initialize Screensaver page so that it's read when it's time to show it.
-      ScreensaverPage::init();
+        // Initialize Screensaver page so that it's read when it's time to show it.
+        ScreensaverPage::init();
+      } else {
+        LoadingPage::set_loading_text("Updated checksums, rebooting.");
+      }
     }
   }
 }

@@ -91,6 +91,11 @@ esp_err_t ConfigManager::load_config() {
     ConfigManager::md5_gui = item->valuestring;
   }
 
+  item = cJSON_GetObjectItem(json, "reverse_relays");
+  if (cJSON_IsBool(item)) {
+    ConfigManager::reverse_relays = cJSON_IsTrue(item);
+  }
+
   item = cJSON_GetObjectItem(json, "relay1_default_mode");
   if (cJSON_IsBool(item)) {
     ConfigManager::relay1_default_mode = cJSON_IsTrue(item);
@@ -176,6 +181,7 @@ esp_err_t ConfigManager::save_config() {
   cJSON_AddStringToObject(json, "md5_firmware", ConfigManager::md5_firmware.c_str());
   cJSON_AddStringToObject(json, "md5_data_file", ConfigManager::md5_data_file.c_str());
   cJSON_AddStringToObject(json, "md5_gui", ConfigManager::md5_gui.c_str());
+  cJSON_AddBoolToObject(json, "reverse_relays", ConfigManager::reverse_relays);
   cJSON_AddBoolToObject(json, "relay1_default_mode", ConfigManager::relay1_default_mode);
   cJSON_AddBoolToObject(json, "relay2_default_mode", ConfigManager::relay2_default_mode);
 

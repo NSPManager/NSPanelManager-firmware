@@ -58,6 +58,9 @@ public:
   // MD5 checksum for installed gui, used to check if new gui update is available in manager
   static inline std::string md5_gui;
 
+  // Should relays be reversed as though the cables on the back switched places?
+  static inline bool reverse_relays = false;
+
   // Should relay 1 be on or off on boot?
   static inline bool relay1_default_mode = false;
 

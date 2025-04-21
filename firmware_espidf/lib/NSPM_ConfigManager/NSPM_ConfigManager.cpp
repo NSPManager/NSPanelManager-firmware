@@ -15,7 +15,7 @@ void NSPM_ConfigManager::init() {
   esp_log_level_set("NSPM_ConfigManager", ConfigManager::log_level);
   ESP_LOGI("NSPM_ConfigManager", "Initializing NSPM_ConfigManager.");
   NSPM_ConfigManager::_config_mutex = xSemaphoreCreateMutex();
-  MqttManager::register_handler(MQTT_EVENT_DATA, &NSPM_ConfigManager::_mqtt_event_handler, NULL);
+  MqttManager::register_handler(MQTT_EVENT_ANY, &NSPM_ConfigManager::_mqtt_event_handler, NULL);
 
   // Subscribe to MQTT command topic
   NSPM_ConfigManager::_mqtt_command_topic = "nspanel/";
@@ -33,22 +33,34 @@ void NSPM_ConfigManager::init() {
 }
 
 void NSPM_ConfigManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-  esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
-  std::string topic_string = std::string(event->topic, event->topic_len);
-  // esp_mqtt_client_handle_t client = event->client;
+  if (event_id == MQTT_EVENT_DATA) {
+    esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
+    std::string topic_string = std::string(event->topic, event->topic_len);
+    // esp_mqtt_client_handle_t client = event->client;
 
-  switch ((esp_mqtt_event_id_t)event_id) {
-  case MQTT_EVENT_DATA: {
-    if (NSPM_ConfigManager::_mqtt_command_topic.compare(topic_string) == 0) {
-      NSPM_ConfigManager::_handle_register_accept(event->data, event->data_len);
-    } else if (NSPM_ConfigManager::_mqtt_config_topic.compare(topic_string) == 0) {
-      NSPM_ConfigManager::_handle_new_config_data(event->data, event->data_len);
+    switch ((esp_mqtt_event_id_t)event_id) {
+    case MQTT_EVENT_DATA: {
+      if (NSPM_ConfigManager::_mqtt_command_topic.compare(topic_string) == 0) {
+        NSPM_ConfigManager::_handle_register_accept(event->data, event->data_len);
+      } else if (NSPM_ConfigManager::_mqtt_config_topic.compare(topic_string) == 0) {
+        NSPM_ConfigManager::_handle_new_config_data(event->data, event->data_len);
+      }
+      break;
     }
-    break;
-  }
 
-  default:
-    break;
+    default:
+      break;
+    }
+  } else if (event_id == MQTT_EVENT_CONNECTED) {
+    // Resubscribe to config topic
+    NSPM_ConfigManager::_mqtt_command_topic = "nspanel/";
+    NSPM_ConfigManager::_mqtt_command_topic.append(ConfigManager::wifi_hostname);
+    NSPM_ConfigManager::_mqtt_command_topic.append("/command");
+    // Wait until subscribe is successful
+    while (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_command_topic.c_str()) != ESP_OK) {
+      ESP_LOGE("NSPM_ConfigManager", "Tried to subscribe to NSPanel command topic but subscribe call was unsuccessful! Will try again.");
+      vTaskDelay(pdMS_TO_TICKS(100));
+    }
   }
 }
 

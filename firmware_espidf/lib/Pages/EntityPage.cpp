@@ -46,6 +46,21 @@ void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int3
           EntityPage::_current_state = std::shared_ptr<NSPanelEntityState>(new_state, &EntityPage::_delete_nspanel_entity_state_object);
           xSemaphoreGive(EntityPage::_current_state_mutex);
 
+          // Set current display mode (RGB/Color temp) from what mode the light state is in
+          switch (EntityPage::_current_state->light->current_light_mode) {
+          case NSPANEL_ENTITY_STATE__LIGHT__LIGHT_MODE__COLOR_TEMP:
+            EntityPage::_current_mode = _entity_page_modes::LIGHT_COLOR_TEMPERATURE;
+            break;
+
+          case NSPANEL_ENTITY_STATE__LIGHT__LIGHT_MODE__RGB:
+            EntityPage::_current_mode = _entity_page_modes::LIGHT_RGB;
+            break;
+
+          default:
+            ESP_LOGW("EntityPage", "Unknown light mode!");
+            break;
+          }
+
           EntityPage::_update_display();
         } else {
           ESP_LOGE("EntityPage", "Failed to take mutex to update current state.");
@@ -161,16 +176,16 @@ void EntityPage::_update_display_light() {
       if (EntityPage::_last_kelvin_pct != state->light->can_color_temp) {
         Nextion::set_component_value(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, state->light->color_temp, 250);
         EntityPage::_last_saturation_pct = state->light->color_temp;
-        Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, false, 250);
-        Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, true, 250);
       }
+      Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, false, 250);
+      Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, true, 250);
     } else if (EntityPage::_current_mode == _entity_page_modes::LIGHT_RGB) {
       if (EntityPage::_last_saturation_pct != state->light->saturation) {
         Nextion::set_component_value(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, state->light->saturation, 250);
-        Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, true, 250);
         EntityPage::_last_saturation_pct = state->light->saturation;
-        Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, true, 250);
       }
+      Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, true, 250);
+      Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, true, 250);
     } else {
       ESP_LOGE("EntityPage", "Unknown color mode for light!");
     }
@@ -187,6 +202,7 @@ void EntityPage::_update_display_light() {
     Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, true, 250);
     Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, true, 250);
   } else {
+    ESP_LOGD("EntityPage", "Light is not capable of color or color temp, will hide kelvin/saturation slider.");
     Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, false, 250);
   }
 }

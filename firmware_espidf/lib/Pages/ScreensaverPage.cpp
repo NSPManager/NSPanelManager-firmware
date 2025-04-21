@@ -132,6 +132,12 @@ void ScreensaverPage::_nspm_config_event_handler(void *arg, esp_event_base_t eve
           ScreensaverPage::_update_displayed_time();
           xTaskCreatePinnedToCore(ScreensaverPage::_task_update_displayed_weather_data, "update_weather_data", 4096, NULL, 2, NULL, 1);
         }
+
+        if (ScreensaverPage::_nspanel_current_config != nullptr && ScreensaverPage::_screensaver_brightness != new_config->screensaver_dim_level) {
+          ScreensaverPage::_update_display_brightness();
+        }
+
+        ScreensaverPage::_nspanel_current_config = new_config;
       } else {
         ESP_LOGE("ScreensaverPage", "Failed to get config while processing 'new config event'. May become out of sync with manager until next config update.");
       }
@@ -274,23 +280,28 @@ void ScreensaverPage::_task_update_displayed_weather_data(void *param) {
 }
 
 void ScreensaverPage::_update_display_brightness() {
-  Nextion::set_brightness_level(ScreensaverPage::_screensaver_brightness, 1000);
-}
-
-void ScreensaverPage::_go_to_nextion_page() {
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
     ScreensaverPage::_current_screensaver_mode.set(config->screensaver_mode);
     if (ScreensaverPage::_current_screensaver_mode.get() == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__NO_SCREENSAVER) {
-      ScreensaverPage::_screensaver_brightness = 0; // No screensaver is to be shown, simply set brightness to 0
+      Nextion::set_brightness_level(0, 1000); // No screensaver is to be shown, simply set brightness to 0
     } else {
-      ScreensaverPage::_screensaver_brightness = config->screensaver_dim_level;
+      Nextion::set_brightness_level(config->screensaver_dim_level, 1000);
     }
-    ScreensaverPage::_update_display_brightness();
+    ScreensaverPage::_screensaver_brightness = config->screensaver_dim_level;
   } else {
     ESP_LOGE("ScreensaverPage", "Failed to get NSPanel Config when showing screensaver page! Will cancel operation.");
     return;
   }
+}
+
+void ScreensaverPage::_go_to_nextion_page() {
+  std::shared_ptr<NSPanelConfig> config;
+  if (NSPM_ConfigManager::get_config(&config) != ESP_OK) [[unlikely]] {
+    ESP_LOGE("ScreensaverPage", "Failed to get NSPanel Config when showing screensaver page! Will cancel operation.");
+    return;
+  }
+  ScreensaverPage::_update_display_brightness();
 
   switch (ScreensaverPage::_current_screensaver_mode.get()) {
   case NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITH_BACKGROUND: {
