@@ -342,6 +342,8 @@ void ButtonManager::_nspm_configmanager_event_handler(void *arg, esp_event_base_
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
     ButtonManager::_reverse_relays = config->reverse_relays;
+    ButtonManager::_button1_mode = config->button1_mode;
+    ButtonManager::_button2_mode = config->button2_mode;
 
     bool save = false;
     if (config->relay1_default_mode != ButtonManager::_relay1_default_mode) {
