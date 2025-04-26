@@ -38,18 +38,10 @@ void NSPM_ConfigManager::_mqtt_event_handler(void *arg, esp_event_base_t event_b
     std::string topic_string = std::string(event->topic, event->topic_len);
     // esp_mqtt_client_handle_t client = event->client;
 
-    switch ((esp_mqtt_event_id_t)event_id) {
-    case MQTT_EVENT_DATA: {
-      if (NSPM_ConfigManager::_mqtt_command_topic.compare(topic_string) == 0) {
-        NSPM_ConfigManager::_handle_register_accept(event->data, event->data_len);
-      } else if (NSPM_ConfigManager::_mqtt_config_topic.compare(topic_string) == 0) {
-        NSPM_ConfigManager::_handle_new_config_data(event->data, event->data_len);
-      }
-      break;
-    }
-
-    default:
-      break;
+    if (NSPM_ConfigManager::_mqtt_command_topic.compare(topic_string) == 0) {
+      NSPM_ConfigManager::_handle_register_accept(event->data, event->data_len);
+    } else if (NSPM_ConfigManager::_mqtt_config_topic.compare(topic_string) == 0) {
+      NSPM_ConfigManager::_handle_new_config_data(event->data, event->data_len);
     }
   } else if (event_id == MQTT_EVENT_CONNECTED) {
     // Resubscribe to config topic

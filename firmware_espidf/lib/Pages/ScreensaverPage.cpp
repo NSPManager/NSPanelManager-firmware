@@ -86,6 +86,7 @@ void ScreensaverPage::_mqtt_event_handler(void *arg, esp_event_base_t event_base
     } else if (topic_string.compare(weather_topic) == 0) {
       if (ScreensaverPage::_weather_update_data_mutex != NULL) {
         if (xSemaphoreTake(ScreensaverPage::_weather_update_data_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
+          ScreensaverPage::_weather_update_mqtt_data.clear();
           ScreensaverPage::_weather_update_mqtt_data.insert(ScreensaverPage::_weather_update_mqtt_data.end(), event->data, event->data + event->data_len);
           xSemaphoreGive(ScreensaverPage::_weather_update_data_mutex);
           // New weather data loaded, update display.
@@ -254,7 +255,7 @@ void ScreensaverPage::_task_update_displayed_weather_data(void *param) {
         Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_max_min_temperature_name, ScreensaverPage::_weather_update_data->current_maxmin_temperature, 250);
         Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_rain_name, ScreensaverPage::_weather_update_data->current_precipitation_string, 250);
 
-        ESP_LOGD("ScreensaverPage", "Updating forecast.");
+        ESP_LOGD("ScreensaverPage", "Updating forecast. Forecast items: %zu, new weather forecast items: %zu", ScreensaverPage::_weather_update_data->n_forecast_items, new_weather_data->n_forecast_items);
         for (int i = 0; i < ScreensaverPage::_weather_update_data->n_forecast_items && i < 5; i++) { // Update all available forecasts but no more than 5 as that's how many forecasts are displayed on the page
           auto item = ScreensaverPage::_weather_update_data->forecast_items[i];
           Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_names[i], item->display_string, 250);
@@ -263,6 +264,7 @@ void ScreensaverPage::_task_update_displayed_weather_data(void *param) {
           Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_rain_names[i], item->precipitation_string, 250);
           Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_wind_names[i], item->wind_string, 250);
         }
+        ESP_LOGD("ScreensaverPage", "Forecast updated. Successfully updated screensaver page with new weather data.");
       } else {
         ESP_LOGE("ScreensaverPage", "Got new weather data but failed to decode it into protobuf object.");
       }

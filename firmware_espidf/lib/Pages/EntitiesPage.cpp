@@ -245,36 +245,38 @@ void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data)
   }
 
   // We did not press an entity, check if we pressed any other button
-  switch (touch_data->component_id) {
-  case GUI_ITEMS4_PAGE::button_back_id:
-    HomePage::show();
-    break;
+  if (touch_data->pressed) {
+    switch (touch_data->component_id) {
+    case GUI_ITEMS4_PAGE::button_back_id:
+      HomePage::show();
+      break;
 
-  case GUI_ITEMS4_PAGE::button_previous_page_id: {
-    if (EntitiesPage::_display_type == display_type_t::SCENES) {
-      RoomManager::go_to_previous_scenes_page();
-    } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
-      RoomManager::go_to_previous_global_scenes_page();
-    } else {
-      RoomManager::go_to_previous_entities_page();
+    case GUI_ITEMS4_PAGE::button_previous_page_id: {
+      if (EntitiesPage::_display_type == display_type_t::SCENES) {
+        RoomManager::go_to_previous_scenes_page();
+      } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+        RoomManager::go_to_previous_global_scenes_page();
+      } else {
+        RoomManager::go_to_previous_entities_page();
+      }
+      break;
     }
-    break;
-  }
 
-  case GUI_ITEMS4_PAGE::button_next_page_id: {
-    if (EntitiesPage::_display_type == display_type_t::SCENES) {
-      RoomManager::go_to_next_scenes_page();
-    } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
-      RoomManager::go_to_next_global_scenes_page();
-    } else {
-      RoomManager::go_to_next_entities_page();
+    case GUI_ITEMS4_PAGE::button_next_page_id: {
+      if (EntitiesPage::_display_type == display_type_t::SCENES) {
+        RoomManager::go_to_next_scenes_page();
+      } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+        RoomManager::go_to_next_global_scenes_page();
+      } else {
+        RoomManager::go_to_next_entities_page();
+      }
+      break;
     }
-    break;
-  }
 
-  default:
-    ESP_LOGD("EntitiesPage", "Unknown component ID of touch event in items4. ID: %u", touch_data->component_id);
-    break;
+    default:
+      ESP_LOGD("EntitiesPage", "Unknown component ID of touch event in items4. ID: %u", touch_data->component_id);
+      break;
+    }
   }
 }
 
@@ -341,36 +343,38 @@ void EntitiesPage::_handle_items8_touch_event(nextion_event_touch_t *touch_data)
   }
 
   // We did not press an entity, check if we pressed any other button
-  switch (touch_data->component_id) {
-  case GUI_ITEMS8_PAGE::button_back_id:
-    HomePage::show();
-    break;
+  if (touch_data->pressed) {
+    switch (touch_data->component_id) {
+    case GUI_ITEMS8_PAGE::button_back_id:
+      HomePage::show();
+      break;
 
-  case GUI_ITEMS8_PAGE::button_previous_page_id: {
-    if (EntitiesPage::_display_type == display_type_t::SCENES) {
-      RoomManager::go_to_previous_scenes_page();
-    } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
-      RoomManager::go_to_previous_global_scenes_page();
-    } else {
-      RoomManager::go_to_previous_entities_page();
+    case GUI_ITEMS8_PAGE::button_previous_page_id: {
+      if (EntitiesPage::_display_type == display_type_t::SCENES) {
+        RoomManager::go_to_previous_scenes_page();
+      } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+        RoomManager::go_to_previous_global_scenes_page();
+      } else {
+        RoomManager::go_to_previous_entities_page();
+      }
+      break;
     }
-    break;
-  }
 
-  case GUI_ITEMS8_PAGE::button_next_page_id: {
-    if (EntitiesPage::_display_type == display_type_t::SCENES) {
-      RoomManager::go_to_next_scenes_page();
-    } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
-      RoomManager::go_to_next_global_scenes_page();
-    } else {
-      RoomManager::go_to_next_entities_page();
+    case GUI_ITEMS8_PAGE::button_next_page_id: {
+      if (EntitiesPage::_display_type == display_type_t::SCENES) {
+        RoomManager::go_to_next_scenes_page();
+      } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+        RoomManager::go_to_next_global_scenes_page();
+      } else {
+        RoomManager::go_to_next_entities_page();
+      }
+      break;
     }
-    break;
-  }
 
-  default:
-    ESP_LOGD("EntitiesPage", "Unknown component ID of touch event in items8. ID: %u", touch_data->component_id);
-    break;
+    default:
+      ESP_LOGD("EntitiesPage", "Unknown component ID of touch event in items8. ID: %u", touch_data->component_id);
+      break;
+    }
   }
 }
 
@@ -437,36 +441,38 @@ void EntitiesPage::_handle_items12_touch_event(nextion_event_touch_t *touch_data
   }
 
   // We did not press an entity, check if we pressed any other button
-  switch (touch_data->component_id) {
-  case GUI_ITEMS12_PAGE::button_back_id:
-    HomePage::show();
-    break;
+  if (touch_data->pressed) {
+    switch (touch_data->component_id) {
+    case GUI_ITEMS12_PAGE::button_back_id:
+      HomePage::show();
+      break;
 
-  case GUI_ITEMS12_PAGE::button_previous_page_id: {
-    if (EntitiesPage::_display_type == display_type_t::SCENES) {
-      RoomManager::go_to_previous_scenes_page();
-    } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
-      RoomManager::go_to_previous_global_scenes_page();
-    } else {
-      RoomManager::go_to_previous_entities_page();
+    case GUI_ITEMS12_PAGE::button_previous_page_id: {
+      if (EntitiesPage::_display_type == display_type_t::SCENES) {
+        RoomManager::go_to_previous_scenes_page();
+      } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+        RoomManager::go_to_previous_global_scenes_page();
+      } else {
+        RoomManager::go_to_previous_entities_page();
+      }
+      break;
     }
-    break;
-  }
 
-  case GUI_ITEMS12_PAGE::button_next_page_id: {
-    if (EntitiesPage::_display_type == display_type_t::SCENES) {
-      RoomManager::go_to_next_scenes_page();
-    } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
-      RoomManager::go_to_next_global_scenes_page();
-    } else {
-      RoomManager::go_to_next_entities_page();
+    case GUI_ITEMS12_PAGE::button_next_page_id: {
+      if (EntitiesPage::_display_type == display_type_t::SCENES) {
+        RoomManager::go_to_next_scenes_page();
+      } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+        RoomManager::go_to_next_global_scenes_page();
+      } else {
+        RoomManager::go_to_next_entities_page();
+      }
+      break;
     }
-    break;
-  }
 
-  default:
-    ESP_LOGD("EntitiesPage", "Unknown component ID of touch event in items12. ID: %u", touch_data->component_id);
-    break;
+    default:
+      ESP_LOGD("EntitiesPage", "Unknown component ID of touch event in items12. ID: %u", touch_data->component_id);
+      break;
+    }
   }
 }
 
