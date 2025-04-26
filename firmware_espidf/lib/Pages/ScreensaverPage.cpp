@@ -161,9 +161,9 @@ void ScreensaverPage::_new_temperature_event(void *arg, esp_event_base_t event_b
   switch (event_id) {
   case statusupdatemanagerevent_t::AVERAGE_TEMP_UPDATE: {
     ScreensaverPage::_current_temperature = *((double *)event_data);
-    std::string temperature_string = std::to_string(*((double *)event_data));
-    Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_room_temperature_name, temperature_string.c_str(), 1000);
-    Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_screensaver_minimal_current_room_temperature_name, temperature_string.c_str(), 1000);
+    std::string display_string = std::format("{:.1f}", ScreensaverPage::_current_temperature.load());
+    Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_room_temperature_name, display_string.c_str(), 1000);
+    Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_screensaver_minimal_current_room_temperature_name, display_string.c_str(), 1000);
 
     break;
   }
