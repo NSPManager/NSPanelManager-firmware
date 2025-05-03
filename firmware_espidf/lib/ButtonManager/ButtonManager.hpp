@@ -1,6 +1,7 @@
 #ifndef BUTTON_MANAGER_HPP
 #define BUTTON_MANAGER_HPP
 
+#include <InterruptButton.h>
 #include <atomic>
 #include <driver/gpio.h>
 #include <esp_event.h>
@@ -17,12 +18,35 @@ public:
   static void init_mqtt();
 
 private:
-  static void IRAM_ATTR _interrupt_triggered(void *param);
+  /**
+   * Handle key down event. This is only used for "Follow mode".
+   */
+  static void _button1_key_down(void);
 
   /**
-   * Task that will be interrupted to actually handle the event.
+   * Handle key down event. This is only used for "Follow mode".
    */
-  static void _interrupt_handle_task(void *param);
+  static void _button1_key_up(void);
+
+  /**
+   * Handle key down event. This is only used for "Follow mode".
+   */
+  static void _button2_key_down(void);
+
+  /**
+   * Handle key down event. This is only used for "Follow mode".
+   */
+  static void _button2_key_up(void);
+
+  /**
+   * Handle press event of button1. This is triggered on release of button.
+   */
+  static void _button1_press(void);
+
+  /**
+   * Handle press event of button2. This is triggered on release of button.
+   */
+  static void _button2_press(void);
 
   /**
    * Set the state of a relay and send state update to MQTT
@@ -62,10 +86,12 @@ private:
   static inline QueueHandle_t _interrupt_queue;
 
   // Button data
-  static inline gpio_config_t _button_io_config;
-  static constexpr const gpio_num_t _button1_pin = gpio_num_t::GPIO_NUM_14;
-  static constexpr const gpio_num_t _button2_pin = gpio_num_t::GPIO_NUM_27;
-  static constexpr const uint32_t _interrupt_pin_mask = ((1ULL << _button1_pin) | (1ULL << _button2_pin));
+  static inline std::atomic<uint32_t> _min_button_push_time;
+  static inline std::atomic<uint32_t> _min_button_long_push_time;
+  static constexpr const uint8_t _button1_pin = 14;
+  static constexpr const uint8_t _button2_pin = 27;
+  static inline InterruptButton *_button1 = nullptr;
+  static inline InterruptButton *_button2 = nullptr;
 
   // Relay data
   static inline gpio_config_t _relay_io_config;

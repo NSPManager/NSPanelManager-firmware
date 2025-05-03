@@ -67,6 +67,12 @@ public:
   // Should relay 2 be on or off on boot?
   static inline bool relay2_default_mode = false;
 
+  // Milliseconds to debounce button/button has to be held for before registering as a press.
+  static inline uint32_t min_button_push_time = 50;
+
+  // Milliseconds a button has to be held for before registering as a long press/hold press.
+  static inline uint32_t min_button_long_push_time = 300;
+
   // Used to indicate that the stored checksum for the firmware should be updated on next reboot.
   static inline bool has_updated;
 

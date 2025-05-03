@@ -16,17 +16,10 @@ void ButtonManager::init() {
   ButtonManager::_reverse_relays = ConfigManager::reverse_relays;
   ButtonManager::_relay1_default_mode = ConfigManager::relay1_default_mode;
   ButtonManager::_relay2_default_mode = ConfigManager::relay2_default_mode;
+  ButtonManager::_min_button_push_time = ConfigManager::min_button_push_time;
+  ButtonManager::_min_button_long_push_time = ConfigManager::min_button_long_push_time;
 
   esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, ButtonManager::_nspm_configmanager_event_handler, NULL);
-
-  ButtonManager::_button_io_config = {};
-  ButtonManager::_button_io_config.intr_type = GPIO_INTR_ANYEDGE;
-  ButtonManager::_button_io_config.pin_bit_mask = ButtonManager::_interrupt_pin_mask;
-  ButtonManager::_button_io_config.mode = GPIO_MODE_INPUT;
-  ButtonManager::_button_io_config.pull_up_en = gpio_pullup_t::GPIO_PULLUP_DISABLE;
-  if (gpio_config(&ButtonManager::_button_io_config) != ESP_OK) [[unlikely]] {
-    ESP_LOGE("ButtonManager", "Failed to configure IO for buttons.");
-  }
 
   ButtonManager::_relay_io_config = {};
   ButtonManager::_relay_io_config.intr_type = GPIO_INTR_DISABLE;
@@ -37,14 +30,32 @@ void ButtonManager::init() {
     ESP_LOGE("ButtonManager", "Failed to configure IO for relays.");
   }
 
-  xTaskCreatePinnedToCore(&ButtonManager::_interrupt_handle_task, "inter_handle_task", 4096, NULL, 1, NULL, 1); // Start task to handle interrupt events once they happen
-
-  gpio_install_isr_service(0);
-  gpio_isr_handler_add(ButtonManager::_button1_pin, ButtonManager::_interrupt_triggered, (void *)ButtonManager::_button1_pin);
-  gpio_isr_handler_add(ButtonManager::_button2_pin, ButtonManager::_interrupt_triggered, (void *)ButtonManager::_button2_pin);
-
   ButtonManager::_set_relay_state(1, ButtonManager::_relay1_default_mode, false); // Do not set MQTT update as MQTT is not connected or initialized when this is called
   ButtonManager::_set_relay_state(2, ButtonManager::_relay2_default_mode, false); // Do not set MQTT update as MQTT is not connected or initialized when this is called
+
+  // Init button1
+  if (ButtonManager::_button1 != nullptr) {
+    delete ButtonManager::_button1;
+    ButtonManager::_button1 = nullptr;
+  }
+  ButtonManager::_button1 = new InterruptButton(ButtonManager::_button1_pin, 0, GPIO_MODE_INPUT, ButtonManager::_min_button_long_push_time, 250, ButtonManager::_min_button_push_time);
+  ButtonManager::_button1->bind(Event_KeyDown, &ButtonManager::_button1_key_down);
+  ButtonManager::_button1->bind(Event_KeyUp, &ButtonManager::_button1_key_up);
+  ButtonManager::_button1->bind(Event_KeyPress, &ButtonManager::_button1_press);
+
+  // Init button2
+  if (ButtonManager::_button2 != nullptr) {
+    delete ButtonManager::_button2;
+    ButtonManager::_button2 = nullptr;
+  }
+  ButtonManager::_button2 = new InterruptButton(ButtonManager::_button2_pin, 0, GPIO_MODE_INPUT, ButtonManager::_min_button_long_push_time, 250, ButtonManager::_min_button_push_time);
+  ButtonManager::_button2->bind(Event_KeyDown, &ButtonManager::_button2_key_down);
+  ButtonManager::_button2->bind(Event_KeyUp, &ButtonManager::_button2_key_up);
+  ButtonManager::_button2->bind(Event_KeyPress, &ButtonManager::_button2_press);
+
+  InterruptButton::setMenuCount(0);
+  InterruptButton::setMenuLevel(0);
+  InterruptButton::setMode(Mode_Asynchronous);
 }
 
 void ButtonManager::init_mqtt() {
@@ -57,110 +68,108 @@ void ButtonManager::init_mqtt() {
   MqttManager::subscribe(relay2_topic);
 }
 
-void ButtonManager::_interrupt_triggered(void *param) {
-  uint32_t gpio_num = (uint32_t)param;
-  xQueueSendFromISR(ButtonManager::_interrupt_queue, &gpio_num, NULL);
+void ButtonManager::_button1_key_down(void) {
+  if (ButtonManager::_button1_mode == NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__FOLLOW) {
+    ButtonManager::_set_relay_state(1, !ButtonManager::_get_relay_state(1), true); // When button is pressed, activate relay
+  }
 }
 
-void ButtonManager::_interrupt_handle_task(void *param) {
-  uint32_t io_num;
-  for (;;) {
-    if (xQueueReceive(ButtonManager::_interrupt_queue, &io_num, portMAX_DELAY) == pdPASS) {
-      bool current_state = gpio_get_level(static_cast<gpio_num_t>(io_num));
+void ButtonManager::_button1_key_up(void) {
+  if (ButtonManager::_button1_mode == NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__FOLLOW) {
+    ButtonManager::_set_relay_state(1, !ButtonManager::_get_relay_state(1), true); // When button is pressed, activate relay
+  }
+}
 
-      // Received a new interrupt, check level of button GPIO
-      // ESP_LOGD("ButtonManager", "Got button %ld event, new state: %s.", io_num, !current_state ? "ON" : " OFF");
+void ButtonManager::_button2_key_down(void) {
+  if (ButtonManager::_button2_mode == NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__FOLLOW) {
+    ButtonManager::_set_relay_state(2, !ButtonManager::_get_relay_state(2), true); // When button is pressed, activate relay
+  }
+}
 
-      if (io_num == ButtonManager::_button1_pin) {
-        switch (ButtonManager::_button1_mode) {
-        case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT: {
-          if (!current_state) {                                                            // Only toggle on button press and not release
-            ButtonManager::_set_relay_state(1, !ButtonManager::_get_relay_state(1), true); // Toggle output
-          }
-          break;
-        }
+void ButtonManager::_button2_key_up(void) {
+  if (ButtonManager::_button2_mode == NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__FOLLOW) {
+    ButtonManager::_set_relay_state(2, !ButtonManager::_get_relay_state(2), true); // When button is pressed, activate relay
+  }
+}
 
-        case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__FOLLOW: {
-          ButtonManager::_set_relay_state(1, !current_state, true); // When button is pressed, activate relay
-          break;
-        }
+void ButtonManager::_button1_press(void) {
+  switch (ButtonManager::_button1_mode) {
+  case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT: {
+    ButtonManager::_set_relay_state(1, !ButtonManager::_get_relay_state(1), true); // Toggle output
+    break;
+  }
 
-        case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__NOTIFY_MANAGER: {
-          if (!current_state) { // Only toggle on button press and not release
-            std::shared_ptr<NSPanelConfig> config;
-            if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
-              NSPanelMQTTManagerCommand command = NSPANEL_MQTTMANAGER_COMMAND__INIT;
-              NSPanelMQTTManagerCommand__ButtonPressed pressed_command = NSPANEL_MQTTMANAGER_COMMAND__BUTTON_PRESSED__INIT;
-              pressed_command.button_id = 1;
-              pressed_command.nspanel_id = config->nspanel_id;
-              command.button_pressed = &pressed_command;
-              command.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_BUTTON_PRESSED;
+  case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__NOTIFY_MANAGER: {
+    std::shared_ptr<NSPanelConfig> config;
+    if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+      NSPanelMQTTManagerCommand command = NSPANEL_MQTTMANAGER_COMMAND__INIT;
+      NSPanelMQTTManagerCommand__ButtonPressed pressed_command = NSPANEL_MQTTMANAGER_COMMAND__BUTTON_PRESSED__INIT;
+      pressed_command.button_id = 1;
+      pressed_command.nspanel_id = config->nspanel_id;
+      command.button_pressed = &pressed_command;
+      command.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_BUTTON_PRESSED;
 
-              uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&command);
-              std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
-              size_t packed_data_size = nspanel_mqttmanager_command__pack(&command, buffer.data());
-              if (packed_data_size == packed_length) [[likely]] {
-                if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) [[unlikely]] {
-                  ESP_LOGE("ButtonManager", "Failed to publish command that button was pressed.");
-                }
-              }
-            } else {
-              ESP_LOGE("ButtonManager", "Failed to get config while trying to process button press event and as such could not sent event to manager for further handling.");
-            }
-          }
-          break;
-        }
-
-        default:
-          ESP_LOGE("ButtonManager", "Unknown button action. Will not perform any action.");
-          break;
-        }
-      } else if (io_num == ButtonManager::_button2_pin) {
-        switch (ButtonManager::_button2_mode) {
-        case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT: {
-          if (!current_state) {                                                            // Only toggle on button press and not release
-            ButtonManager::_set_relay_state(2, !ButtonManager::_get_relay_state(2), true); // Toggle output
-          }
-          break;
-        }
-
-        case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__FOLLOW: {
-          ButtonManager::_set_relay_state(2, !current_state, true); // When button is pressed, activate relay
-          break;
-        }
-
-        case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__NOTIFY_MANAGER: {
-          if (!current_state) { // Only toggle on button press and not release
-            std::shared_ptr<NSPanelConfig> config;
-            if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
-              NSPanelMQTTManagerCommand command = NSPANEL_MQTTMANAGER_COMMAND__INIT;
-              NSPanelMQTTManagerCommand__ButtonPressed pressed_command = NSPANEL_MQTTMANAGER_COMMAND__BUTTON_PRESSED__INIT;
-              pressed_command.button_id = 2;
-              pressed_command.nspanel_id = config->nspanel_id;
-              command.button_pressed = &pressed_command;
-              command.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_BUTTON_PRESSED;
-
-              uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&command);
-              std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
-              size_t packed_data_size = nspanel_mqttmanager_command__pack(&command, buffer.data());
-              if (packed_data_size == packed_length) [[likely]] {
-                if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) [[unlikely]] {
-                  ESP_LOGE("ButtonManager", "Failed to publish command that button was pressed.");
-                }
-              }
-            } else {
-              ESP_LOGE("ButtonManager", "Failed to get config while trying to process button press event and as such could not sent event to manager for further handling.");
-            }
-          }
-          break;
-        }
-
-        default:
-          ESP_LOGE("ButtonManager", "Unknown button action. Will not perform any action.");
-          break;
+      uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&command);
+      std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
+      size_t packed_data_size = nspanel_mqttmanager_command__pack(&command, buffer.data());
+      if (packed_data_size == packed_length) [[likely]] {
+        if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) [[unlikely]] {
+          ESP_LOGE("ButtonManager", "Failed to publish command that button was pressed.");
         }
       }
+    } else {
+      ESP_LOGE("ButtonManager", "Failed to get config while trying to process button press event and as such could not sent event to manager for further handling.");
     }
+    break;
+  }
+
+  case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__FOLLOW:
+    break; // Simply do nothing, this is handled in "key down" and "key up" events.
+
+  default:
+    ESP_LOGE("ButtonManager", "Unknown button action. Will not perform any action.");
+    break;
+  }
+}
+
+void ButtonManager::_button2_press(void) {
+  switch (ButtonManager::_button2_mode) {
+  case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT: {
+    ButtonManager::_set_relay_state(2, !ButtonManager::_get_relay_state(2), true); // Toggle output
+    break;
+  }
+
+  case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__NOTIFY_MANAGER: {
+    std::shared_ptr<NSPanelConfig> config;
+    if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+      NSPanelMQTTManagerCommand command = NSPANEL_MQTTMANAGER_COMMAND__INIT;
+      NSPanelMQTTManagerCommand__ButtonPressed pressed_command = NSPANEL_MQTTMANAGER_COMMAND__BUTTON_PRESSED__INIT;
+      pressed_command.button_id = 2;
+      pressed_command.nspanel_id = config->nspanel_id;
+      command.button_pressed = &pressed_command;
+      command.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_BUTTON_PRESSED;
+
+      uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&command);
+      std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
+      size_t packed_data_size = nspanel_mqttmanager_command__pack(&command, buffer.data());
+      if (packed_data_size == packed_length) [[likely]] {
+        if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) [[unlikely]] {
+          ESP_LOGE("ButtonManager", "Failed to publish command that button was pressed.");
+        }
+      }
+    } else {
+      ESP_LOGE("ButtonManager", "Failed to get config while trying to process button press event and as such could not sent event to manager for further handling.");
+    }
+
+    break;
+  }
+
+  case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__FOLLOW:
+    break; // Simply do nothing, this is handled in "key down" and "key up" events.
+
+  default:
+    ESP_LOGE("ButtonManager", "Unknown button action. Will not perform any action.");
+    break;
   }
 }
 
@@ -360,6 +369,25 @@ void ButtonManager::_nspm_configmanager_event_handler(void *arg, esp_event_base_
       ButtonManager::_set_relay_state(2, config->relay2_default_mode, true);
       save = true;
     }
+
+    if (config->min_button_push_time != ButtonManager::_min_button_push_time) {
+      ButtonManager::_min_button_push_time = config->min_button_push_time;
+      ConfigManager::min_button_push_time = ButtonManager::_min_button_push_time;
+
+      ButtonManager::_button1->setDoubleClickInterval(ButtonManager::_min_button_push_time);
+      ButtonManager::_button2->setDoubleClickInterval(ButtonManager::_min_button_push_time);
+      save = true;
+    }
+
+    if (config->button_long_press_time != ButtonManager::_min_button_long_push_time) {
+      ButtonManager::_min_button_long_push_time = config->button_long_press_time;
+      ConfigManager::min_button_long_push_time = ButtonManager::_min_button_long_push_time;
+
+      ButtonManager::_button1->setLongPressInterval(ButtonManager::_min_button_long_push_time);
+      ButtonManager::_button2->setLongPressInterval(ButtonManager::_min_button_long_push_time);
+      save = true;
+    }
+
     if (save) {
       ConfigManager::save_config();
     }

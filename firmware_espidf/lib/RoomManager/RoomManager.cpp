@@ -272,7 +272,7 @@ esp_err_t RoomManager::replace_home_page_status_all_rooms(std::shared_ptr<NSPane
 }
 
 esp_err_t RoomManager::get_current_room_entities_page_status(std::shared_ptr<NSPanelRoomEntitiesPage> *status) {
-  if (xSemaphoreTake(RoomManager::_entities_page_mutex, pdMS_TO_TICKS(250) == pdPASS)) {
+  if (xSemaphoreTake(RoomManager::_entities_page_mutex, pdMS_TO_TICKS(500) == pdPASS)) {
     if (RoomManager::_entities_page == nullptr) [[unlikely]] {
       xSemaphoreGive(RoomManager::_entities_page_mutex);
       return ESP_ERR_NOT_FINISHED;

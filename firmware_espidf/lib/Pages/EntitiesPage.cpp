@@ -148,7 +148,7 @@ void EntitiesPage::_handle_roommanager_event(void *arg, esp_event_base_t event_b
     if (RoomManager::get_current_room_entities_page_status(&EntitiesPage::_current_entities_page) == ESP_OK) [[likely]] {
       EntitiesPage::_update_display();
     } else {
-      ESP_LOGE("EntitiesPage", "Got new entity page data event but couldn't got new entity page data!");
+      ESP_LOGE("EntitiesPage", "Got new entity page data event but couldn't get new entity page data!");
     }
   }
 }
