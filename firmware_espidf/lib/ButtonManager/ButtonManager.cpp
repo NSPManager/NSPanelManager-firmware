@@ -413,19 +413,27 @@ void ButtonManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
 
     if (topic_string.compare(relay1_topic) == 0) {
       if (data.compare("0") == 0) {
-        ButtonManager::_set_relay_state(1, false, true);
+        if (ButtonManager::_get_relay_state(1) == true) {
+          ButtonManager::_set_relay_state(1, false, true);
+        }
       } else if (data.compare("1") == 0) {
-        ButtonManager::_set_relay_state(1, true, true);
+        if (ButtonManager::_get_relay_state(1) == false) {
+          ButtonManager::_set_relay_state(1, true, true);
+        }
       } else if (data.compare("2") == 0) {
-        ButtonManager::_set_relay_state(1, !ButtonManager::_relay1_current_state, true);
+        ButtonManager::_set_relay_state(1, !ButtonManager::_get_relay_state(1), true);
       } else {
         ESP_LOGE("ButtonManager", "Got command to set relay1 state but command data was not recognized.");
       }
     } else if (topic_string.compare(relay2_topic) == 0) {
       if (data.compare("0") == 0) {
-        ButtonManager::_set_relay_state(2, false, true);
+        if (ButtonManager::_get_relay_state(2) == true) {
+          ButtonManager::_set_relay_state(2, false, true);
+        }
       } else if (data.compare("1") == 0) {
-        ButtonManager::_set_relay_state(2, true, true);
+        if (ButtonManager::_get_relay_state(2) == false) {
+          ButtonManager::_set_relay_state(2, true, true);
+        }
       } else if (data.compare("2") == 0) {
         ButtonManager::_set_relay_state(2, !ButtonManager::_relay2_current_state, true);
       } else {
@@ -450,12 +458,16 @@ void ButtonManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
           if (data.compare("0") == 0) {
             if (ButtonManager::_get_relay_state(1)) { // Relay 1 is on, turn off.
               ESP_LOGD("ButtonManager", "Received update from relay group %ld, new state OFF.", config->relay1_relay_group[i]);
-              ButtonManager::_set_relay_state(1, false, true);
+              if (ButtonManager::_get_relay_state(1) == true) {
+                ButtonManager::_set_relay_state(1, false, true);
+              }
             }
           } else if (data.compare("1") == 0) {
             if (!ButtonManager::_get_relay_state(1)) { // Relay 1 is off, turn off.
               ESP_LOGD("ButtonManager", "Received update from relay group %ld, new state ON.", config->relay1_relay_group[i]);
-              ButtonManager::_set_relay_state(1, true, true);
+              if (ButtonManager::_get_relay_state(1) == false) {
+                ButtonManager::_set_relay_state(1, true, true);
+              }
             }
           } else {
             ESP_LOGE("ButtonManager", "Found matching relay group topic but failed to determine state.");
@@ -474,12 +486,16 @@ void ButtonManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
           if (data.compare("0") == 0) {
             if (ButtonManager::_get_relay_state(2)) { // Relay 2 is on, turn off.
               ESP_LOGD("ButtonManager", "Received update from relay group %ld, new state OFF.", config->relay2_relay_group[i]);
-              ButtonManager::_set_relay_state(2, false, true);
+              if (ButtonManager::_get_relay_state(2) == true) {
+                ButtonManager::_set_relay_state(2, false, true);
+              }
             }
           } else if (data.compare("1") == 0) {
             if (!ButtonManager::_get_relay_state(2)) { // Relay 2 is off, turn off.
               ESP_LOGD("ButtonManager", "Received update from relay group %ld, new state ON.", config->relay2_relay_group[i]);
-              ButtonManager::_set_relay_state(2, true, true);
+              if (ButtonManager::_get_relay_state(2) == false) {
+                ButtonManager::_set_relay_state(2, true, true);
+              }
             }
           } else {
             ESP_LOGE("ButtonManager", "Found matching relay group topic but failed to determine state.");
