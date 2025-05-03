@@ -99,6 +99,9 @@ private:
   static constexpr const gpio_num_t _relay2_pin = gpio_num_t::GPIO_NUM_19;
   static constexpr const uint32_t _relay_pin_mask = ((1ULL << _relay1_pin) | (1ULL << _relay2_pin));
 
+  static inline uint64_t _last_relay1_change = 0;
+  static inline uint64_t _last_relay2_change = 0;
+
   // The current/previous config. Used to compare and check for changes.
   static inline std::shared_ptr<NSPanelConfig> _current_config = nullptr;
 };

@@ -1,3 +1,4 @@
+
 #include <ButtonManager.hpp>
 #include <ConfigManager.hpp>
 #include <MqttManager.hpp>
@@ -6,6 +7,7 @@
 #include <WiFiManager.hpp>
 #include <driver/gpio.h>
 #include <esp_log.h>
+#include <esp_timer.h>
 #include <format>
 #include <vector>
 
@@ -175,6 +177,11 @@ void ButtonManager::_button2_press(void) {
 
 void ButtonManager::_set_relay_state(uint8_t relay, bool state, bool send_mqtt_update) {
   if (relay == 1) {
+    // Only allow relay state to be changed once every 250ms.
+    if (esp_timer_get_time() - ButtonManager::_last_relay1_change < 250000) {
+      return;
+    }
+
     if (!ButtonManager::_reverse_relays) {
       ESP_LOGD("ButtonManager", "Setting output of relay 1 (left) relay to %s", state ? "ON" : " OFF");
       ButtonManager::_relay1_current_state = state;
@@ -203,7 +210,13 @@ void ButtonManager::_set_relay_state(uint8_t relay, bool state, bool send_mqtt_u
         }
       }
     }
+    ButtonManager::_last_relay1_change = esp_timer_get_time();
   } else if (relay == 2) {
+    // Only allow relay state to be changed once every 250ms.
+    if (esp_timer_get_time() - ButtonManager::_last_relay2_change < 250000) {
+      return;
+    }
+
     if (!ButtonManager::_reverse_relays) {
       ESP_LOGD("ButtonManager", "Setting output of relay 2 (right) relay to %s", state ? "ON" : " OFF");
       ButtonManager::_relay2_current_state = state;
@@ -232,6 +245,8 @@ void ButtonManager::_set_relay_state(uint8_t relay, bool state, bool send_mqtt_u
         }
       }
     }
+
+    ButtonManager::_last_relay2_change = esp_timer_get_time();
   }
 }
 
