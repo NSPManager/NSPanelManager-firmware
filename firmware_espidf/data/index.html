@@ -156,17 +156,23 @@
         }
         return response.json();
       }).then(data => {
+        if (data.wifi_psk_set) {
+          document.getElementById("clear_wifi_password_option_box").classList.remove("hidden");
+        }
+
+        if (data.mqtt_psk_set) {
+          document.getElementById("clear_mqtt_password_option_box").classList.remove("hidden");
+        }
+
+
         document.title = "NSPMPanel - " + data.wifi_hostname;
         document.getElementById("version_badge").innerText = data.version;
         document.getElementById("wifi_hostname").value = data.wifi_hostname;
-        document.getElementById("wifi_psk").value = data.wifi_hostname;
         document.getElementById("log_level").value = data.log_level;
         document.getElementById("wifi_ssid").value = data.wifi_ssid;
-        document.getElementById("wifi_psk").value = data.wifi_psk;
         document.getElementById("mqtt_server").value = data.mqtt_server;
         document.getElementById("mqtt_port").value = data.mqtt_port;
         document.getElementById("mqtt_username").value = data.mqtt_username;
-        document.getElementById("mqtt_psk").value = data.mqtt_psk;
         if (data.use_latest_nextion_upload_protocol) {
           document.getElementById("nextion_latest_protocol").checked = true;
           document.getElementById("nextion_legacy_protocol").checked = false;
@@ -174,7 +180,6 @@
           document.getElementById("nextion_legacy_protocol").checked = true;
           document.getElementById("nextion_latest_protocol").checked = false;
         }
-        document.getElementById("mqtt_psk").value = data.mqtt_psk;
         document.getElementById("upload_baud_rate").value = data.nextion_upload_baudrate;
         document.getElementById("block_access_wait_for_data_modal").classList.add("hidden");
       }).catch(error => {
@@ -523,7 +528,30 @@
               </span>
               <input
                 class="rounded-none rounded-e-md bg-gray-50 border text-gray-900 focus:ring-blue-500 focus:border-blue-500 block flex-1 min-w-0 w-full text-sm border-gray-300 p-2.5"
-                type="password" name="wifi_psk" id="wifi_psk" placeholder="Password" value="" required />
+                type="password" name="wifi_psk" id="wifi_psk" placeholder="Password" value="" />
+            </div>
+          </div>
+
+          <div id="clear_wifi_password_option_box"
+            class="mt-2 border-2 border-dashed border-blue-500 rounded-lg p-2 hidden">
+            <div class="bg-blue-500 p-4 rounded-lg">
+              <svg class="shrink-0 inline w-4 h-4 me-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"
+                fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  d="M10 .5a9.5 9.5 0 1 0 9.5 9.5A9.51 9.51 0 0 0 10 .5ZM9.5 4a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM12 15H8a1 1 0 0 1 0-2h1v-3H8a1 1 0 0 1 0-2h2a1 1 0 0 1 1 1v4h1a1 1 0 0 1 0 2Z" />
+              </svg>
+              WiFi password is configured but is not shown for security reasons.
+              Enter a new password to change it or leave blank to keep the current password. If you wish to clear the
+              stored password use the checkbox below.
+            </div>
+
+            <div class="mt-2 flex items-center justify-start w-full">
+              <input type="checkbox"
+                class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded-sm focus:ring-blue-500 focus:ring-2"
+                id="clear_wifi_password" name="clear_wifi_password">
+              <label for="clear_wifi_password" class="text-sm ms-2 font-medium">
+                <span class="label-text">Clear WiFi password</span>
+              </label>
             </div>
           </div>
         </div>
@@ -603,6 +631,30 @@
                 type="password" name="mqtt_psk" id="mqtt_psk" placeholder="MQTT Password" value="" />
             </div>
           </div>
+
+          <div id="clear_mqtt_password_option_box"
+            class="mt-2 border-2 border-dashed border-blue-500 rounded-lg p-2 hidden">
+            <div class="bg-blue-500 p-4 rounded-lg">
+              <svg class="shrink-0 inline w-4 h-4 me-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"
+                fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  d="M10 .5a9.5 9.5 0 1 0 9.5 9.5A9.51 9.51 0 0 0 10 .5ZM9.5 4a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM12 15H8a1 1 0 0 1 0-2h1v-3H8a1 1 0 0 1 0-2h2a1 1 0 0 1 1 1v4h1a1 1 0 0 1 0 2Z" />
+              </svg>
+              MQTT password is configured but is not shown for security reasons.
+              Enter a new password to change it or leave blank to keep the current password. If you wish to clear the
+              stored password use the checkbox below.
+            </div>
+
+            <div class="mt-2 flex items-center justify-start w-full">
+              <input type="checkbox"
+                class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded-sm focus:ring-blue-500 focus:ring-2"
+                id="clear_mqtt_password" name="clear_mqtt_password">
+              <label for="clear_mqtt_password" class="text-sm ms-2 font-medium">
+                <span class="label-text">Clear MQTT password</span>
+              </label>
+            </div>
+          </div>
+
         </div>
 
         <div class="bg-gray-50 rounded-md p-4 mt-4">

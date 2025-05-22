@@ -24,7 +24,7 @@ void RoomManager::init() {
   RoomManager::_local_event_loop_args = {
       .queue_size = 128,
       .task_name = "roommanager_event_loop",
-      .task_priority = 6,
+      .task_priority = 4,
       .task_stack_size = 8192,
       .task_core_id = 1};
   esp_event_loop_create(&RoomManager::_local_event_loop_args, &RoomManager::_local_event_loop);
@@ -39,6 +39,7 @@ esp_err_t RoomManager::get_home_page_status(std::shared_ptr<NSPanelRoomStatus> *
   if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250) == pdPASS)) {
     if (RoomManager::_home_page == nullptr) [[unlikely]] {
       xSemaphoreGive(RoomManager::_home_page_mutex);
+      ESP_LOGE("RoomManager", "Failed to get home page status, is NULL.");
       return ESP_ERR_NOT_FINISHED;
     }
 
@@ -53,8 +54,9 @@ esp_err_t RoomManager::get_home_page_status(std::shared_ptr<NSPanelRoomStatus> *
 
 esp_err_t RoomManager::get_home_page_status_all_rooms(std::shared_ptr<NSPanelRoomStatus> *status) {
   if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250) == pdPASS)) {
-    if (RoomManager::_home_page == nullptr) [[unlikely]] {
+    if (RoomManager::_home_page_all_rooms == nullptr) [[unlikely]] {
       xSemaphoreGive(RoomManager::_home_page_mutex);
+      ESP_LOGE("RoomManager", "Failed to get home page status (all rooms), is NULL.");
       return ESP_ERR_NOT_FINISHED;
     }
 
@@ -273,67 +275,87 @@ esp_err_t RoomManager::replace_home_page_status_all_rooms(std::shared_ptr<NSPane
 
 esp_err_t RoomManager::get_current_room_entities_page_status(std::shared_ptr<NSPanelRoomEntitiesPage> *status) {
   if (xSemaphoreTake(RoomManager::_entities_page_mutex, pdMS_TO_TICKS(500) == pdPASS)) {
+    ESP_LOGI("RoomManager", "3");
     if (RoomManager::_entities_page == nullptr) [[unlikely]] {
       xSemaphoreGive(RoomManager::_entities_page_mutex);
+      ESP_LOGI("RoomManager", "/31");
+      ESP_LOGE("RoomManager", "Failed to get current room entities page. Current page is NULL.");
       return ESP_ERR_NOT_FINISHED;
     }
 
     *status = RoomManager::_entities_page;
     xSemaphoreGive(RoomManager::_entities_page_mutex);
+    ESP_LOGI("RoomManager", "/32");
     return ESP_OK;
+  }
+  ESP_LOGE("RoomManager", "Failed to get current room entities page mutex.");
+
+  TaskHandle_t holder_task = xSemaphoreGetMutexHolder(RoomManager::_entities_page_mutex);
+  if (holder_task != NULL) {
+    ESP_LOGE("RoomManager", "Holding task Name: %s", pcTaskGetName(holder_task));
   }
   return ESP_ERR_NOT_FINISHED;
 }
 
 esp_err_t RoomManager::go_to_entities_page_id(uint32_t page_id) {
-  if (xSemaphoreTake(RoomManager::_entities_page_mutex, pdMS_TO_TICKS(250) == pdPASS)) {
-    ESP_LOGD("RoomManager", "Request to navigate to entities page ID %lu", page_id);
-
-    std::shared_ptr<NSPanelConfig> config;
-    if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-      bool valid_page_id = false;
-      uint32_t entities_page_room_id = 0; // The ID of the room that the entity page is attached to.
-      for (int i = 0; i < config->n_room_infos && !valid_page_id; i++) {
-        for (int j = 0; j < config->room_infos[i]->n_entity_page_ids && !valid_page_id; j++) {
-          if (config->room_infos[i]->entity_page_ids[j] == page_id) {
-            entities_page_room_id = config->room_infos[i]->room_id;
-            valid_page_id = true;
-          }
-        }
-        for (int j = 0; j < config->room_infos[i]->n_scene_page_ids && !valid_page_id; j++) {
-          if (config->room_infos[i]->scene_page_ids[j] == page_id) {
-            entities_page_room_id = config->room_infos[i]->room_id;
-            valid_page_id = true;
-          }
-        }
-      }
-      for (int i = 0; i < config->n_global_scene_entity_page_ids && !valid_page_id; i++) {
-        if (config->global_scene_entity_page_ids[i] == page_id) {
+  std::shared_ptr<NSPanelConfig> config;
+  if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+    bool valid_page_id = false;
+    uint32_t entities_page_room_id = 0; // The ID of the room that the entity page is attached to.
+    for (int i = 0; i < config->n_room_infos && !valid_page_id; i++) {
+      for (int j = 0; j < config->room_infos[i]->n_entity_page_ids && !valid_page_id; j++) {
+        if (config->room_infos[i]->entity_page_ids[j] == page_id) {
+          entities_page_room_id = config->room_infos[i]->room_id;
           valid_page_id = true;
         }
       }
-
-      if (!valid_page_id) [[unlikely]] {
-        ESP_LOGW("RoomManager", "Requested to go to entities page id %lu but not such ID was found in config. Will abort.", page_id);
-        xSemaphoreGive(RoomManager::_entities_page_mutex);
-        return ESP_ERR_NOT_FINISHED;
+      for (int j = 0; j < config->room_infos[i]->n_scene_page_ids && !valid_page_id; j++) {
+        if (config->room_infos[i]->scene_page_ids[j] == page_id) {
+          entities_page_room_id = config->room_infos[i]->room_id;
+          valid_page_id = true;
+        }
       }
+    }
+    for (int i = 0; i < config->n_global_scene_entity_page_ids && !valid_page_id; i++) {
+      if (config->global_scene_entity_page_ids[i] == page_id) {
+        valid_page_id = true;
+      }
+    }
 
-      std::string new_mqtt_entities_page_status_topic = "nspanel/mqttmanager_";
-      new_mqtt_entities_page_status_topic.append(NSPM_ConfigManager::get_manager_address());
-      new_mqtt_entities_page_status_topic.append("/entity_pages/");
-      new_mqtt_entities_page_status_topic.append(std::to_string(page_id));
-      new_mqtt_entities_page_status_topic.append("/state");
+    if (!valid_page_id) [[unlikely]] {
+      ESP_LOGW("RoomManager", "Requested to go to entities page id %lu but not such ID was found in config. Will abort.", page_id);
+      return ESP_ERR_NOT_FINISHED;
+    }
 
-      std::string current_topic = std::string(RoomManager::_current_entities_page_status_topic.get());
-      ESP_LOGD("RoomManager", "Current topic: %s", current_topic.c_str());
-      ESP_LOGD("RoomManager", "New topic:     %s", new_mqtt_entities_page_status_topic.c_str());
+    std::string new_mqtt_entities_page_status_topic = "nspanel/mqttmanager_";
+    new_mqtt_entities_page_status_topic.append(NSPM_ConfigManager::get_manager_address());
+    new_mqtt_entities_page_status_topic.append("/entity_pages/");
+    new_mqtt_entities_page_status_topic.append(std::to_string(page_id));
+    new_mqtt_entities_page_status_topic.append("/state");
+    std::string current_topic = std::string(RoomManager::_current_entities_page_status_topic.get());
+
+    if (xSemaphoreTake(RoomManager::_entities_page_mutex, pdMS_TO_TICKS(250) == pdTRUE)) {
+      ESP_LOGI("RoomManager", "1");
+      ESP_LOGD("RoomManager", "Request to navigate to entities page ID %lu", page_id);
+
       if (new_mqtt_entities_page_status_topic.compare(current_topic) == 0) {
         ESP_LOGD("RoomManager", "Already on correct topic, send event.");
         // We are navigating to the same already selected page, simply trigger the event.
-        xSemaphoreGive(RoomManager::_entities_page_mutex);
-        esp_event_post_to(RoomManager::_local_event_loop, ROOMMANAGER_EVENT, roommanager_event_t::ROOM_ENTITIES_PAGE_UPDATED, NULL, 0, pdMS_TO_TICKS(250));
+        if (xSemaphoreGive(RoomManager::_entities_page_mutex) != pdTRUE) [[unlikely]] {
+          ESP_LOGE("RoomManager", "Failed to give back _entities_page_mutex!");
+        }
+        ESP_LOGI("RoomManager", "/11");
+
+        vTaskDelay(pdMS_TO_TICKS(25)); // Wait 25ms for semaphore to actually give way and reset as this seems to be the cause of a race-condition otherwise.
+        if (esp_event_post_to(RoomManager::_local_event_loop, ROOMMANAGER_EVENT, roommanager_event_t::ROOM_ENTITIES_PAGE_UPDATED, NULL, 0, pdMS_TO_TICKS(250)) != ESP_OK) [[unlikely]] {
+          ESP_LOGE("RoomManager", "Failed to trigger event that entities page has changed (was already on correct entities page ID).");
+        }
       } else {
+        if (xSemaphoreGive(RoomManager::_entities_page_mutex) != pdTRUE) [[unlikely]] {
+          ESP_LOGE("RoomManager", "Failed to give back _entities_page_mutex!");
+        }
+        ESP_LOGI("RoomManager", "/12");
+
         ESP_LOGD("RoomManager", "Navigate to new topic.");
         if (!current_topic.empty()) [[likely]] {
           if (MqttManager::unsubscribe(current_topic) != ESP_OK) [[unlikely]] {
@@ -346,7 +368,6 @@ esp_err_t RoomManager::go_to_entities_page_id(uint32_t page_id) {
           ESP_LOGE("RoomManager", "Failed to subscribe to new MQTT topic for entity page state updates. Will try again in 200ms.");
           vTaskDelay(pdMS_TO_TICKS(200));
         }
-        xSemaphoreGive(RoomManager::_entities_page_mutex);
       }
       RoomManager::_current_entities_page_id = page_id;
       return ESP_OK;
@@ -366,7 +387,6 @@ esp_err_t RoomManager::go_to_first_entities_page() {
           break;
         } else {
           ESP_LOGE("RoomManager", "Requested to go to first entity page in room but room has not entity pages. Will abort.");
-          xSemaphoreGive(RoomManager::_entities_page_mutex);
           return ESP_ERR_NOT_FINISHED;
         }
       }
@@ -466,7 +486,6 @@ esp_err_t RoomManager::go_to_first_scenes_page() {
           break;
         } else {
           ESP_LOGE("RoomManager", "Requested to go to first entity page in room but room has not entity pages. Will abort.");
-          xSemaphoreGive(RoomManager::_entities_page_mutex);
           return ESP_ERR_NOT_FINISHED;
         }
       }
@@ -673,10 +692,14 @@ void RoomManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
     } else if (topic_string.compare(RoomManager::_current_entities_page_status_topic.get()) == 0) {
       NSPanelRoomEntitiesPage *entities_page = nspanel_room_entities_page__unpack(NULL, event->data_len, (const uint8_t *)event->data);
       if (entities_page != NULL) {
-        if (xSemaphoreTake(RoomManager::_entities_page_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
+        if (xSemaphoreTake(RoomManager::_entities_page_mutex, pdMS_TO_TICKS(250)) == pdTRUE) {
+          ESP_LOGI("RoomManager", "2");
           ESP_LOGD("RoomManager", "Received new entities page state update.");
           RoomManager::_entities_page = std::shared_ptr<NSPanelRoomEntitiesPage>(entities_page, &RoomManager::_nspanel_room_entities_page_shared_ptr_deleter);
-          xSemaphoreGive(RoomManager::_entities_page_mutex);
+          if (xSemaphoreGive(RoomManager::_entities_page_mutex) != pdTRUE) [[unlikely]] {
+            ESP_LOGE("RoomManager", "Failed to give back _entities_page_mutex after updating shared_ptr to new NSPanelRoomEntitiesPage object.");
+          }
+          ESP_LOGI("RoomManager", "/2");
 
           if (esp_event_post_to(RoomManager::_local_event_loop, ROOMMANAGER_EVENT, roommanager_event_t::ROOM_ENTITIES_PAGE_UPDATED, NULL, 0, pdMS_TO_TICKS(250)) != ESP_OK) {
             ESP_LOGW("RoomManager", "Failed to publish event that new entities page is available.");

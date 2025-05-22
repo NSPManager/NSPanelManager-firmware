@@ -256,13 +256,13 @@ void HomePage::_handle_nextion_event(void *arg, esp_event_base_t event_base, int
         break;
       }
     } else if (data->component_id == GUI_HOME_PAGE::button_scenes_id) {
-      if (HomePage::_current_affect_mode == HomePage::HomePageAffectMode::ROOM) {
+      if (HomePage::_current_affect_mode == HomePage::HomePageAffectMode::ROOM && !data->pressed) {
         EntitiesPage::show(EntitiesPage::display_type_t::SCENES);
-      } else if (HomePage::_current_affect_mode == HomePage::HomePageAffectMode::ALL) {
+      } else if (HomePage::_current_affect_mode == HomePage::HomePageAffectMode::ALL && !data->pressed) {
         EntitiesPage::show(EntitiesPage::display_type_t::GLOBAL_SCENES);
       }
     } else if (data->component_id == GUI_HOME_PAGE::button_room_entities_id) {
-      if (HomePage::_current_affect_mode == HomePage::HomePageAffectMode::ROOM) {
+      if (HomePage::_current_affect_mode == HomePage::HomePageAffectMode::ROOM && !data->pressed) {
         EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
       }
     } else {

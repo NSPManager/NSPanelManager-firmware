@@ -39,11 +39,11 @@ esp_err_t WebManager::_handle_uri_config_data(httpd_req_t *req) {
   cJSON_AddNumberToObject(json, "log_level", ConfigManager::log_level);
   cJSON_AddStringToObject(json, "wifi_hostname", ConfigManager::wifi_hostname.c_str());
   cJSON_AddStringToObject(json, "wifi_ssid", ConfigManager::wifi_ssid.c_str());
-  cJSON_AddStringToObject(json, "wifi_psk", ConfigManager::wifi_psk.c_str());
+  cJSON_AddBoolToObject(json, "wifi_psk_set", !ConfigManager::wifi_psk.empty());
   cJSON_AddStringToObject(json, "mqtt_server", ConfigManager::mqtt_server.c_str());
   cJSON_AddNumberToObject(json, "mqtt_port", ConfigManager::mqtt_port);
   cJSON_AddStringToObject(json, "mqtt_username", ConfigManager::mqtt_username.c_str());
-  cJSON_AddStringToObject(json, "mqtt_psk", ConfigManager::mqtt_password.c_str());
+  cJSON_AddBoolToObject(json, "mqtt_psk_set", !ConfigManager::mqtt_password.empty());
 
   if (ConfigManager::use_latest_nextion_upload_protocol) {
     cJSON_AddTrueToObject(json, "use_latest_nextion_upload_protocol");
@@ -96,8 +96,12 @@ esp_err_t WebManager::_handle_uri_save_config(httpd_req_t *req) {
     ESP_LOGE("WebManager", "Could not find field name 'wifi_ssid' while saving config from web post request!");
   }
 
-  if (result.find("wifi_psk") != result.end()) {
-    ConfigManager::wifi_psk = result["wifi_psk"];
+  if (result.find("clear_wifi_password") != result.end()) {
+    ConfigManager::wifi_psk = "";
+  } else if (result.find("wifi_psk") != result.end()) {
+    if (!result["wifi_psk"].empty()) {
+      ConfigManager::wifi_psk = result["wifi_psk"];
+    }
   } else {
     ESP_LOGE("WebManager", "Could not find field name 'wifi_psk' while saving config from web post request!");
   }
@@ -120,8 +124,12 @@ esp_err_t WebManager::_handle_uri_save_config(httpd_req_t *req) {
     ESP_LOGE("WebManager", "Could not find field name 'mqtt_username' while saving config from web post request!");
   }
 
-  if (result.find("mqtt_psk") != result.end()) {
-    ConfigManager::mqtt_password = result["mqtt_psk"];
+  if (result.find("clear_mqtt_password") != result.end()) {
+    ConfigManager::mqtt_password = "";
+  } else if (result.find("mqtt_psk") != result.end()) {
+    if (!result["mqtt_psk"].empty()) {
+      ConfigManager::mqtt_password = result["mqtt_psk"];
+    }
   } else {
     ESP_LOGE("WebManager", "Could not find field name 'mqtt_psk' while saving config from web post request!");
   }

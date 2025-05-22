@@ -21,8 +21,15 @@ void EntitiesPage::show(display_type_t display_type) {
   InterfaceManager::current_page_unshow_callback.set(EntitiesPage::unshow);
 
   // EntitiesPage::_update_display();
-  RoomManager::register_handler(ESP_EVENT_ANY_ID, EntitiesPage::_handle_roommanager_event, NULL);
-  esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, EntitiesPage::_handle_nextion_event, NULL);
+  if (RoomManager::register_handler(ESP_EVENT_ANY_ID, EntitiesPage::_handle_roommanager_event, NULL) != ESP_OK) [[unlikely]] {
+    ESP_LOGE("EntitiesPage", "Failed to register event handler for EntitiesPage to RoomManager. Will return on HomePage.");
+    HomePage::show();
+  }
+
+  if (esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, EntitiesPage::_handle_nextion_event, NULL) != ESP_OK) [[unlikely]] {
+    ESP_LOGE("EntitiesPage", "Failed to register event handler for EntitiesPage to Nextion. Will return on HomePage.");
+    HomePage::show();
+  }
 
   // If current room has an entities page, go to it and if not, show the next available entities page.
   switch (display_type) {
@@ -39,21 +46,23 @@ void EntitiesPage::show(display_type_t display_type) {
     break;
 
   default:
-    ESP_LOGE("EntitiesPage", "Unknown display type!");
+    ESP_LOGE("EntitiesPage", "Unknown display type! Will return to HomePage.");
+    HomePage::show();
     break;
   }
 
-  if (RoomManager::get_current_room_entities_page_status(&EntitiesPage::_current_entities_page) != ESP_OK) [[unlikely]] {
-    ESP_LOGE("EntitiesPage", "Failed to get current entities page. Will return to HomePage.");
-    HomePage::show();
-    return;
-  }
+  // if (RoomManager::get_current_room_entities_page_status(&EntitiesPage::_current_entities_page) != ESP_OK) [[unlikely]] {
+  //   ESP_LOGE("EntitiesPage", "Failed to get current entities page. Will return to HomePage.");
+  //   HomePage::show();
+  //   return;
+  // }
 }
 
 void EntitiesPage::unshow() {
   RoomManager::unregister_handler(ESP_EVENT_ANY_ID, EntitiesPage::_handle_roommanager_event);
   esp_event_handler_unregister(NEXTION_EVENT, ESP_EVENT_ANY_ID, EntitiesPage::_handle_nextion_event);
 
+  EntitiesPage::_current_entities_page = nullptr;
   EntitiesPage::_currently_showing_page_type = 0;       // Set to 0 to force a page navigation on Nextion display when showing EntitiesPage next time.
   EntitiesPage::_currently_showing_header_text.set(""); // Clear stored string so that header text is always updated when showing EntitiesPage.
 }
@@ -149,11 +158,19 @@ void EntitiesPage::_handle_roommanager_event(void *arg, esp_event_base_t event_b
       EntitiesPage::_update_display();
     } else {
       ESP_LOGE("EntitiesPage", "Got new entity page data event but couldn't get new entity page data!");
+      if (EntitiesPage::_current_entities_page == nullptr) {
+        ESP_LOGE("EntitiesPage", "Currently not showing entities page and we failed to get data. Will go back to HomePage.");
+        HomePage::show();
+      }
     }
   }
 }
 
 void EntitiesPage::_handle_nextion_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
+  if (EntitiesPage::_current_entities_page == nullptr || EntitiesPage::_currently_showing_page_type == 0) { // We are currently not displaying. Ignore Nextion event.
+    return;
+  }
+
   switch (event_id) {
   case nextion_event_t::TOUCH_EVENT: {
     nextion_event_touch_t *data = (nextion_event_touch_t *)event_data;

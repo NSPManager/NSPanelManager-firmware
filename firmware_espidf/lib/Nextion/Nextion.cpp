@@ -726,7 +726,9 @@ esp_err_t Nextion::start_update(uint32_t comms_baud, uint32_t upload_baudrate, b
 
     Nextion::restart();
 
-    uart_set_baudrate(UART_NUM_2, comms_baud);
+    if (uart_set_baudrate(UART_NUM_2, comms_baud) != ESP_OK) {
+      ESP_LOGE("Nextion", "Failed to set new baud rate %lu", comms_baud);
+    }
 
     // Wait for panel to start
     vTaskDelay(pdMS_TO_TICKS(10000));
