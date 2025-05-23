@@ -51,6 +51,7 @@ esp_err_t WebManager::_handle_uri_config_data(httpd_req_t *req) {
     cJSON_AddFalseToObject(json, "use_latest_nextion_upload_protocol");
   }
   cJSON_AddNumberToObject(json, "nextion_upload_baudrate", ConfigManager::nextion_upload_baudrate);
+  cJSON_AddNumberToObject(json, "communication_baud_rate", ConfigManager::communication_baud_rate);
 
   if (httpd_resp_set_type(req, "application/json") != ESP_OK) {
     ESP_LOGE("Web", "Failed to set content type for response!");
@@ -148,6 +149,12 @@ esp_err_t WebManager::_handle_uri_save_config(httpd_req_t *req) {
     ConfigManager::nextion_upload_baudrate = atoi(result["upload_baud_rate"].c_str());
   } else {
     ESP_LOGE("WebManager", "Could not find field name 'upload_baud_rate' while saving config from web post request!");
+  }
+
+  if (result.find("communication_baud_rate") != result.end()) {
+    ConfigManager::communication_baud_rate = atoi(result["communication_baud_rate"].c_str());
+  } else {
+    ESP_LOGE("WebManager", "Could not find field name 'communication_baud_rate' while saving config from web post request!");
   }
 
   httpd_resp_set_status(req, "302 Found");  // Set the status code

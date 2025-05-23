@@ -38,7 +38,7 @@ esp_err_t Nextion::init() {
 
   // Configure UART
   Nextion::_uart_config = {
-      .baud_rate = 115200,
+      .baud_rate = (int)ConfigManager::communication_baud_rate,
       .data_bits = UART_DATA_8_BITS,
       .parity = UART_PARITY_DISABLE,
       .stop_bits = UART_STOP_BITS_1,
@@ -713,7 +713,7 @@ void Nextion::restart() {
   gpio_set_level(NEXTION_ON_OFF_GPIO, 0); // Turn on power to the display
 }
 
-esp_err_t Nextion::start_update(uint32_t comms_baud, uint32_t upload_baudrate, bool use_new_upload_protocol, uint64_t upload_file_size) {
+esp_err_t Nextion::start_update(uint32_t upload_baudrate, bool use_new_upload_protocol, uint64_t upload_file_size) {
   if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(10000)) == pdTRUE) {
     if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(10000)) == pdTRUE) {
       Nextion::_current_nextion_state = nextion_state_t::UPDATING; // Set state to updating so that other functions won't write to the UART.
@@ -725,10 +725,6 @@ esp_err_t Nextion::start_update(uint32_t comms_baud, uint32_t upload_baudrate, b
     }
 
     Nextion::restart();
-
-    if (uart_set_baudrate(UART_NUM_2, comms_baud) != ESP_OK) {
-      ESP_LOGE("Nextion", "Failed to set new baud rate %lu", comms_baud);
-    }
 
     // Wait for panel to start
     vTaskDelay(pdMS_TO_TICKS(10000));

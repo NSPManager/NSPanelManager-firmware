@@ -123,6 +123,11 @@ esp_err_t ConfigManager::load_config() {
     ConfigManager::nextion_upload_baudrate = item->valueint;
   }
 
+  item = cJSON_GetObjectItem(json, "comms_baud");
+  if (cJSON_IsNumber(item)) {
+    ConfigManager::communication_baud_rate = item->valueint;
+  }
+
   item = cJSON_GetObjectItem(json, "num_failed_boots");
   if (cJSON_IsNumber(item)) {
     ConfigManager::num_failed_boots = item->valueint;
@@ -159,6 +164,7 @@ void ConfigManager::create_default() {
 
   ConfigManager::use_latest_nextion_upload_protocol = true;
   ConfigManager::nextion_upload_baudrate = 115200;
+  ConfigManager::communication_baud_rate = 115200;
   ConfigManager::log_level = ESP_LOG_WARN;
 }
 
@@ -198,6 +204,7 @@ esp_err_t ConfigManager::save_config() {
   }
 
   cJSON_AddNumberToObject(json, "upload_baud", ConfigManager::nextion_upload_baudrate);
+  cJSON_AddNumberToObject(json, "comms_baud", ConfigManager::communication_baud_rate);
   cJSON_AddNumberToObject(json, "num_failed_boots", ConfigManager::num_failed_boots);
 
   char *json_string = cJSON_Print(json);

@@ -181,6 +181,7 @@
           document.getElementById("nextion_latest_protocol").checked = false;
         }
         document.getElementById("upload_baud_rate").value = data.nextion_upload_baudrate;
+        document.getElementById("communication_baud_rate").value = data.communication_baud_rate;
         document.getElementById("block_access_wait_for_data_modal").classList.add("hidden");
       }).catch(error => {
         alert('There was a problem with the fetch operation:', error);
@@ -306,12 +307,11 @@
     class="overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 justify-center items-center w-full md:inset-0 h-[calc(100%-1rem)] max-h-full flex">
     <div class="fixed bg-black bg-opacity-90 top-0 left-0 w-full h-full"></div>
     <div class="relative p-4 w-full max-w-md max-h-full">
-      <div class="relative bg-white rounded-lg shadow dark:bg-gray-700">
+      <div class="relative bg-white rounded-lg shadow ">
         <div class="p-4 md:p-5 text-center">
           <div role="status">
-            <svg aria-hidden="true"
-              class="w-11 h-11 mx-auto text-gray-200 animate-spin dark:text-gray-600 fill-blue-600"
-              viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <svg aria-hidden="true" class="w-11 h-11 mx-auto text-gray-200 animate-spin " viewBox="0 0 100 101"
+              fill="none" xmlns="http://www.w3.org/2000/svg">
               <path
                 d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z"
                 fill="currentColor" />
@@ -321,7 +321,7 @@
             </svg>
             <span class="sr-only">Loading...</span>
           </div>
-          <h3 class="mt-5 text-lg font-normal text-gray-500 dark:text-gray-400">Loading data, please wait.</h3>
+          <h3 class="mt-5 text-lg font-normal text-gray-500 ">Loading data, please wait.</h3>
         </div>
       </div>
     </div>
@@ -333,14 +333,14 @@
       <div class="w-full h-full fixed bg-black opacity-90" onclick="close_wifi_select_modal();"></div>
       <div class="relative p-4 w-full max-w-2xl max-h-full">
         <!-- Modal content -->
-        <div class="relative bg-white rounded-lg shadow dark:bg-gray-700">
+        <div class="relative bg-white rounded-lg shadow ">
           <!-- Modal header -->
-          <div class="flex items-center justify-between p-4 md:p-5 border-b rounded-t dark:border-gray-600">
-            <h3 class="text-xl font-semibold text-gray-900 dark:text-white">
+          <div class="flex items-center justify-between p-4 md:p-5 border-b rounded-t ">
+            <h3 class="text-xl font-semibold text-gray-900 ">
               Select WiFi
             </h3>
             <button type="button" onclick="close_wifi_select_modal();"
-              class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm w-8 h-8 ms-auto inline-flex justify-center items-center dark:hover:bg-gray-600 dark:hover:text-white"
+              class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm w-8 h-8 ms-auto inline-flex justify-center items-center "
               data-modal-hide="default-modal">
               <svg class="w-3 h-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none"
                 viewBox="0 0 14 14">
@@ -353,9 +353,8 @@
           <!-- Spinner while fetching wifi networks -->
           <div id="wifi_wait_div" class="p-4">
             <center>
-              <svg aria-hidden="true"
-                class="w-11 h-11 mx-auto text-gray-200 animate-spin dark:text-gray-600 fill-blue-600"
-                viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <svg aria-hidden="true" class="w-11 h-11 mx-auto text-gray-200 animate-spin " viewBox="0 0 100 101"
+                fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path
                   d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z"
                   fill="currentColor" />
@@ -732,6 +731,62 @@
               you wish to have different value than default. Changing this from
               default may cause the NSPanel to fail to update the screen GUI. If you are having problems starting the
               upload try changing to the Sonoff default or the Nextion default.
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <label for="communication_baud_rate" class="block mb-2 text-sm font-medium text-gray-900">Communication baud
+              rate
+              rate</label>
+            <div class="flex">
+              <span
+                class="inline-flex items-center px-3 text-sm text-gray-900 bg-gray-200 border rounded-e-0 border-gray-300 rounded-s-md   ">
+                <svg class="w-4 h-4 text-gray-500 " aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"
+                  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                  <title>Upload baud rate</title>
+                  <path
+                    d="M12,16A3,3 0 0,1 9,13C9,11.88 9.61,10.9 10.5,10.39L20.21,4.77L14.68,14.35C14.18,15.33 13.17,16 12,16M12,3C13.81,3 15.5,3.5 16.97,4.32L14.87,5.53C14,5.19 13,5 12,5A8,8 0 0,0 4,13C4,15.21 4.89,17.21 6.34,18.65H6.35C6.74,19.04 6.74,19.67 6.35,20.06C5.96,20.45 5.32,20.45 4.93,20.07V20.07C3.12,18.26 2,15.76 2,13A10,10 0 0,1 12,3M22,13C22,15.76 20.88,18.26 19.07,20.07V20.07C18.68,20.45 18.05,20.45 17.66,20.06C17.27,19.67 17.27,19.04 17.66,18.65V18.65C19.11,17.2 20,15.21 20,13C20,12 19.81,11 19.46,10.1L20.67,8C21.5,9.5 22,11.18 22,13Z" />
+                </svg>
+              </span>
+
+              <select name="communication_baud_rate" id="communication_baud_rate" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-e-md focus:ring-blue-500
+                focus:border-blue-500 block w-full p-2.5   
+                 ">
+                <option value="2400">2400</option>
+                <option value="4800">4800</option>
+                <option value="9600">9600 (Nextion default)</option>
+                <option value="19200">19200</option>
+                <option value="31250">31250</option>
+                <option value="38400">38400</option>
+                <option value="57600">57600</option>
+                <option value="115200">115200 (Sonoff/NSPanel Manager default)</option>
+                <option value="250000">250000</option>
+                <option value="260000">260000</option>
+                <option value="512000">512000</option>
+                <option value="921600">921600</option>
+              </select>
+            </div>
+
+            <div class="bg-yellow-300 rounded-md p-4 is-warning mt-2">
+              <div class="text-lg font-medium">Warning.</div>
+              <p>
+                This is the baud rate that will be used to communicate with the panel. This may be necessary to change
+                in
+                some circumstances but should not be if not absolutely necessary.
+              </p>
+              <p>
+                In case this is not set to the same as the firmware running on the screen itself, ie. the Nextion
+                display
+                (the GUI), then nothing will work as expected.
+              </p>
+              <p>
+                The only reason for this to change is in the case of a freshly flashed panel from a previous firmware
+                that
+                did not use <span class="font-bold">115200</span> as the default baud or the
+                panel has been reset to the Nextion default in which case you need to change this to 9600 to
+                allow the ESP32 firmware to update the GUI. When the GUI update is complete you need to change this back
+                to 115200 manually in order to get the panel working correctly again.
+              </p>
             </div>
           </div>
         </div>
