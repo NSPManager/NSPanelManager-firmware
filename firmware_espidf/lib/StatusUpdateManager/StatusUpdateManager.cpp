@@ -46,9 +46,9 @@ void StatusUpdateManager::init() {
 
   // Setup ADC for reading temperature
   adc1_config_width(ADC_WIDTH_BIT_12);
-  adc1_config_channel_atten(ADC1_CHANNEL_2, ADC_ATTEN_DB_0);
+  adc1_config_channel_atten(ADC1_CHANNEL_2, ADC_ATTEN_DB_11);
   StatusUpdateManager::_adc_chars = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
-  esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_0, ADC_WIDTH_BIT_12, 0, StatusUpdateManager::_adc_chars);
+  esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 0, StatusUpdateManager::_adc_chars);
 
   err = esp_timer_start_periodic(StatusUpdateManager::_status_update_timer, 30000 * 1000); // Send status update every 30 seconds
   if (err != ESP_OK) {
@@ -107,32 +107,47 @@ void StatusUpdateManager::_measure_temperature(void *arg) {
   if (esp_adc_cal_get_voltage(adc_channel_t::ADC_CHANNEL_2, StatusUpdateManager::_adc_chars, &read_voltage_mv) == ESP_OK) {
     // We now have temperature as a voltage. Convert voltage into celsius:
     double read_voltage_v = (double)read_voltage_mv / 1000.0; // Convert mV to V.
-    double current_temperature = 25 + log(((11200.0 * read_voltage_v / (3.3 - read_voltage_v)) / 10000)) + StatusUpdateManager::_temperature_offset_calibration;
-    current_temperature = std::round(current_temperature * 10) / 10; // Round value to 1 decimal precision
 
-    // If we have read the _measured_temperature_next_index slot previously, remove it from the total before setting the new value.
-    if (StatusUpdateManager::_measured_temperature_total_samples >= StatusUpdateManager::_measured_temperature_next_index + 1) {
-      StatusUpdateManager::_measured_temperature_total_sum -= StatusUpdateManager::_measured_temperatures[StatusUpdateManager::_measured_temperature_next_index]; // Remove old sample from current index from total
+    // Calculate temperature from NTC using the Steinhart–Hart equation
+    // See https://robertvicol.com/tech/arduino-measuring-temperature-with-ntc-steinhart-hart-formula/ for example
+    // float Resistance = (3.3 - read_voltage_v) - 1;
+    // double R2 = 12400.0 / Resistance;
+    // double T = (1.0 / (-0.2860629305E-03 + 4.484292072E-04 * log(R2) + -8.321267622E-07 * log(R2) * log(R2) * log(R2))) - 273.15;
+    // double current_temperature = T;
+
+    double R2 = 8800 / ((3.3 - read_voltage_v) - 1);
+    double steinhart = R2 / 12400;                   // (R/Ro)
+    steinhart = log(steinhart);                      // ln(R/Ro)
+    steinhart /= 3950.0;                             // 1/B * ln(R/Ro)
+    steinhart += 1.0 / (25.0 + 273.15);              // + (1/To)
+    steinhart = 1.0 / steinhart;                     // Invert
+    double current_temperature = steinhart - 273.15; // convert Kelvin to *C
+
+    if (StatusUpdateManager::_measure_temperature_in_fahrenheit) {
+      current_temperature = (current_temperature * 1.8) + 32;
     }
 
+    current_temperature += StatusUpdateManager::_temperature_offset_calibration;
+
+    StatusUpdateManager::_measured_temperatures[StatusUpdateManager::_measured_temperature_next_index++] = current_temperature;
     // We only have space for 30 samples.
     if (StatusUpdateManager::_measured_temperature_total_samples < 30) {
       StatusUpdateManager::_measured_temperature_total_samples++;
     }
 
-    // Set _measured_temperature_next_index slot to read value and recalculate average temperature
-    StatusUpdateManager::_measured_temperatures[StatusUpdateManager::_measured_temperature_next_index++] = current_temperature;
-    StatusUpdateManager::_measured_temperature_total_sum += current_temperature;
-    double average_temperature = StatusUpdateManager::_measured_temperature_total_sum / StatusUpdateManager::_measured_temperature_total_samples;
-    StatusUpdateManager::_measured_average_temperature.set(average_temperature);
-
     if (StatusUpdateManager::_measured_temperature_next_index >= 30) {
       StatusUpdateManager::_measured_temperature_next_index = 0;
-      // Only send event ever 30 seconds to skip unnecessary events
-      esp_event_post(STATUSUPDATEMANAGER_EVENT, statusupdatemanagerevent_t::AVERAGE_TEMP_UPDATE, &average_temperature, sizeof(average_temperature), pdMS_TO_TICKS(250));
+      // Only calculate and send event ever 30 seconds to skip unnecessary events
+
+      double current_average_temperature = 0;
+      for (int i = 0; i < StatusUpdateManager::_measured_temperature_total_samples; i++) {
+        current_average_temperature += StatusUpdateManager::_measured_temperatures[i] / StatusUpdateManager::_measured_temperature_total_samples;
+      }
+      StatusUpdateManager::_measured_average_temperature.set(current_average_temperature);
+      esp_event_post(STATUSUPDATEMANAGER_EVENT, statusupdatemanagerevent_t::AVERAGE_TEMP_UPDATE, &current_average_temperature, sizeof(current_average_temperature), pdMS_TO_TICKS(250));
     }
   } else {
-    ESP_LOGW("StatusUpdateManager", "Failed to get read voltage while measuring temperature from NTC.");
+    ESP_LOGW("StatusUpdateManager", "Failed to read voltage while measuring temperature from NTC.");
   }
 }
 

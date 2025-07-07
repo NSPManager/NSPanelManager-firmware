@@ -15,6 +15,8 @@ void WebManager::start() {
     if (httpd_start(&WebManager::_server, &WebManager::_config) == ESP_OK) {
       httpd_register_uri_handler(WebManager::_server, &WebManager::_uri_index);                  // Register index view
       httpd_register_uri_handler(WebManager::_server, &WebManager::_uri_save_config);            // Register URI for saving config data
+      httpd_register_uri_handler(WebManager::_server, &WebManager::_uri_factory_reset);          // Register URI to factory reset device
+      httpd_register_uri_handler(WebManager::_server, &WebManager::_uri_reboot);                 // Register URI to reboot
       httpd_register_uri_handler(WebManager::_server, &WebManager::_uri_config_data);            // Register URI for config data
       httpd_register_uri_handler(WebManager::_server, &WebManager::_uri_status_data);            // Register URI for status data
       httpd_register_uri_handler(WebManager::_server, &WebManager::_uri_get_available_networks); // Register URI for getting list of available networks
@@ -161,6 +163,23 @@ esp_err_t WebManager::_handle_uri_save_config(httpd_req_t *req) {
   httpd_resp_set_hdr(req, "Location", "/"); // Set the Location header
   httpd_resp_send(req, NULL, 0);            // Send the response
 
+  ConfigManager::save_config();
+  esp_restart();
+  return ESP_OK;
+}
+
+esp_err_t WebManager::_handle_uri_reboot(httpd_req_t *req) {
+  ESP_LOGI("WebManager", "Reboot requested from web interface.");
+  vTaskDelay(pdMS_TO_TICKS(250));
+  esp_restart();
+  return ESP_OK;
+}
+
+esp_err_t WebManager::_handle_uri_factory_reset(httpd_req_t *req) {
+  ESP_LOGI("WebManager", "Factory reset requested from web interface.");
+  vTaskDelay(pdMS_TO_TICKS(250));
+
+  ConfigManager::create_default();
   ConfigManager::save_config();
   esp_restart();
   return ESP_OK;

@@ -60,9 +60,6 @@ private:
   // How many samples has been read from the temperature sensor
   static inline uint8_t _measured_temperature_total_samples;
 
-  // Total sum of all measured temperatures. Used to calculate _measured_average_temperature
-  static inline float _measured_temperature_total_sum;
-
   // Mutex to only allow once task at the time access to the _status_report.
   static inline SemaphoreHandle_t _status_report_mutex;
 

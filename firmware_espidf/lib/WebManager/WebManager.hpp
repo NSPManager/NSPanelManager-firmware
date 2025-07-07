@@ -12,6 +12,8 @@ public:
 private:
   static esp_err_t _handle_uri_index(httpd_req_t *req);
   static esp_err_t _handle_uri_save_config(httpd_req_t *req);
+  static esp_err_t _handle_uri_reboot(httpd_req_t *req);
+  static esp_err_t _handle_uri_factory_reset(httpd_req_t *req);
   static esp_err_t _handle_uri_config_data(httpd_req_t *req);
   static esp_err_t _handle_uri_status_data(httpd_req_t *req);
   static esp_err_t _handle_uri_get_available_networks(httpd_req_t *req);
@@ -47,6 +49,16 @@ private:
       .uri = "/save_config",
       .method = HTTP_POST,
       .handler = _handle_uri_save_config,
+      .user_ctx = NULL};
+  static inline httpd_uri_t _uri_factory_reset = {
+      .uri = "/factory_reset",
+      .method = HTTP_POST,
+      .handler = _handle_uri_factory_reset,
+      .user_ctx = NULL};
+  static inline httpd_uri_t _uri_reboot = {
+      .uri = "/reboot",
+      .method = HTTP_POST,
+      .handler = _handle_uri_reboot,
       .user_ctx = NULL};
   static inline httpd_uri_t _uri_config_data = {
       .uri = "/config_data",

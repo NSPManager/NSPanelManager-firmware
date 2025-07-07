@@ -348,7 +348,12 @@ void EntitiesPage::_handle_items8_touch_event(nextion_event_touch_t *touch_data)
       if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].label_id) {
         if (touch_data->pressed) {
           if (EntitiesPage::_current_entities_page->entities[i] != nullptr) [[likely]] {
+            ESP_LOGI("EntitiesPage", "Test");
+            vTaskDelay(pdMS_TO_TICKS(500));
             std::string topic_string = EntitiesPage::_current_entities_page->entities[i]->mqtt_state_topic;
+            ESP_LOGI("EntitiesPage", "Test2");
+            vTaskDelay(pdMS_TO_TICKS(500));
+
             if (!topic_string.empty()) [[likely]] {
               EntityPage::show(topic_string);
             }
