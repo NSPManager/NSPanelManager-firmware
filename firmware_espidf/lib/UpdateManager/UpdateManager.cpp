@@ -37,7 +37,8 @@ void UpdateManager::update_gui(void *param) {
     tft_file_url.append(NSPM_ConfigManager::get_manager_address());
     tft_file_url.append(":");
     tft_file_url.append(std::to_string(NSPM_ConfigManager::get_manager_port()));
-    tft_file_url.append(config->is_us_panel ? "/download_tft_us" : "/download_tft_eu");
+    tft_file_url.append("/download_tft/");
+    tft_file_url.append(std::to_string(config->nspanel_id));
 
     esp_http_client_config_t http_client_config = {
         .url = tft_file_url.c_str(),
@@ -209,7 +210,8 @@ void UpdateManager::update_gui(void *param) {
     gui_md5_checksum_url.append(NSPM_ConfigManager::get_manager_address());
     gui_md5_checksum_url.append(":");
     gui_md5_checksum_url.append(std::to_string(NSPM_ConfigManager::get_manager_port()));
-    gui_md5_checksum_url.append(config->is_us_panel ? "/checksum_tft_file_us" : "/checksum_tft_file_eu");
+    gui_md5_checksum_url.append("/checksum_tft_file/");
+    gui_md5_checksum_url.append(std::to_string(config->nspanel_id));
 
     ESP_LOGD("UpdateManager", "Will download md5 checksum from URL: %s", gui_md5_checksum_url.c_str());
     std::vector<uint8_t> data;

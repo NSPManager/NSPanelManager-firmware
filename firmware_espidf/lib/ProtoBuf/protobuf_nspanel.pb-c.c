@@ -1096,7 +1096,7 @@ const ProtobufCEnumDescriptor nspanel_status_report__state__descriptor =
   nspanel_status_report__state__value_ranges,
   NULL,NULL,NULL,NULL   /* reserved[1234] */
 };
-static const ProtobufCFieldDescriptor nspanel_status_report__field_descriptors[8] =
+static const ProtobufCFieldDescriptor nspanel_status_report__field_descriptors[11] =
 {
   {
     "nspanel_state",
@@ -1194,11 +1194,50 @@ static const ProtobufCFieldDescriptor nspanel_status_report__field_descriptors[8
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
+  {
+    "md5_firmware",
+    9,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(NSPanelStatusReport, md5_firmware),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "md5_littlefs",
+    10,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(NSPanelStatusReport, md5_littlefs),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "md5_tft_gui",
+    11,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(NSPanelStatusReport, md5_tft_gui),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
 };
 static const unsigned nspanel_status_report__field_indices_by_name[] = {
   3,   /* field[3] = heap_used_pct */
   6,   /* field[6] = ip_address */
   4,   /* field[4] = mac_address */
+  8,   /* field[8] = md5_firmware */
+  9,   /* field[9] = md5_littlefs */
+  10,   /* field[10] = md5_tft_gui */
   0,   /* field[0] = nspanel_state */
   2,   /* field[2] = rssi */
   5,   /* field[5] = temperature */
@@ -1208,7 +1247,7 @@ static const unsigned nspanel_status_report__field_indices_by_name[] = {
 static const ProtobufCIntRange nspanel_status_report__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 8 }
+  { 0, 11 }
 };
 const ProtobufCMessageDescriptor nspanel_status_report__descriptor =
 {
@@ -1218,7 +1257,7 @@ const ProtobufCMessageDescriptor nspanel_status_report__descriptor =
   "NSPanelStatusReport",
   "",
   sizeof(NSPanelStatusReport),
-  8,
+  11,
   nspanel_status_report__field_descriptors,
   nspanel_status_report__field_indices_by_name,
   1,  nspanel_status_report__number_ranges,

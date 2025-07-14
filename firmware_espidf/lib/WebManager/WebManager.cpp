@@ -170,6 +170,11 @@ esp_err_t WebManager::_handle_uri_save_config(httpd_req_t *req) {
 
 esp_err_t WebManager::_handle_uri_reboot(httpd_req_t *req) {
   ESP_LOGI("WebManager", "Reboot requested from web interface.");
+
+  httpd_resp_set_status(req, "302 Found");  // Set the status code
+  httpd_resp_set_hdr(req, "Location", "/"); // Set the Location header
+  httpd_resp_send(req, NULL, 0);            // Send the response
+
   vTaskDelay(pdMS_TO_TICKS(250));
   esp_restart();
   return ESP_OK;

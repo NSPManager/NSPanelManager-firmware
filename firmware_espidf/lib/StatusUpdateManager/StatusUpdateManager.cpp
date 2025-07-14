@@ -31,6 +31,9 @@ void StatusUpdateManager::init() {
   StatusUpdateManager::_status_report.rssi = 0;
   StatusUpdateManager::_status_report.temperature = 0;
   StatusUpdateManager::_status_report.mac_address = (char *)WiFiManager::mac_string();
+  StatusUpdateManager::_status_report.md5_firmware = (char *)ConfigManager::md5_firmware.c_str();
+  StatusUpdateManager::_status_report.md5_littlefs = (char *)ConfigManager::md5_data_file.c_str();
+  StatusUpdateManager::_status_report.md5_tft_gui = (char *)ConfigManager::md5_gui.c_str();
 
   // Create status update timer
   esp_err_t err = esp_timer_create(&StatusUpdateManager::_status_update_timer_args, &StatusUpdateManager::_status_update_timer);
@@ -110,11 +113,7 @@ void StatusUpdateManager::_measure_temperature(void *arg) {
 
     // Calculate temperature from NTC using the Steinhart–Hart equation
     // See https://robertvicol.com/tech/arduino-measuring-temperature-with-ntc-steinhart-hart-formula/ for example
-    // float Resistance = (3.3 - read_voltage_v) - 1;
-    // double R2 = 12400.0 / Resistance;
-    // double T = (1.0 / (-0.2860629305E-03 + 4.484292072E-04 * log(R2) + -8.321267622E-07 * log(R2) * log(R2) * log(R2))) - 273.15;
-    // double current_temperature = T;
-
+    // Thanks to @atirage in https://github.com/arendst/Tasmota/discussions/15737 for providing reference values.
     double R2 = 8800 / ((3.3 - read_voltage_v) - 1);
     double steinhart = R2 / 12400;                   // (R/Ro)
     steinhart = log(steinhart);                      // ln(R/Ro)

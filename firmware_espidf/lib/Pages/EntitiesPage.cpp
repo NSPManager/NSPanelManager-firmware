@@ -144,6 +144,7 @@ void EntitiesPage::_update_displayed_item_in_slot(NSPanelRoomEntitiesPage__Entit
 
     Nextion::set_component_visibility(page_slot.button_name, true, 250);
     Nextion::set_component_visibility(page_slot.label_name, true, 250);
+    vTaskDelay(pdMS_TO_TICKS(50));
   } else {
     // No entity was found for page slot. Blank page slot.
     Nextion::set_component_visibility(page_slot.button_name, false, 250);
@@ -249,10 +250,14 @@ void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data)
     for (int i = 0; i < 4; i++) {
       if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].label_id) {
         if (touch_data->pressed) {
-          if (EntitiesPage::_current_entities_page->entities[i] != nullptr) [[likely]] {
-            std::string topic_string = EntitiesPage::_current_entities_page->entities[i]->mqtt_state_topic;
-            if (!topic_string.empty()) [[likely]] {
-              EntityPage::show(topic_string);
+          for (int j = 0; j < EntitiesPage::_current_entities_page->n_entities; j++) {
+            if (EntitiesPage::_current_entities_page->entities[j]->room_view_position == i) {
+              if (EntitiesPage::_current_entities_page->entities[i] != nullptr) [[likely]] {
+                std::string topic_string = EntitiesPage::_current_entities_page->entities[i]->mqtt_state_topic;
+                if (!topic_string.empty()) [[likely]] {
+                  EntityPage::show(topic_string);
+                }
+              }
             }
           }
         }
@@ -347,15 +352,16 @@ void EntitiesPage::_handle_items8_touch_event(nextion_event_touch_t *touch_data)
     for (int i = 0; i < 8; i++) {
       if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].label_id) {
         if (touch_data->pressed) {
-          if (EntitiesPage::_current_entities_page->entities[i] != nullptr) [[likely]] {
-            ESP_LOGI("EntitiesPage", "Test");
-            vTaskDelay(pdMS_TO_TICKS(500));
-            std::string topic_string = EntitiesPage::_current_entities_page->entities[i]->mqtt_state_topic;
-            ESP_LOGI("EntitiesPage", "Test2");
-            vTaskDelay(pdMS_TO_TICKS(500));
+          for (int j = 0; j < EntitiesPage::_current_entities_page->n_entities; j++) {
+            if (EntitiesPage::_current_entities_page->entities[j] != nullptr) [[likely]] {
+              if (EntitiesPage::_current_entities_page->entities[j]->room_view_position == i) {
+                std::string topic_string = EntitiesPage::_current_entities_page->entities[j]->mqtt_state_topic;
 
-            if (!topic_string.empty()) [[likely]] {
-              EntityPage::show(topic_string);
+                if (!topic_string.empty()) [[likely]] {
+                  EntityPage::show(topic_string);
+                }
+                return; // Found match, no need to continue.
+              }
             }
           }
         }
@@ -450,10 +456,14 @@ void EntitiesPage::_handle_items12_touch_event(nextion_event_touch_t *touch_data
     for (int i = 0; i < 12; i++) {
       if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].label_id) {
         if (touch_data->pressed) {
-          if (EntitiesPage::_current_entities_page->entities[i] != nullptr) [[likely]] {
-            std::string topic_string = EntitiesPage::_current_entities_page->entities[i]->mqtt_state_topic;
-            if (!topic_string.empty()) [[likely]] {
-              EntityPage::show(topic_string);
+          for (int j = 0; j < EntitiesPage::_current_entities_page->n_entities; j++) {
+            if (EntitiesPage::_current_entities_page->entities[j] != nullptr) [[likely]] {
+              if (EntitiesPage::_current_entities_page->entities[j]->room_view_position == i) {
+                std::string topic_string = EntitiesPage::_current_entities_page->entities[j]->mqtt_state_topic;
+                if (!topic_string.empty()) [[likely]] {
+                  EntityPage::show(topic_string);
+                }
+              }
             }
           }
         }

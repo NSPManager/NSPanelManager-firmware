@@ -52,12 +52,12 @@ private:
       .user_ctx = NULL};
   static inline httpd_uri_t _uri_factory_reset = {
       .uri = "/factory_reset",
-      .method = HTTP_POST,
+      .method = HTTP_GET,
       .handler = _handle_uri_factory_reset,
       .user_ctx = NULL};
   static inline httpd_uri_t _uri_reboot = {
       .uri = "/reboot",
-      .method = HTTP_POST,
+      .method = HTTP_GET,
       .handler = _handle_uri_reboot,
       .user_ctx = NULL};
   static inline httpd_uri_t _uri_config_data = {
