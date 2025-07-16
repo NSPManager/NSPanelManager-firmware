@@ -378,12 +378,11 @@ struct  NSPanelMQTTManagerCommand__SaveSceneCommand
 struct  NSPanelMQTTManagerCommand__ButtonPressed
 {
   ProtobufCMessage base;
-  int32_t nspanel_id;
   int32_t button_id;
 };
 #define NSPANEL_MQTTMANAGER_COMMAND__BUTTON_PRESSED__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&nspanel_mqttmanager_command__button_pressed__descriptor) \
-    , 0, 0 }
+    , 0 }
 
 
 typedef enum {
@@ -403,6 +402,7 @@ typedef enum {
 struct  NSPanelMQTTManagerCommand
 {
   ProtobufCMessage base;
+  int32_t nspanel_id;
   NSPanelMQTTManagerCommand__CommandDataCase command_data_case;
   union {
     NSPanelMQTTManagerCommand__FirstPageTurnLightOn *first_page_turn_on;
@@ -415,7 +415,7 @@ struct  NSPanelMQTTManagerCommand
 };
 #define NSPANEL_MQTTMANAGER_COMMAND__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&nspanel_mqttmanager_command__descriptor) \
-    , NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA__NOT_SET, {0} }
+    , 0, NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA__NOT_SET, {0} }
 
 
 /* NSPanelConfig__RoomInfo methods */

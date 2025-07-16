@@ -43,6 +43,11 @@ public:
   static esp_err_t replace_config(std::shared_ptr<NSPanelConfig> *config);
 
   /**
+   * Get the NSPanel ID as registered with the manager.
+   */
+  static int32_t get_nspanel_id();
+
+  /**
    * @brief Get the manager IP address
    */
   static std::string get_manager_address();

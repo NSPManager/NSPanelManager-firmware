@@ -426,6 +426,7 @@ void HomePage::_send_ceiling_master_button_command_to_manager() {
         NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
         cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_FIRST_PAGE_TURN_ON;
         cmd.first_page_turn_on = &turn_light_on_cmd;
+        cmd.nspanel_id = config->nspanel_id;
 
         uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
         std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
@@ -493,6 +494,7 @@ void HomePage::_send_ceiling_master_button_command_to_manager() {
       NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
       cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_FIRST_PAGE_TURN_ON;
       cmd.first_page_turn_on = &turn_light_on_cmd;
+      cmd.nspanel_id = config->nspanel_id;
 
       uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
       std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
@@ -565,6 +567,7 @@ void HomePage::_send_table_master_button_command_to_manager() {
         NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
         cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_FIRST_PAGE_TURN_ON;
         cmd.first_page_turn_on = &turn_light_on_cmd;
+        cmd.nspanel_id = config->nspanel_id;
 
         uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
         std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
@@ -632,6 +635,7 @@ void HomePage::_send_table_master_button_command_to_manager() {
       NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
       cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_FIRST_PAGE_TURN_ON;
       cmd.first_page_turn_on = &turn_light_on_cmd;
+      cmd.nspanel_id = config->nspanel_id;
 
       uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
       std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
@@ -804,6 +808,7 @@ void HomePage::_handle_brightness_slider_event() {
   NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
   cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_FIRST_PAGE_TURN_ON;
   cmd.first_page_turn_on = &turn_light_on_cmd;
+  cmd.nspanel_id = NSPM_ConfigManager::get_nspanel_id();
 
   uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
   std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
@@ -918,6 +923,7 @@ void HomePage::_handle_color_temperature_slider_event() {
   NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
   cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_FIRST_PAGE_TURN_ON;
   cmd.first_page_turn_on = &turn_light_on_cmd;
+  cmd.nspanel_id = NSPM_ConfigManager::get_nspanel_id();
 
   uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
   std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope

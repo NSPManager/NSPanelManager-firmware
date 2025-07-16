@@ -107,8 +107,8 @@ void ButtonManager::_button1_press(void) {
       NSPanelMQTTManagerCommand command = NSPANEL_MQTTMANAGER_COMMAND__INIT;
       NSPanelMQTTManagerCommand__ButtonPressed pressed_command = NSPANEL_MQTTMANAGER_COMMAND__BUTTON_PRESSED__INIT;
       pressed_command.button_id = 1;
-      pressed_command.nspanel_id = config->nspanel_id;
       command.button_pressed = &pressed_command;
+      command.nspanel_id = config->nspanel_id;
       command.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_BUTTON_PRESSED;
 
       uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&command);
@@ -147,8 +147,8 @@ void ButtonManager::_button2_press(void) {
       NSPanelMQTTManagerCommand command = NSPANEL_MQTTMANAGER_COMMAND__INIT;
       NSPanelMQTTManagerCommand__ButtonPressed pressed_command = NSPANEL_MQTTMANAGER_COMMAND__BUTTON_PRESSED__INIT;
       pressed_command.button_id = 2;
-      pressed_command.nspanel_id = config->nspanel_id;
       command.button_pressed = &pressed_command;
+      command.nspanel_id = config->nspanel_id;
       command.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_BUTTON_PRESSED;
 
       uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&command);

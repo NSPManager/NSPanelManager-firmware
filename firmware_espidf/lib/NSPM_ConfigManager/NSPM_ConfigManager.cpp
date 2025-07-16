@@ -187,6 +187,15 @@ esp_err_t NSPM_ConfigManager::replace_config(std::shared_ptr<NSPanelConfig> *con
   return ESP_ERR_NOT_FINISHED;
 }
 
+int32_t NSPM_ConfigManager::get_nspanel_id() {
+  std::shared_ptr<NSPanelConfig> config;
+  if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+    return config->nspanel_id;
+  }
+  ESP_LOGE("NSPM_ConfigManager", "Failed to get config to get nspanel ID!");
+  return 0;
+}
+
 std::string NSPM_ConfigManager::get_manager_address() {
   return NSPM_ConfigManager::_manager_address;
 }

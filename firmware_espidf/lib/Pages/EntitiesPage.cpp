@@ -518,6 +518,7 @@ void EntitiesPage::_send_entity_toggle_command_to_manager(uint32_t entity_page_i
   NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
   cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_TOGGLE_ENTITY_FROM_ENTITIES_PAGE;
   cmd.toggle_entity_from_entities_page = &toggle_cmd;
+  cmd.nspanel_id = NSPM_ConfigManager::get_nspanel_id();
 
   uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
   std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
@@ -555,6 +556,7 @@ void EntitiesPage::_task_save_scene_progress(void *scene_slot) {
     NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
     cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_SAVE_SCENE_COMMAND;
     cmd.save_scene_command = &save_command;
+    cmd.nspanel_id = NSPM_ConfigManager::get_nspanel_id();
 
     uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
     std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
