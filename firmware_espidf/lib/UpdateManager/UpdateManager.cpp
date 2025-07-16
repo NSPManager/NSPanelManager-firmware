@@ -245,11 +245,11 @@ void UpdateManager::update_firmware(void *param) {
   firmware_md5_string.append("/checksum_firmware");
 
   std::vector<uint8_t> data;
-  if (UpdateManager::_download_data(&data, firmware_md5_string.c_str(), -1, -1) == ESP_OK) {
+  if (UpdateManager::_force_update || UpdateManager::_download_data(&data, firmware_md5_string.c_str(), -1, -1) == ESP_OK) {
     std::string md5_string = std::string((char *)data.data(), data.size());
     ESP_LOGD("UpdateManager", "Got new MD5 sum from manager: %s", md5_string.c_str());
 
-    if (md5_string.compare(ConfigManager::md5_firmware) != 0) {
+    if (UpdateManager::_force_update || md5_string.compare(ConfigManager::md5_firmware) != 0) {
       ESP_LOGI("UpdateManager", "New firmware available. Will update OTA.");
       if (UpdateManager::_update_firmware_ota() == ESP_OK) {
         ConfigManager::has_updated = true;
@@ -479,6 +479,9 @@ void UpdateManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
           ESP_LOGI("UpgradeManager", "Received command to reboot. Will reboot NSPanel.");
           esp_restart();
         } else if (command_string.compare("firmware_update") == 0 && UpdateManager::_current_update_task == NULL) {
+          xTaskCreatePinnedToCore(UpdateManager::update_firmware, "update_firmware", 8192, NULL, 2, &UpdateManager::_current_update_task, 1);
+        } else if (command_string.compare("firmware_update_force") == 0 && UpdateManager::_current_update_task == NULL) {
+          UpdateManager::_force_update = true;
           xTaskCreatePinnedToCore(UpdateManager::update_firmware, "update_firmware", 8192, NULL, 2, &UpdateManager::_current_update_task, 1);
         } else if (command_string.compare("tft_update") == 0 && UpdateManager::_current_update_task == NULL) {
           xTaskCreatePinnedToCore(UpdateManager::update_gui, "update_gui", 8192, NULL, 2, &UpdateManager::_current_update_task, 1);

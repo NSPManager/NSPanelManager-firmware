@@ -119,4 +119,7 @@ private:
 
   // After the next interrupt, should we reset the HTTP client?
   static inline bool _nextion_update_reset_http_client = false;
+
+  // When performing an update, should we force the update, ie. skip the check for if we are already up to date? If true, then yes, skip check.
+  static inline bool _force_update = false;
 };
