@@ -250,6 +250,12 @@ void UpdateManager::update_firmware(void *param) {
     ESP_LOGD("UpdateManager", "Got new MD5 sum from manager: %s", md5_string.c_str());
 
     if (UpdateManager::_force_update || md5_string.compare(ConfigManager::md5_firmware) != 0) {
+      if (UpdateManager::_force_update) {
+        ESP_LOGI("UpdateManager", "This is a force update, clearing stored checksum for firmware and littlefs.");
+        ConfigManager::md5_data_file = "";
+        ConfigManager::md5_firmware = "";
+        ConfigManager::save_config();
+      }
       ESP_LOGI("UpdateManager", "New firmware available. Will update OTA.");
       if (UpdateManager::_update_firmware_ota() == ESP_OK) {
         ConfigManager::has_updated = true;
