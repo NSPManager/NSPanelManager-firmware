@@ -409,3 +409,58 @@ public:
   static inline constexpr const uint8_t kelvin_mode_pic = 86;        // pic for mode button
   static inline constexpr const uint8_t rgb_mode_pic = 87;           // pic for mode button
 };
+
+// Struct to contain all data relevant for a thermostat option slot on the thermostat page.
+// This is used to better be able to loop over option slots instead of copy-paste lots
+// of code.
+struct GUI_THERMOSTAT_OPTIONS_MODE_DATA {
+  uint8_t button_id;
+  const char *button_name;
+  uint8_t label_id;
+  const char *label_name;
+};
+
+class GUI_THERMOSTAT_CONTROL_PAGE {
+public:
+  static inline constexpr const uint8_t page_id = 5;            // TODO: FIX!
+  static inline constexpr const char *page_name = "thermostat"; // TODO: FIX!
+
+  static inline constexpr const uint8_t back_button_id = 1;          // TODO: FIX!
+  static inline constexpr const uint8_t next_button_id = 8;          // TODO: FIX!
+  static inline constexpr const uint8_t previous_button_id = 7;      // TODO: FIX!
+  static inline constexpr const uint8_t next_mode_button_id = 5;     // TODO: FIX!
+  static inline constexpr const uint8_t previous_mode_button_id = 6; // TODO: FIX!
+
+  static inline constexpr const char *room_name_label_name = "currentLight";  // TODO: FIX!
+  static inline constexpr const char *temperature_label_name = "colormode";   // TODO: FIX!
+  static inline constexpr const char *set_label_name = "brightness";          // TODO: Maybe not needed?
+  static inline constexpr const char *current_mode_label_name = "kelvin_sat"; // TODO: FIX!
+
+  static inline constexpr GUI_THERMOSTAT_OPTIONS_MODE_DATA options[] = {
+      // TODO: Fix data
+      {
+          .button_id = 5,
+          .button_name = "i1_button",
+          .label_id = 1,
+          .label_name = "i1_label",
+      },
+      {
+          .button_id = 6,
+          .button_name = "i2_button",
+          .label_id = 2,
+          .label_name = "i2_label",
+      },
+      {
+          .button_id = 7,
+          .button_name = "i3_button",
+          .label_id = 3,
+          .label_name = "i3_label",
+      },
+      {
+          .button_id = 8,
+          .button_name = "i4_button",
+          .label_id = 4,
+          .label_name = "i4_label",
+      },
+  };
+};

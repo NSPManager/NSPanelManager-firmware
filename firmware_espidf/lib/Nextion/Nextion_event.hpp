@@ -1,6 +1,7 @@
 #pragma once
 #include <Nextion_constans.hpp>
 #include <esp_event.h>
+#include <string>
 #include <vector>
 
 ESP_EVENT_DECLARE_BASE(NEXTION_EVENT);
@@ -10,6 +11,7 @@ enum nextion_event_t {
   CONNECTED,
   RECEIVED_NSPM_FLAG,
   TOUCH_EVENT,
+  STRING_EVENT,
   SLEEP_EVENT,
   WAKE_EVENT,
   UPDATE_STARTED,

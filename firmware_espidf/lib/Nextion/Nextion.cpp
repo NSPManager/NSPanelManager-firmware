@@ -136,7 +136,7 @@ void Nextion::_task_uart_event(void *param) {
                 read_nextion_jump_instruction = false; // Reset special handling
               }
 
-              if (sizeof(uart_buffer) <= NEXTION_UART_EVENT_LOOP_STACK_SIZE - 512) { // Subtract 512 to allow for internal variables in the event loop
+              if (uart_buffer.size() <= NEXTION_UART_EVENT_LOOP_STACK_SIZE - 512) { // Subtract 512 to allow for internal variables in the event loop
                 switch (esp_event_post_to(Nextion::_handle_uart_data_event_loop, NEXTION_EVENT, nextion_event_t::RECEIVED_DATA, &uart_buffer, sizeof(uart_buffer), pdMS_TO_TICKS(16))) {
                 case ESP_OK:
                   break;
@@ -224,7 +224,7 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
   if (data->size() <= 0) [[unlikely]] {
     return;
   }
-  // ESP_LOGD("Nextion", "Read Nextion data: %s, size: %d", data->data, data->data_size);
+  ESP_LOGD("Nextion", "Read Nextion data: %.*s, size: %d", data->size(), data->data(), data->size());
 
   if (data->data()[0] == NEX_RET_NUMBER_HEAD) {
     // Got numeric data
@@ -266,6 +266,13 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
     } else {
       ESP_LOGE("Nextion", "Not enough bytes sent for 0x65 touch event.");
     }
+  } else if (data->data()[0] == NEX_OUT_STRING_DATA) {
+    if (data->size() >= 0) [[likely]] {
+      ESP_LOGD("Nextion", "Received string event: %.*s", data->size(), data->data());
+      esp_event_post(NEXTION_EVENT, nextion_event_t::STRING_EVENT, data->data(), data->size(), pdMS_TO_TICKS(16));
+    } else {
+      ESP_LOGE("Nextion", "Not enough bytes sent for 0x99 string data.");
+    }
   } else if (data->data()[0] == NEX_OUT_SLEEP) {
     esp_event_post(NEXTION_EVENT, nextion_event_t::SLEEP_EVENT, NULL, 0, pdMS_TO_TICKS(5000));
   } else if (data->data()[0] == NEX_OUT_WAKE) {
@@ -290,7 +297,7 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
       ESP_LOGE("Nextion", "Not enough bytes sent for 0x08 update byte offset! Only read %zu bytes.", data->size());
     }
   } else {
-    ESP_LOGW("Nextion", "Unknown event data from Nextion: %s", data->data());
+    ESP_LOGW("Nextion", "Unknown event data from Nextion: %.*s", data->size(), data->data());
   }
 }
 

@@ -56,6 +56,16 @@ private:
    */
   static void _handle_touch_event_light(uint16_t component_id, bool pressed);
 
+  /*
+   * Update displayed page and value of "Thermostat" page.
+   */
+  static void _update_display_thermostat();
+
+  /*
+   * Handle touch event for "Thermostat" page.
+   */
+  static void _handle_touch_event_thermostat(uint16_t component_id, bool pressed);
+
   /**
    * properly delete pointer and clear old data when shared_ptr expires
    */
@@ -65,6 +75,7 @@ private:
   enum _entity_page_modes {
     LIGHT_COLOR_TEMPERATURE,
     LIGHT_RGB,
+    THERMOSTAT,
   };
   static inline std::atomic<_entity_page_modes> _current_mode;
 

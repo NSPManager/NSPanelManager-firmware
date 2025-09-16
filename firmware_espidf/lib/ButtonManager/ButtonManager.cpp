@@ -2,8 +2,9 @@
 #include <ButtonManager.hpp>
 #include <ConfigManager.hpp>
 #include <MqttManager.hpp>
-#include <NSPM_ConfigManager.hpp> // Forward declared to allow compilation to succeed.
+#include <NSPM_ConfigManager.hpp>
 #include <NSPM_ConfigManager_event.hpp>
+#include <StatusUpdateManager_events.hpp>
 #include <WiFiManager.hpp>
 #include <driver/gpio.h>
 #include <esp_log.h>
@@ -22,6 +23,7 @@ void ButtonManager::init() {
   ButtonManager::_min_button_long_push_time = ConfigManager::min_button_long_push_time;
 
   esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, ButtonManager::_nspm_configmanager_event_handler, NULL);
+  esp_event_handler_register(STATUSUPDATEMANAGER_EVENT, statusupdatemanagerevent_t::AVERAGE_TEMP_UPDATE, ButtonManager::_new_temperature_event, NULL);
 
   ButtonManager::_relay_io_config = {};
   ButtonManager::_relay_io_config.intr_type = GPIO_INTR_DISABLE;
@@ -370,19 +372,66 @@ void ButtonManager::_nspm_configmanager_event_handler(void *arg, esp_event_base_
     ButtonManager::_button2_mode = config->button2_mode;
 
     bool save = false;
-    if (config->relay1_default_mode != ButtonManager::_relay1_default_mode) {
-      ESP_LOGI("ButtonManager", "Relay1 default state changed. Setting new state.");
-      ConfigManager::relay1_default_mode = config->relay1_default_mode;
-      ButtonManager::_relay1_default_mode = config->relay1_default_mode;
-      ButtonManager::_set_relay_state(1, config->relay1_default_mode, true);
+    if (config->button1_mode == NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__THERMOSTAT_HEAT || config->button1_mode == NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__THERMOSTAT_COOL) {
+      if (config->button1_mode == NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__THERMOSTAT_HEAT) {
+        ConfigManager::relay1_thermostat_cool_mode = false;
+        ConfigManager::relay1_thermostat_heat_mode = true;
+        ESP_LOGI("ButtonManager", "Relay1 is set to thermostat (heating) mode.");
+      } else if (config->button1_mode == NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__THERMOSTAT_COOL) {
+        ConfigManager::relay1_thermostat_heat_mode = false;
+        ConfigManager::relay1_thermostat_cool_mode = true;
+        ESP_LOGI("ButtonManager", "Relay1 is set to thermostat (cooling) mode.");
+      }
+      ConfigManager::relay1_lower_temperature = config->button1_lower_temperature;
+      ConfigManager::relay1_upper_temperature = config->button1_upper_temperature;
+
+      // If we are running in thermostat mode. Always set default to relay is off.
+      ConfigManager::relay1_default_mode = false;
+      ButtonManager::_relay1_default_mode = false;
+      ButtonManager::_set_relay_state(1, false, true);
       save = true;
+    } else {
+      ConfigManager::relay1_thermostat_heat_mode = false;
+      ConfigManager::relay1_thermostat_cool_mode = false;
+
+      if (config->relay1_default_mode != ButtonManager::_relay1_default_mode) {
+        ESP_LOGI("ButtonManager", "Relay1 default state changed. Setting new state.");
+        ConfigManager::relay1_default_mode = config->relay1_default_mode;
+        ButtonManager::_relay1_default_mode = config->relay1_default_mode;
+        ButtonManager::_set_relay_state(1, config->relay1_default_mode, true);
+        save = true;
+      }
     }
-    if (config->relay2_default_mode != ButtonManager::_relay2_default_mode) {
-      ESP_LOGI("ButtonManager", "Relay2 default state changed. Setting new state.");
-      ConfigManager::relay2_default_mode = config->relay2_default_mode;
-      ButtonManager::_relay2_default_mode = config->relay2_default_mode;
-      ButtonManager::_set_relay_state(2, config->relay2_default_mode, true);
+
+    if (config->button2_mode == NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__THERMOSTAT_HEAT || config->button2_mode == NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__THERMOSTAT_COOL) {
+      if (config->button2_mode == NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__THERMOSTAT_HEAT) {
+        ConfigManager::relay2_thermostat_cool_mode = false;
+        ConfigManager::relay2_thermostat_heat_mode = true;
+        ESP_LOGI("ButtonManager", "Relay2 is set to thermostat (heating) mode.");
+      } else if (config->button2_mode == NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__THERMOSTAT_COOL) {
+        ConfigManager::relay2_thermostat_heat_mode = false;
+        ConfigManager::relay2_thermostat_cool_mode = true;
+        ESP_LOGI("ButtonManager", "Relay2 is set to thermostat (cooling) mode.");
+      }
+      ConfigManager::relay2_lower_temperature = config->button2_lower_temperature;
+      ConfigManager::relay2_upper_temperature = config->button2_upper_temperature;
+
+      // If we are running in thermostat mode. Always set default to relay is off.
+      ConfigManager::relay2_default_mode = false;
+      ButtonManager::_relay2_default_mode = false;
+      ButtonManager::_set_relay_state(2, false, true);
       save = true;
+    } else {
+      ConfigManager::relay2_thermostat_cool_mode = false;
+      ConfigManager::relay2_thermostat_heat_mode = false;
+
+      if (config->relay2_default_mode != ButtonManager::_relay2_default_mode) {
+        ESP_LOGI("ButtonManager", "Relay2 default state changed. Setting new state.");
+        ConfigManager::relay2_default_mode = config->relay2_default_mode;
+        ButtonManager::_relay2_default_mode = config->relay2_default_mode;
+        ButtonManager::_set_relay_state(2, config->relay2_default_mode, true);
+        save = true;
+      }
     }
 
     if (config->min_button_push_time != ButtonManager::_min_button_push_time) {
@@ -410,6 +459,65 @@ void ButtonManager::_nspm_configmanager_event_handler(void *arg, esp_event_base_
     ButtonManager::_current_config = config;
   } else {
     ESP_LOGE("ButtonManager", "Got new config update but ButtonManager failed to read config. Cannot update internal values.");
+  }
+}
+
+void ButtonManager::_new_temperature_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
+  if (event_id != statusupdatemanagerevent_t::AVERAGE_TEMP_UPDATE) [[unlikely]] {
+    return;
+  }
+  double *new_avg_temp = ((double *)event_data);
+
+  if (ConfigManager::relay1_thermostat_heat_mode) {
+    if (*new_avg_temp >= ConfigManager::relay1_upper_temperature) {
+      if (_get_relay_state(1)) {
+        ESP_LOGI("ButtonManager", "Relay1 is set to heat mode and new temperature %f has gone above (>=) set threshold (%d). Stop heating.", *new_avg_temp, ConfigManager::relay1_upper_temperature);
+        _set_relay_state(1, false, true); // We are in heat mode and the temperature has risen above set threshold. Stop heating.
+      }
+    } else if (*new_avg_temp <= ConfigManager::relay1_lower_temperature) {
+      if (!_get_relay_state(1)) {
+        ESP_LOGI("ButtonManager", "Relay1 is set to heat mode and new temperature %f has gone below (<=) set threshold (%d). Start heating.", *new_avg_temp, ConfigManager::relay1_lower_temperature);
+        _set_relay_state(1, true, true); // We are in heat mode and the temperature has gone below set threshold. Start heating.
+      }
+    }
+  } else if (ConfigManager::relay1_thermostat_cool_mode) {
+    if (*new_avg_temp >= ConfigManager::relay1_upper_temperature) {
+      if (!_get_relay_state(1)) {
+        ESP_LOGI("ButtonManager", "Relay1 is set to cool mode and new temperature %f has gone above (>=) set threshold (%d). Start cooling.", *new_avg_temp, ConfigManager::relay1_upper_temperature);
+        _set_relay_state(1, true, true); // We are in cool mode and the temperature has risen above set threshold. Start cooling.
+      }
+    } else if (*new_avg_temp <= ConfigManager::relay1_lower_temperature) {
+      if (_get_relay_state(1)) {
+        ESP_LOGI("ButtonManager", "Relay1 is set to cool mode and new temperature %f has gone below (<=) set threshold (%d). Stop cooling.", *new_avg_temp, ConfigManager::relay1_upper_temperature);
+        _set_relay_state(1, false, true); // We are in cool mode and the temperature has gone below set threshold. Stop cooling.
+      }
+    }
+  }
+
+  if (ConfigManager::relay2_thermostat_heat_mode) {
+    if (*new_avg_temp >= ConfigManager::relay2_upper_temperature) {
+      if (_get_relay_state(2)) {
+        ESP_LOGI("ButtonManager", "Relay2 is set to heat mode and new temperature %f has gone above (>=) set threshold (%d). Stop heating.", *new_avg_temp, ConfigManager::relay2_upper_temperature);
+        _set_relay_state(2, false, true); // We are in heat mode and the temperature has risen above set threshold. Stop heating.
+      }
+    } else if (*new_avg_temp <= ConfigManager::relay2_lower_temperature) {
+      if (!_get_relay_state(2)) {
+        ESP_LOGI("ButtonManager", "Relay2 is set to heat mode and new temperature %f has gone below (<=) set threshold (%d). Start heating.", *new_avg_temp, ConfigManager::relay2_lower_temperature);
+        _set_relay_state(2, true, true); // We are in heat mode and the temperature has gone below set threshold. Start heating.
+      }
+    }
+  } else if (ConfigManager::relay2_thermostat_cool_mode) {
+    if (*new_avg_temp >= ConfigManager::relay2_upper_temperature) {
+      if (!_get_relay_state(2)) {
+        ESP_LOGI("ButtonManager", "Relay2 is set to cool mode and new temperature %f has gone above (>=) set threshold (%d). Start cooling.", *new_avg_temp, ConfigManager::relay2_upper_temperature);
+        _set_relay_state(2, true, true); // We are in cool mode and the temperature has risen above set threshold. Start cooling.
+      }
+    } else if (*new_avg_temp <= ConfigManager::relay2_lower_temperature) {
+      if (_get_relay_state(2)) {
+        ESP_LOGI("ButtonManager", "Relay2 is set to heat mode and new temperature %f has gone below (<=) set threshold (%d). Start heating.", *new_avg_temp, ConfigManager::relay2_lower_temperature);
+        _set_relay_state(2, false, true); // We are in cool mode and the temperature has gone below set threshold. Stop cooling.
+      }
+    }
   }
 }
 

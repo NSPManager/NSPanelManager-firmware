@@ -133,6 +133,46 @@ esp_err_t ConfigManager::load_config() {
     ConfigManager::num_failed_boots = item->valueint;
   }
 
+  item = cJSON_GetObjectItem(json, "relay1_is_thermostat_heat_mode");
+  if (cJSON_IsBool(item)) {
+    ConfigManager::relay1_thermostat_heat_mode = cJSON_IsTrue(item);
+  }
+
+  item = cJSON_GetObjectItem(json, "relay1_is_thermostat_cool_mode");
+  if (cJSON_IsBool(item)) {
+    ConfigManager::relay1_thermostat_cool_mode = cJSON_IsTrue(item);
+  }
+
+  item = cJSON_GetObjectItem(json, "relay2_is_thermostat_heat_mode");
+  if (cJSON_IsBool(item)) {
+    ConfigManager::relay2_thermostat_heat_mode = cJSON_IsTrue(item);
+  }
+
+  item = cJSON_GetObjectItem(json, "relay2_is_thermostat_cool_mode");
+  if (cJSON_IsBool(item)) {
+    ConfigManager::relay2_thermostat_cool_mode = cJSON_IsTrue(item);
+  }
+
+  item = cJSON_GetObjectItem(json, "relay1_lower_temperature");
+  if (cJSON_IsNumber(item)) {
+    ConfigManager::relay1_lower_temperature = item->valueint;
+  }
+
+  item = cJSON_GetObjectItem(json, "relay1_upper_temperature");
+  if (cJSON_IsNumber(item)) {
+    ConfigManager::relay1_upper_temperature = item->valueint;
+  }
+
+  item = cJSON_GetObjectItem(json, "relay2_lower_temperature");
+  if (cJSON_IsNumber(item)) {
+    ConfigManager::relay2_lower_temperature = item->valueint;
+  }
+
+  item = cJSON_GetObjectItem(json, "relay2_upper_temperature");
+  if (cJSON_IsNumber(item)) {
+    ConfigManager::relay2_upper_temperature = item->valueint;
+  }
+
   cJSON_Delete(json);
   free(read_buffer);
 
@@ -190,6 +230,14 @@ esp_err_t ConfigManager::save_config() {
   cJSON_AddBoolToObject(json, "reverse_relays", ConfigManager::reverse_relays);
   cJSON_AddBoolToObject(json, "relay1_default_mode", ConfigManager::relay1_default_mode);
   cJSON_AddBoolToObject(json, "relay2_default_mode", ConfigManager::relay2_default_mode);
+  cJSON_AddBoolToObject(json, "relay1_is_thermostat_heat_mode", ConfigManager::relay1_thermostat_heat_mode);
+  cJSON_AddBoolToObject(json, "relay1_is_thermostat_cool_mode", ConfigManager::relay1_thermostat_cool_mode);
+  cJSON_AddBoolToObject(json, "relay2_is_thermostat_heat_mode", ConfigManager::relay2_thermostat_heat_mode);
+  cJSON_AddBoolToObject(json, "relay2_is_thermostat_cool_mode", ConfigManager::relay2_thermostat_cool_mode);
+  cJSON_AddNumberToObject(json, "relay1_lower_temperature", ConfigManager::relay1_lower_temperature);
+  cJSON_AddNumberToObject(json, "relay1_upper_temperature", ConfigManager::relay1_upper_temperature);
+  cJSON_AddNumberToObject(json, "relay2_lower_temperature", ConfigManager::relay2_lower_temperature);
+  cJSON_AddNumberToObject(json, "relay2_upper_temperature", ConfigManager::relay2_upper_temperature);
 
   if (ConfigManager::use_latest_nextion_upload_protocol) {
     cJSON_AddTrueToObject(json, "use_new_upload_protocol");

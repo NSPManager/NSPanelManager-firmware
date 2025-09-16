@@ -70,6 +70,30 @@ public:
   // Should relay 2 be on or off on boot?
   static inline bool relay2_default_mode = false;
 
+  // Relay1 is thermostat heat mode
+  static inline bool relay1_thermostat_heat_mode = false;
+
+  // Relay1 is thermostat cool mode
+  static inline bool relay1_thermostat_cool_mode = false;
+
+  // Relay 1 on temperature (heating) or off temperature (cooling)
+  static inline uint16_t relay1_lower_temperature = 0;
+
+  // Relay 1 off temperature (heating) or on temperature (cooling)
+  static inline uint16_t relay1_upper_temperature = 0;
+
+  // Relay2 is thermostat heat mode
+  static inline bool relay2_thermostat_heat_mode = false;
+
+  // Relay2 is thermostat cool mode
+  static inline bool relay2_thermostat_cool_mode = false;
+
+  // Relay 1 on temperature (heating) or off temperature (cooling)
+  static inline uint16_t relay2_lower_temperature = 0;
+
+  // Relay 1 off temperature (heating) or on temperature (cooling)
+  static inline uint16_t relay2_upper_temperature = 0;
+
   // Milliseconds to debounce button/button has to be held for before registering as a press.
   static inline uint32_t min_button_push_time = 50;
 

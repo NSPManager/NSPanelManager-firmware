@@ -37,6 +37,7 @@ void ScreensaverPage::show() {
   ScreensaverPage::_go_to_nextion_page();
   ScreensaverPage::_update_displayed_date();
   ScreensaverPage::_update_displayed_time();
+  ScreensaverPage::_update_displayed_temperature();
   xTaskCreatePinnedToCore(ScreensaverPage::_task_update_displayed_weather_data, "update_weather_data", 4096, NULL, 2, NULL, 1);
 
   RoomManager::go_to_default_room(); // Go to default room so that it is the room that is shown when the screensaver is hidden.
@@ -72,7 +73,13 @@ void ScreensaverPage::_mqtt_event_handler(void *arg, esp_event_base_t event_base
     std::string weather_topic = mqtt_base_topic;
     weather_topic.append("/status/weather");
 
-    if (topic_string.compare(time_topic) == 0) {
+    std::string inside_temperature_sensor_state_topic = ScreensaverPage::_inside_temperature_sensor_state_topic.get();
+    if (topic_string.compare(inside_temperature_sensor_state_topic) == 0) {
+      // Got new temperature from MQTT, update display.
+      std::string new_temperature_string = std::string(event->data, event->data_len).c_str();
+      ScreensaverPage::_current_temperature.set(new_temperature_string);
+      ScreensaverPage::_update_displayed_temperature();
+    } else if (topic_string.compare(time_topic) == 0) {
       ScreensaverPage::_current_time = std::string(event->data, event->data_len);
       ScreensaverPage::_update_displayed_time();
     } else if (topic_string.compare(date_topic) == 0) {
@@ -160,10 +167,13 @@ void ScreensaverPage::_nspm_config_event_handler(void *arg, esp_event_base_t eve
 void ScreensaverPage::_new_temperature_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
   switch (event_id) {
   case statusupdatemanagerevent_t::AVERAGE_TEMP_UPDATE: {
-    ScreensaverPage::_current_temperature = *((double *)event_data);
-    std::string display_string = std::format("{:.1f}", ScreensaverPage::_current_temperature.load());
-    Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_room_temperature_name, display_string.c_str(), 1000);
-    Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_screensaver_minimal_current_room_temperature_name, display_string.c_str(), 1000);
+    // So that no inside temperature MQTT topic is configured. If it is it means that the panel is configured to get inside temperature from
+    // a sensor via MQTTManger over MQTT. In that case, simply exit this function.
+    if (!ScreensaverPage::_inside_temperature_sensor_state_topic.get().empty()) {
+      return;
+    }
+    ScreensaverPage::_current_temperature.set(std::format("{:.1f}", *((double *)event_data)));
+    ScreensaverPage::_update_displayed_temperature();
 
     break;
   }
@@ -212,6 +222,20 @@ void ScreensaverPage::_subscribe_to_mqtt_topics() {
       ESP_LOGE("ScreensaverPage", "Failed to subscribe to weather topic for screensaver page.");
       vTaskDelay(pdMS_TO_TICKS(500));
     }
+
+    std::shared_ptr<NSPanelConfig> config;
+    if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+      std::string inside_temperature_sensor_mqtt_topic = std::string(config->inside_temperature_sensor_mqtt_topic);
+      ScreensaverPage::_inside_temperature_sensor_state_topic.set(inside_temperature_sensor_mqtt_topic);
+      ESP_LOGD("ScreensaverPage", "Subscribing to inside temperature sensor state topic: %s", config->inside_temperature_sensor_mqtt_topic);
+      if (!inside_temperature_sensor_mqtt_topic.empty()) {
+        ESP_LOGD("ScreensaverPage", "Subscribing to inside temperature sensor state topic: %s", config->inside_temperature_sensor_mqtt_topic);
+        while (MqttManager::subscribe(inside_temperature_sensor_mqtt_topic) != ESP_OK) {
+          ESP_LOGE("ScreensaverPage", "Failed to subscribe to inside temperature sensor state topic.");
+          vTaskDelay(pdMS_TO_TICKS(500));
+        }
+      }
+    }
   } else {
     ESP_LOGE("ScreensaverPage", "Failed to subscribe to relevant MQTT topics as no manager address is set.");
   }
@@ -232,6 +256,18 @@ void ScreensaverPage::_update_displayed_date() {
     Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_day_name, ScreensaverPage::_current_date.get().c_str(), 250);
   } else if (ScreensaverPage::_current_screensaver_mode.get() == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__DATETIME_WITH_BACKGROUND || ScreensaverPage::_current_screensaver_mode.get() == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__DATETIME_WITHOUT_BACKGROUND) {
     Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_screensaver_minimal_current_day_name, ScreensaverPage::_current_date.get().c_str(), 250);
+  } else if (ScreensaverPage::_current_screensaver_mode.get() == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__NO_SCREENSAVER) {
+    // Perform nothing and do not show error message below.
+  } else {
+    ESP_LOGE("ScreensaverPage", "Unknown screensaver mode %d while processing new date from MQTT.", (int)ScreensaverPage::_current_screensaver_mode.get());
+  }
+}
+
+void ScreensaverPage::_update_displayed_temperature() {
+  if (ScreensaverPage::_current_screensaver_mode.get() == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITH_BACKGROUND || ScreensaverPage::_current_screensaver_mode.get() == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITHOUT_BACKGROUND) {
+    Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_room_temperature_name, ScreensaverPage::_current_temperature.get().c_str(), 1000);
+  } else if (ScreensaverPage::_current_screensaver_mode.get() == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__DATETIME_WITH_BACKGROUND || ScreensaverPage::_current_screensaver_mode.get() == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__DATETIME_WITHOUT_BACKGROUND) {
+    Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_screensaver_minimal_current_room_temperature_name, ScreensaverPage::_current_temperature.get().c_str(), 1000);
   } else if (ScreensaverPage::_current_screensaver_mode.get() == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__NO_SCREENSAVER) {
     // Perform nothing and do not show error message below.
   } else {

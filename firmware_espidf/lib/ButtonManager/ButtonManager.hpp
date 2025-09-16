@@ -69,6 +69,11 @@ private:
   static void _nspm_configmanager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
   /**
+   * @brief Handle new temperature and if in thermostat mode check for any changes and set relay state accordingly.
+   */
+  static void _new_temperature_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
+  /**
    * @brief Handle data received over MQTT
    */
   static void _mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);

@@ -47,18 +47,24 @@ void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int3
           xSemaphoreGive(EntityPage::_current_state_mutex);
 
           // Set current display mode (RGB/Color temp) from what mode the light state is in
-          switch (EntityPage::_current_state->light->current_light_mode) {
-          case NSPANEL_ENTITY_STATE__LIGHT__LIGHT_MODE__COLOR_TEMP:
-            EntityPage::_current_mode = _entity_page_modes::LIGHT_COLOR_TEMPERATURE;
-            break;
+          if (EntityPage::_current_state->entity_case == NSPanelEntityState__EntityCase::NSPANEL_ENTITY_STATE__ENTITY_LIGHT) {
+            switch (EntityPage::_current_state->light->current_light_mode) {
+            case NSPANEL_ENTITY_STATE__LIGHT__LIGHT_MODE__COLOR_TEMP:
+              EntityPage::_current_mode = _entity_page_modes::LIGHT_COLOR_TEMPERATURE;
+              break;
 
-          case NSPANEL_ENTITY_STATE__LIGHT__LIGHT_MODE__RGB:
-            EntityPage::_current_mode = _entity_page_modes::LIGHT_RGB;
-            break;
+            case NSPANEL_ENTITY_STATE__LIGHT__LIGHT_MODE__RGB:
+              EntityPage::_current_mode = _entity_page_modes::LIGHT_RGB;
+              break;
 
-          default:
-            ESP_LOGW("EntityPage", "Unknown light mode!");
-            break;
+            default:
+              ESP_LOGW("EntityPage", "Unknown light mode!");
+              break;
+            }
+          } else if (EntityPage::_current_state->entity_case == NSPanelEntityState__EntityCase::NSPANEL_ENTITY_STATE__ENTITY_THERMOSTAT) {
+            EntityPage::_current_mode = _entity_page_modes::THERMOSTAT;
+          } else {
+            ESP_LOGE("EntityPage", "Unknown entity state case!");
           }
 
           EntityPage::_update_display();
@@ -83,6 +89,10 @@ void EntityPage::_update_display() {
     EntityPage::_update_display_light();
     break;
 
+  case NSPANEL_ENTITY_STATE__ENTITY_THERMOSTAT:
+    EntityPage::_update_display_thermostat();
+    break;
+
   default:
     ESP_LOGE("EntityPage", "Unknown state type. Can't call appropriate update display function.");
     break;
@@ -103,6 +113,10 @@ void EntityPage::_handle_touch_event(uint16_t component_id, bool pressed) {
   switch (EntityPage::_current_state->entity_case) {
   case NSPANEL_ENTITY_STATE__ENTITY_LIGHT:
     EntityPage::_handle_touch_event_light(component_id, pressed);
+    break;
+
+  case NSPANEL_ENTITY_STATE__ENTITY_THERMOSTAT:
+    EntityPage::_handle_touch_event_thermostat(component_id, pressed);
     break;
 
   default:
@@ -348,6 +362,43 @@ void EntityPage::_handle_touch_event_light(uint16_t component_id, bool pressed) 
   default:
     break;
   }
+}
+
+void EntityPage::_update_display_thermostat() {
+  ESP_LOGI("EntityPage", "Updating EntityPage with thermostat state.");
+  if (!EntityPage::_currently_showing) {
+    ESP_LOGD("EntityPage", "Switching page to %s", GUI_THERMOSTAT_CONTROL_PAGE::page_name);
+    EntityPage::_currently_showing = true;
+    if (Nextion::go_to_page(GUI_THERMOSTAT_CONTROL_PAGE::page_name, 1000) != ESP_OK) [[unlikely]] {
+      ESP_LOGE("EntityPage", "Failed to navigate Nextion to page. Will go back.");
+      EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
+    }
+
+    InterfaceManager::call_unshow_callback();
+    InterfaceManager::current_page_unshow_callback.set(EntityPage::unshow);
+
+    esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event, NULL);
+  }
+
+  std::shared_ptr<NSPanelEntityState> state = EntityPage::_current_state;
+
+  // Loop over all options. Set them to the corresponding value if an option in the index
+  // is available in the state data. If not, clean it and hide it.
+  for (int i = 0; i < sizeof(GUI_THERMOSTAT_CONTROL_PAGE::options) / sizeof(GUI_THERMOSTAT_OPTIONS_MODE_DATA); i++) {
+    if (i < state->thermostat->n_options) {
+      Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].button_name, true, 1000);
+      Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].label_name, true, 1000);
+      Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::options[i].label_name, state->thermostat->options[i]->name, 1000);
+      Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::options[i].button_name, state->thermostat->options[i]->icon, 1000);
+    } else {
+      Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].button_name, false, 1000);
+      Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].label_name, false, 1000);
+    }
+  }
+}
+
+void EntityPage::_handle_touch_event_thermostat(uint16_t component_id, bool pressed) {
+  ESP_LOGD("EntityPage", "Touch component %d, pressed %s", component_id, pressed ? "Yes" : "No");
 }
 
 void EntityPage::_delete_nspanel_entity_state_object(NSPanelEntityState *object) {
