@@ -414,8 +414,8 @@ public:
 // This is used to better be able to loop over option slots instead of copy-paste lots
 // of code.
 struct GUI_THERMOSTAT_OPTIONS_MODE_DATA {
-  uint8_t button_id;
-  const char *button_name;
+  uint8_t icon_id;
+  const char *icon_name;
   uint8_t label_id;
   const char *label_name;
 };
@@ -439,26 +439,32 @@ public:
   static inline constexpr GUI_THERMOSTAT_OPTIONS_MODE_DATA options[] = {
       // TODO: Fix data
       {
-          .button_id = 5,
-          .button_name = "i1_button",
+          .icon_id = 5,
+          .icon_name = "i1_button",
           .label_id = 1,
           .label_name = "i1_label",
       },
       {
-          .button_id = 6,
-          .button_name = "i2_button",
+          .icon_id = 6,
+          .icon_name = "i2_button",
           .label_id = 2,
           .label_name = "i2_label",
       },
       {
-          .button_id = 7,
-          .button_name = "i3_button",
+          .icon_id = 7,
+          .icon_name = "i3_button",
           .label_id = 3,
           .label_name = "i3_label",
       },
       {
-          .button_id = 8,
-          .button_name = "i4_button",
+          .icon_id = 8,
+          .icon_name = "i4_button",
+          .label_id = 4,
+          .label_name = "i4_label",
+      },
+      {
+          .icon_id = 8,
+          .icon_name = "i4_button",
           .label_id = 4,
           .label_name = "i4_label",
       },
