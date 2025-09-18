@@ -422,51 +422,51 @@ struct GUI_THERMOSTAT_OPTIONS_MODE_DATA {
 
 class GUI_THERMOSTAT_CONTROL_PAGE {
 public:
-  static inline constexpr const uint8_t page_id = 5;            // TODO: FIX!
-  static inline constexpr const char *page_name = "thermostat"; // TODO: FIX!
+  static inline constexpr const uint8_t page_id = 11; 
+  static inline constexpr const char *page_name = "thermostat";
 
-  static inline constexpr const uint8_t back_button_id = 1;          // TODO: FIX!
-  static inline constexpr const uint8_t next_button_id = 8;          // TODO: FIX!
-  static inline constexpr const uint8_t previous_button_id = 7;      // TODO: FIX!
-  static inline constexpr const uint8_t next_mode_button_id = 5;     // TODO: FIX!
-  static inline constexpr const uint8_t previous_mode_button_id = 6; // TODO: FIX!
+  static inline constexpr const uint8_t back_button_id = 1;
+  static inline constexpr const uint8_t next_button_id = 3;
+  static inline constexpr const uint8_t previous_button_id = 2;
+  static inline constexpr const uint8_t next_mode_button_id = 7;
+  static inline constexpr const uint8_t previous_mode_button_id = 10;
 
-  static inline constexpr const char *room_name_label_name = "currentLight";  // TODO: FIX!
-  static inline constexpr const char *temperature_label_name = "colormode";   // TODO: FIX!
-  static inline constexpr const char *set_label_name = "brightness";          // TODO: Maybe not needed?
-  static inline constexpr const char *current_mode_label_name = "kelvin_sat"; // TODO: FIX!
+  static inline constexpr const char *room_name_label_name = "current";
+  static inline constexpr const char *temperature_label_name = "roomTemp";
+  static inline constexpr const char *set_label_name = "setTemp";
+
 
   static inline constexpr GUI_THERMOSTAT_OPTIONS_MODE_DATA options[] = {
       // TODO: Fix data
       {
-          .icon_id = 5,
-          .icon_name = "i1_button",
-          .label_id = 1,
-          .label_name = "i1_label",
+          .icon_id = 20,
+          .icon_name = "set1_icon",
+          .label_id = 21,
+          .label_name = "set1_text",
       },
       {
-          .icon_id = 6,
-          .icon_name = "i2_button",
-          .label_id = 2,
-          .label_name = "i2_label",
+          .icon_id = 22,
+          .icon_name = "set2_icon",
+          .label_id = 23,
+          .label_name = "set2_text",
       },
       {
-          .icon_id = 7,
-          .icon_name = "i3_button",
-          .label_id = 3,
-          .label_name = "i3_label",
+          .icon_id = 24,
+          .icon_name = "set3_icon",
+          .label_id = 25,
+          .label_name = "set3_text",
       },
       {
-          .icon_id = 8,
-          .icon_name = "i4_button",
-          .label_id = 4,
-          .label_name = "i4_label",
+          .icon_id = 26,
+          .icon_name = "set4_icon",
+          .label_id = 27,
+          .label_name = "set4_text",
       },
       {
-          .icon_id = 8,
-          .icon_name = "i4_button",
-          .label_id = 4,
-          .label_name = "i4_label",
+          .icon_id = 28,
+          .icon_name = "set5_icon",
+          .label_id = 29,
+          .label_name = "set5_text",
       },
   };
 };
