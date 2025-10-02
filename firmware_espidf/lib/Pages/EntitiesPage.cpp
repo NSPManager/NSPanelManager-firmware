@@ -252,8 +252,8 @@ void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data)
         if (touch_data->pressed) {
           for (int j = 0; j < EntitiesPage::_current_entities_page->n_entities; j++) {
             if (EntitiesPage::_current_entities_page->entities[j]->room_view_position == i) {
-              if (EntitiesPage::_current_entities_page->entities[i] != nullptr) [[likely]] {
-                std::string topic_string = EntitiesPage::_current_entities_page->entities[i]->mqtt_state_topic;
+              if (EntitiesPage::_current_entities_page->entities[j] != nullptr) [[likely]] {
+                std::string topic_string = EntitiesPage::_current_entities_page->entities[j]->mqtt_state_topic;
                 if (!topic_string.empty()) [[likely]] {
                   EntityPage::show(topic_string);
                 }

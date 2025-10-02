@@ -422,7 +422,7 @@ struct GUI_THERMOSTAT_OPTIONS_MODE_DATA {
 
 class GUI_THERMOSTAT_CONTROL_PAGE {
 public:
-  static inline constexpr const uint8_t page_id = 11; 
+  static inline constexpr const uint8_t page_id = 11;
   static inline constexpr const char *page_name = "thermostat";
 
   static inline constexpr const uint8_t back_button_id = 1;
@@ -435,38 +435,37 @@ public:
   static inline constexpr const char *temperature_label_name = "roomTemp";
   static inline constexpr const char *set_label_name = "setTemp";
 
-
   static inline constexpr GUI_THERMOSTAT_OPTIONS_MODE_DATA options[] = {
       // TODO: Fix data
       {
           .icon_id = 20,
-          .icon_name = "set1_icon",
+          .icon_name = "set1icon",
           .label_id = 21,
-          .label_name = "set1_text",
+          .label_name = "set1text",
       },
       {
           .icon_id = 22,
-          .icon_name = "set2_icon",
+          .icon_name = "set2icon",
           .label_id = 23,
-          .label_name = "set2_text",
+          .label_name = "set2text",
       },
       {
           .icon_id = 24,
-          .icon_name = "set3_icon",
+          .icon_name = "set3icon",
           .label_id = 25,
-          .label_name = "set3_text",
+          .label_name = "set3text",
       },
       {
           .icon_id = 26,
-          .icon_name = "set4_icon",
+          .icon_name = "set4icon",
           .label_id = 27,
-          .label_name = "set4_text",
+          .label_name = "set4text",
       },
       {
           .icon_id = 28,
-          .icon_name = "set5_icon",
+          .icon_name = "set5icon",
           .label_id = 29,
-          .label_name = "set5_text",
+          .label_name = "set5text",
       },
   };
 };

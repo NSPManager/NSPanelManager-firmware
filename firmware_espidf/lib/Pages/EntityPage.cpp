@@ -386,12 +386,13 @@ void EntityPage::_update_display_thermostat() {
   // is available in the state data. If not, clean it and hide it.
   for (int i = 0; i < sizeof(GUI_THERMOSTAT_CONTROL_PAGE::options) / sizeof(GUI_THERMOSTAT_OPTIONS_MODE_DATA); i++) {
     if (i < state->thermostat->n_options) {
-      Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].button_name, true, 1000);
+      ESP_LOGD("EntityPage", "Setting %d to %s. Icon: %s", i, state->thermostat->options[i]->name, state->thermostat->options[i]->current_icon);
+      Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].icon_name, true, 1000);
       Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].label_name, true, 1000);
+      Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::options[i].icon_name, state->thermostat->options[i]->current_icon, 1000);
       Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::options[i].label_name, state->thermostat->options[i]->name, 1000);
-      Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::options[i].button_name, state->thermostat->options[i]->icon, 1000);
     } else {
-      Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].button_name, false, 1000);
+      Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].icon_name, false, 1000);
       Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].label_name, false, 1000);
     }
   }
