@@ -345,6 +345,19 @@ void InterfaceManager::_nspm_configmanager_event_handler(void *arg, esp_event_ba
     break;
   }
 
+  case nspm_configmanager_event::MANAGER_STATE_CHANGE: {
+    if (NSPM_ConfigManager::get_manager_online()) {
+      InterfaceManager::show_default_page(); // Manager became online again after being offline.
+      InterfaceManager::_screensaver_blocked = false;
+    } else {
+      LoadingPage::show();
+      LoadingPage::set_loading_text("Lost connection to manager.");
+      LoadingPage::set_secondary_text("");
+      InterfaceManager::_screensaver_blocked = true;
+    }
+    break;
+  }
+
   default:
     break;
   }

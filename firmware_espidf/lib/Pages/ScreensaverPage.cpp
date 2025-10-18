@@ -19,7 +19,6 @@ void ScreensaverPage::init() {
   // This is the first time showing the screensaver page.
   if (ScreensaverPage::_weather_update_data_mutex == NULL) {
     esp_log_level_set("ScreensaverPage", ConfigManager::log_level);
-
     ScreensaverPage::_weather_update_data_mutex = xSemaphoreCreateMutex();
   }
   ScreensaverPage::_subscribe_to_mqtt_topics();
@@ -29,6 +28,11 @@ void ScreensaverPage::show() {
   if (ScreensaverPage::_currently_shown) {
     // Do not "show" page again when it's already showing.
     return;
+  }
+
+  if (ScreensaverPage::_weather_update_data_mutex == NULL) {
+    // Page has not been initialized, do that first.
+    ScreensaverPage::init();
   }
 
   InterfaceManager::call_unshow_callback();
@@ -276,7 +280,7 @@ void ScreensaverPage::_update_displayed_temperature() {
 }
 
 void ScreensaverPage::_task_update_displayed_weather_data(void *param) {
-  if (xSemaphoreTake(ScreensaverPage::_weather_update_data_mutex, pdMS_TO_TICKS(1000)) == pdPASS) [[likely]] {
+  if (_weather_update_data_mutex != NULL && xSemaphoreTake(ScreensaverPage::_weather_update_data_mutex, pdMS_TO_TICKS(1000)) == pdPASS) [[likely]] {
     if (ScreensaverPage::_weather_update_mqtt_data.size() > 0) [[likely]] {
       NSPanelWeatherUpdate *new_weather_data = nspanel_weather_update__unpack(NULL, ScreensaverPage::_weather_update_mqtt_data.size(), ScreensaverPage::_weather_update_mqtt_data.data());
       if (new_weather_data != NULL) [[likely]] {
@@ -305,7 +309,7 @@ void ScreensaverPage::_task_update_displayed_weather_data(void *param) {
         ESP_LOGE("ScreensaverPage", "Got new weather data but failed to decode it into protobuf object.");
       }
     } else {
-      ESP_LOGE("ScreensaverPage", "Trying to update screensaver page but not data to decode protobuf is available.");
+      ESP_LOGE("ScreensaverPage", "Trying to update screensaver page but no data to decode protobuf is available.");
     }
 
     xSemaphoreGive(ScreensaverPage::_weather_update_data_mutex);

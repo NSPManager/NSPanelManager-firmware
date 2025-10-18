@@ -21,6 +21,10 @@ void EntityPage::show(std::string state_topic) {
 
   EntityPage::_current_entity_mqtt_topic = state_topic;
   MqttManager::subscribe(EntityPage::_current_entity_mqtt_topic);
+
+  // Reset variables:
+  EntityPage::_selected_thermostat_option_index = 0;
+  EntityPage::_is_currently_editing = false;
 }
 
 void EntityPage::unshow() {
@@ -45,10 +49,11 @@ void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int3
         if (xSemaphoreTake(EntityPage::_current_state_mutex, pdMS_TO_TICKS(500)) == pdPASS) [[likely]] {
           EntityPage::_current_state = std::shared_ptr<NSPanelEntityState>(new_state, &EntityPage::_delete_nspanel_entity_state_object);
           xSemaphoreGive(EntityPage::_current_state_mutex);
+          auto state = EntityPage::_get_current_state();
 
           // Set current display mode (RGB/Color temp) from what mode the light state is in
-          if (EntityPage::_current_state->entity_case == NSPanelEntityState__EntityCase::NSPANEL_ENTITY_STATE__ENTITY_LIGHT) {
-            switch (EntityPage::_current_state->light->current_light_mode) {
+          if (state->entity_case == NSPanelEntityState__EntityCase::NSPANEL_ENTITY_STATE__ENTITY_LIGHT) {
+            switch (state->light->current_light_mode) {
             case NSPANEL_ENTITY_STATE__LIGHT__LIGHT_MODE__COLOR_TEMP:
               EntityPage::_current_mode = _entity_page_modes::LIGHT_COLOR_TEMPERATURE;
               break;
@@ -61,7 +66,7 @@ void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int3
               ESP_LOGW("EntityPage", "Unknown light mode!");
               break;
             }
-          } else if (EntityPage::_current_state->entity_case == NSPanelEntityState__EntityCase::NSPANEL_ENTITY_STATE__ENTITY_THERMOSTAT) {
+          } else if (state->entity_case == NSPanelEntityState__EntityCase::NSPANEL_ENTITY_STATE__ENTITY_THERMOSTAT) {
             EntityPage::_current_mode = _entity_page_modes::THERMOSTAT;
           } else {
             ESP_LOGE("EntityPage", "Unknown entity state case!");
@@ -70,6 +75,7 @@ void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int3
           EntityPage::_update_display();
         } else {
           ESP_LOGE("EntityPage", "Failed to take mutex to update current state.");
+          nspanel_entity_state__free_unpacked(new_state, NULL);
         }
       } else {
         ESP_LOGE("EntityPage", "Received new state but failed to parse into protobuf object.");
@@ -103,6 +109,19 @@ void EntityPage::_handle_nextion_event(void *arg, esp_event_base_t event_base, i
   if (event_id == nextion_event_t::TOUCH_EVENT) {
     nextion_event_touch_t *touch_data = (nextion_event_touch_t *)event_data;
     EntityPage::_handle_touch_event(touch_data->component_id, touch_data->pressed);
+  } else if (event_id == nextion_event_t::STRING_EVENT) {
+    switch (EntityPage::_current_state->entity_case) {
+    case NSPANEL_ENTITY_STATE__ENTITY_LIGHT:
+      break;
+
+    case NSPANEL_ENTITY_STATE__ENTITY_THERMOSTAT:
+      EntityPage::_handle_string_event_thermostat((char *)event_data);
+      break;
+
+    default:
+      ESP_LOGE("EntityPage", "Unknown state type. Can't call appropriate string event function.");
+      break;
+    }
   }
 }
 
@@ -116,11 +135,10 @@ void EntityPage::_handle_touch_event(uint16_t component_id, bool pressed) {
     break;
 
   case NSPANEL_ENTITY_STATE__ENTITY_THERMOSTAT:
-    EntityPage::_handle_touch_event_thermostat(component_id, pressed);
     break;
 
   default:
-    ESP_LOGE("EntityPage", "Unknown state type. Can't call appropriate update display function.");
+    ESP_LOGE("EntityPage", "Unknown state type. Can't call appropriate touch function.");
     break;
   }
 }
@@ -133,6 +151,7 @@ void EntityPage::_update_display_light() {
     if (Nextion::go_to_page(GUI_LIGHT_CONTROL_PAGE::page_name, 1000) != ESP_OK) [[unlikely]] {
       ESP_LOGE("EntityPage", "Failed to navigate Nextion to page. Will go back.");
       EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
+      return;
     }
 
     InterfaceManager::call_unshow_callback();
@@ -141,7 +160,7 @@ void EntityPage::_update_display_light() {
     esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event, NULL);
   }
 
-  std::shared_ptr<NSPanelEntityState> state = EntityPage::_current_state;
+  auto state = EntityPage::_get_current_state();
 
   // Show button to switch modes IF light can both color and color temp
   if (state->light->can_color && state->light->can_color_temp) {
@@ -380,13 +399,12 @@ void EntityPage::_update_display_thermostat() {
     esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event, NULL);
   }
 
-  std::shared_ptr<NSPanelEntityState> state = EntityPage::_current_state;
+  std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
 
   // Loop over all options. Set them to the corresponding value if an option in the index
   // is available in the state data. If not, clean it and hide it.
   for (int i = 0; i < sizeof(GUI_THERMOSTAT_CONTROL_PAGE::options) / sizeof(GUI_THERMOSTAT_OPTIONS_MODE_DATA); i++) {
     if (i < state->thermostat->n_options) {
-      ESP_LOGD("EntityPage", "Setting %d to %s. Icon: %s", i, state->thermostat->options[i]->name, state->thermostat->options[i]->current_icon);
       Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].icon_name, true, 1000);
       Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].label_name, true, 1000);
       Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::options[i].icon_name, state->thermostat->options[i]->current_icon, 1000);
@@ -396,12 +414,234 @@ void EntityPage::_update_display_thermostat() {
       Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].label_name, false, 1000);
     }
   }
+
+  char buf[16];
+  uint8_t chars_written = snprintf(buf, sizeof(buf), "%.1f°", state->thermostat->set_temperature);
+  if (chars_written > 0) {
+    Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, buf, 1000);
+  } else {
+    ESP_LOGE("EntityPage", "Failed to snprintf set temp to temperature buffer.");
+  }
+
+  Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::room_name_label_name, state->thermostat->name, 1000);
+  if (state->thermostat->has_current_temperature) {
+    chars_written = snprintf(buf, sizeof(buf), "%.1f°", state->thermostat->current_temperature);
+  } else {
+    ESP_LOGE("EntityPage", "Thermostat does not have a valid temperature for location. will display -°");
+    chars_written = snprintf(buf, sizeof(buf), "-°");
+  }
+
+  if (chars_written > 0) {
+    Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::temperature_label_name, buf, 1000);
+  } else {
+    ESP_LOGE("EntityPage", "Failed to snprintf current temp to temperature buffer.");
+  }
 }
 
-void EntityPage::_handle_touch_event_thermostat(uint16_t component_id, bool pressed) {
-  ESP_LOGD("EntityPage", "Touch component %d, pressed %s", component_id, pressed ? "Yes" : "No");
+void EntityPage::_handle_string_event_thermostat(char *data) {
+  ESP_LOGD("EntityPage", "Thermostat page received string event data: %s", data);
+
+  if (strcmp(data, "activate:set1") == 0) {
+    if (EntityPage::_current_state->thermostat->n_options >= 1) {
+      EntityPage::_send_thermostat_option_command();
+      ESP_LOGD("EntityPage", "Activating thermostat options set1");
+      EntityPage::_is_currently_editing = true;
+      EntityPage::_selected_thermostat_option_index = 0;
+      ESP_LOGD("EntityPage", "Setting value: %s", EntityPage::_current_state->thermostat->options[0]->current_value);
+      Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, EntityPage::_current_state->thermostat->options[0]->current_value, 1000);
+    }
+  } else if (strcmp(data, "activate:set2") == 0) {
+    if (EntityPage::_current_state->thermostat->n_options >= 2) {
+      EntityPage::_send_thermostat_option_command();
+      ESP_LOGD("EntityPage", "Activating thermostat options set2");
+      EntityPage::_is_currently_editing = true;
+      EntityPage::_selected_thermostat_option_index = 1;
+      Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, EntityPage::_current_state->thermostat->options[1]->current_value, 1000);
+    }
+  } else if (strcmp(data, "activate:set3") == 0) {
+    if (EntityPage::_current_state->thermostat->n_options >= 3) {
+      EntityPage::_send_thermostat_option_command();
+      ESP_LOGD("EntityPage", "Activating thermostat options set3");
+      EntityPage::_is_currently_editing = true;
+      EntityPage::_selected_thermostat_option_index = 2;
+      Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, EntityPage::_current_state->thermostat->options[2]->current_value, 1000);
+    }
+  } else if (strcmp(data, "activate:set4") == 0) {
+    if (EntityPage::_current_state->thermostat->n_options >= 4) {
+      EntityPage::_send_thermostat_option_command();
+      ESP_LOGD("EntityPage", "Activating thermostat options set4");
+      EntityPage::_is_currently_editing = true;
+      EntityPage::_selected_thermostat_option_index = 3;
+      Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, EntityPage::_current_state->thermostat->options[3]->current_value, 1000);
+    }
+  } else if (strcmp(data, "activate:set5") == 0) {
+    if (EntityPage::_current_state->thermostat->n_options >= 5) {
+      EntityPage::_send_thermostat_option_command();
+      ESP_LOGD("EntityPage", "Activating thermostat options set5");
+      EntityPage::_is_currently_editing = true;
+      EntityPage::_selected_thermostat_option_index = 4;
+      Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, EntityPage::_current_state->thermostat->options[4]->current_value, 1000);
+    }
+  } else if (strcmp(data, "deactivate") == 0) {
+    EntityPage::_send_thermostat_option_command();
+    EntityPage::_is_currently_editing = false;
+    EntityPage::_update_display_thermostat();
+  } else if (strcmp(data, "back") == 0) {
+    EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
+  } else if (strcmp(data, "tempup") == 0) {
+    if (EntityPage::_is_currently_editing) {
+      std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+      if (EntityPage::_selected_thermostat_option_index < state->thermostat->n_options) {
+        // Find current index of currently selected option
+        uint8_t current_index = 0;
+        for (int i = 0; i < state->thermostat->options[EntityPage::_selected_thermostat_option_index]->n_options; i++) {
+          if (strcmp(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->options[i]->value, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value) == 0) {
+            current_index = i;
+            break;
+          }
+        }
+
+        current_index++;
+        if (current_index >= state->thermostat->options[EntityPage::_selected_thermostat_option_index]->n_options) {
+          current_index = 0; // Reset index to 0 to restart loop of options
+        }
+
+        bool alloc_failed = false;
+        uint16_t new_value_len = strlen(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->options[current_index]->value);
+        uint16_t new_icon_len = strlen(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->options[current_index]->icon);
+        char *new_value = (char *)malloc(new_value_len + 1);
+        char *new_icon = (char *)malloc(new_icon_len + 1);
+
+        if (new_value == NULL) {
+          alloc_failed = true;
+          ESP_LOGE("EntityPage", "Failed to allocate memory for new value. New value length: %u", new_value_len);
+          if (new_icon != NULL) {
+            free(new_icon); // Free new icon as it won't be used when alloc failed.
+          }
+        } else if (new_icon == NULL) {
+          alloc_failed = true;
+          ESP_LOGE("EntityPage", "Failed to allocate memory for new icon. New icon length: %u", new_value_len);
+          free(new_value); // Free new value as it won't be used when alloc failed.
+        }
+
+        if (!alloc_failed) [[likely]] {
+          strncpy(new_value, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->options[current_index]->value, new_value_len);
+          strncpy(new_icon, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->options[current_index]->icon, new_icon_len);
+          new_value[new_value_len] = '\0';
+          new_icon[new_icon_len] = '\0';
+          taskENTER_CRITICAL(&EntityPage::_entity_page_spinlock);
+          free(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value);
+          free(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_icon);
+          state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value = new_value;
+          state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_icon = new_icon;
+          taskEXIT_CRITICAL(&EntityPage::_entity_page_spinlock);
+        }
+
+        Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value, 1000);
+        Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::options[EntityPage::_selected_thermostat_option_index].icon_name, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_icon, 1000);
+      }
+    } else {
+      std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+      state->thermostat->set_temperature += state->thermostat->step_size;
+      EntityPage::_update_display_thermostat();
+    }
+  } else if (strcmp(data, "tempdown") == 0) {
+    if (EntityPage::_is_currently_editing) {
+      std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+      if (EntityPage::_selected_thermostat_option_index < state->thermostat->n_options) {
+        // Find current index of currently selected option
+        uint8_t current_index = 0;
+        for (int i = state->thermostat->options[EntityPage::_selected_thermostat_option_index]->n_options - 1; i > 0; i--) {
+          if (strcmp(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->options[i]->value, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value) == 0) {
+            current_index = i;
+            break;
+          }
+        }
+
+        current_index--;
+        if (current_index == 255) {                                                                                 // We've loop all the way around.
+          current_index = state->thermostat->options[EntityPage::_selected_thermostat_option_index]->n_options - 1; // Reset index to last item to restart loop of options
+        }
+        bool alloc_failed = false;
+        uint16_t new_value_len = strlen(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->options[current_index]->value);
+        uint16_t new_icon_len = strlen(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->options[current_index]->icon);
+        char *new_value = (char *)malloc(new_value_len + 1);
+        char *new_icon = (char *)malloc(new_icon_len + 1);
+
+        if (new_value == NULL) {
+          alloc_failed = true;
+          ESP_LOGE("EntityPage", "Failed to allocate memory for new value. New value length: %u", new_value_len);
+          if (new_icon != NULL) {
+            free(new_icon); // Free new icon as it won't be used when alloc failed.
+          }
+        } else if (new_icon == NULL) {
+          alloc_failed = true;
+          ESP_LOGE("EntityPage", "Failed to allocate memory for new icon. New icon length: %u", new_value_len);
+          free(new_value); // Free new value as it won't be used when alloc failed.
+        }
+
+        if (!alloc_failed) [[likely]] {
+          strncpy(new_value, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->options[current_index]->value, new_value_len);
+          strncpy(new_icon, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->options[current_index]->icon, new_icon_len);
+          new_value[new_value_len] = '\0';
+          new_icon[new_icon_len] = '\0';
+          taskENTER_CRITICAL(&EntityPage::_entity_page_spinlock);
+          free(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value);
+          free(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_icon);
+          state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value = new_value;
+          state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_icon = new_icon;
+          taskEXIT_CRITICAL(&EntityPage::_entity_page_spinlock);
+        }
+
+        Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value, 1000);
+        Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::options[EntityPage::_selected_thermostat_option_index].icon_name, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_icon, 1000);
+      }
+    } else {
+      std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+      state->thermostat->set_temperature -= state->thermostat->step_size;
+      EntityPage::_update_display_thermostat();
+    }
+  } else {
+    ESP_LOGW("EntityPage", "Unknown string event on thermostat page. Received string: %s", data);
+  }
 }
 
 void EntityPage::_delete_nspanel_entity_state_object(NSPanelEntityState *object) {
   nspanel_entity_state__free_unpacked(object, NULL);
+}
+
+std::shared_ptr<NSPanelEntityState> EntityPage::_get_current_state() {
+  if (xSemaphoreTake(EntityPage::_current_state_mutex, pdMS_TO_TICKS(5000)) == pdPASS) [[likely]] {
+    std::shared_ptr<NSPanelEntityState> ret = EntityPage::_current_state;
+    xSemaphoreGive(EntityPage::_current_state_mutex);
+    return ret;
+  }
+  return nullptr;
+}
+
+void EntityPage::_send_thermostat_option_command() {
+  if (EntityPage::_is_currently_editing) {
+    NSPanelMQTTManagerCommand__ThermostatCommand command = NSPANEL_MQTTMANAGER_COMMAND__THERMOSTAT_COMMAND__INIT;
+    std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+    command.thermostat_id = state->thermostat->thermostat_id;
+    command.option = state->thermostat->options[EntityPage::_selected_thermostat_option_index]->name;
+    command.new_value = state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value;
+
+    NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
+    cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_THERMOSTAT_COMMAND;
+    cmd.thermostat_command = &command;
+    cmd.nspanel_id = NSPM_ConfigManager::get_nspanel_id();
+
+    uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
+    std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
+    size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
+    if (packed_data_size == packed_length) [[likely]] {
+      if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) [[unlikely]] {
+        ESP_LOGE("EntityPage", "Failed to send MQTT message with command payload.");
+      }
+    } else {
+      ESP_LOGE("EntityPage", "Failed to pack protobuf command.");
+      EntityPage::_update_display_light(); // Update display to reset values to those stored
+    }
+  }
 }

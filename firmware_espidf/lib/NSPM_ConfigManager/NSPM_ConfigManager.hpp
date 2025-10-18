@@ -62,6 +62,11 @@ public:
    */
   static std::string get_manager_command_topic();
 
+  /**
+   * @brief Returns true if the status topic of the manager is true and MQTT is connected.
+   */
+  static bool get_manager_online();
+
 private:
   /**
    * @brief MQTT events, such as "reload config" and "room config" updates.
@@ -110,6 +115,12 @@ private:
 
   // Port used to download files from MQTT Manager container
   static inline uint16_t _manager_port;
+
+  // Last known MQTT manager status state
+  static inline bool _manager_online = false;
+
+  // Topic for manager status message
+  static inline std::string _mqtt_manager_status_topic;
 
   // MQTT topic used from manager to send new config data to panel
   static inline std::string _mqtt_config_topic;

@@ -267,9 +267,11 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
       ESP_LOGE("Nextion", "Not enough bytes sent for 0x65 touch event.");
     }
   } else if (data->data()[0] == NEX_OUT_STRING_DATA) {
-    ESP_LOGD("Nextion", "Received string event: %.*s", data->size(), data->data());
-    data->erase(data->begin()); // Remove first byte that represents the even type:
-    esp_event_post(NEXTION_EVENT, nextion_event_t::STRING_EVENT, data->data(), data->size(), pdMS_TO_TICKS(16));
+    data->erase(data->begin());                // Remove first byte that represents the even type:
+    if (*(data->end()--) != '\n') [[likely]] { // Add termination char at end of string for proper processing when receiving the event.
+      data->push_back('\0');
+    }
+    esp_event_post(NEXTION_EVENT, nextion_event_t::STRING_EVENT, data->data(), data->size(), pdMS_TO_TICKS(16)); // TODO: Is there a better way than simply sending raw bytes as te length cannot be access when receiving the event
   } else if (data->data()[0] == NEX_OUT_SLEEP) {
     esp_event_post(NEXTION_EVENT, nextion_event_t::SLEEP_EVENT, NULL, 0, pdMS_TO_TICKS(5000));
   } else if (data->data()[0] == NEX_OUT_WAKE) {

@@ -277,7 +277,7 @@ esp_err_t WebManager::_handle_uri_status_data(httpd_req_t *req) {
       cJSON_AddStringToObject(json, "nspanelmanager_status", "Searching");
     } else {
       uint16_t manager_port = NSPM_ConfigManager::get_manager_port();
-      std::string ret_string = "Connected to ";
+      std::string ret_string = "Accepted by ";
       ret_string.append(manager_address);
       ret_string.append(":");
       ret_string.append(std::to_string(manager_port));

@@ -62,14 +62,20 @@ private:
   static void _update_display_thermostat();
 
   /*
-   * Handle touch event for "Thermostat" page.
+   * Handle Nextion string event.
    */
-  static void _handle_touch_event_thermostat(uint16_t component_id, bool pressed);
+  static void _handle_string_event_thermostat(char *data);
 
   /**
    * properly delete pointer and clear old data when shared_ptr expires
    */
   static void _delete_nspanel_entity_state_object(NSPanelEntityState *object);
+
+  // Get a shared_ptr to the current state of the entity.
+  static inline std::shared_ptr<NSPanelEntityState> _get_current_state();
+
+  // If currently editing, check what has changed and sent the new setting to the manager to apply setting.
+  static void _send_thermostat_option_command();
 
   // What is the page currently showing
   enum _entity_page_modes {
@@ -95,6 +101,12 @@ private:
   static inline uint8_t _last_hue = 0;
   static inline uint8_t _last_saturation_pct = 0;
 
+  // Thermostat specific variables
+  static inline std::atomic<bool> _is_currently_editing = false;
+  static inline uint8_t _selected_thermostat_option_index = 0;
+
   static inline SemaphoreHandle_t _current_state_mutex = NULL;
   static inline std::shared_ptr<NSPanelEntityState> _current_state;
+
+  static inline portMUX_TYPE _entity_page_spinlock = portMUX_INITIALIZER_UNLOCKED;
 };
