@@ -418,7 +418,9 @@ void EntityPage::_update_display_thermostat() {
   char buf[16];
   uint8_t chars_written = snprintf(buf, sizeof(buf), "%.1f°", state->thermostat->set_temperature);
   if (chars_written > 0) {
-    Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, buf, 1000);
+    if (!EntityPage::_is_currently_editing) { // Only update displayed temperature in case we are currently not editing any other option.
+      Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, buf, 1000);
+    }
   } else {
     ESP_LOGE("EntityPage", "Failed to snprintf set temp to temperature buffer.");
   }
@@ -482,9 +484,33 @@ void EntityPage::_handle_string_event_thermostat(char *data) {
       EntityPage::_selected_thermostat_option_index = 4;
       Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, EntityPage::_current_state->thermostat->options[4]->current_value, 1000);
     }
-  } else if (strcmp(data, "deactivate") == 0) {
+  } else if (strcmp(data, "deactivate") == 0) { // We've edited an option. Send updated state to manager.
     EntityPage::_send_thermostat_option_command();
     EntityPage::_is_currently_editing = false;
+    EntityPage::_update_display_thermostat();
+  } else if (strcmp(data, "deactivatetemp") == 0) { // We've changed the temperature. Send updated temperature to manager.
+    NSPanelMQTTManagerCommand__ThermostatTemperatureCommand command = NSPANEL_MQTTMANAGER_COMMAND__THERMOSTAT_TEMPERATURE_COMMAND__INIT;
+    std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+    command.thermostat_id = state->thermostat->thermostat_id;
+    command.temperature = state->thermostat->set_temperature;
+
+    NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
+    cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_THERMOSTAT_TEMPERATURE_COMMAND;
+    cmd.thermostat_temperature_command = &command;
+    cmd.nspanel_id = NSPM_ConfigManager::get_nspanel_id();
+
+    uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
+    std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
+    size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
+    if (packed_data_size == packed_length) [[likely]] {
+      if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) [[unlikely]] {
+        ESP_LOGE("EntityPage", "Failed to send MQTT message with command payload.");
+      }
+    } else {
+      ESP_LOGE("EntityPage", "Failed to pack protobuf command.");
+      EntityPage::_update_display_thermostat(); // Update display to reset values to those stored
+    }
+
     EntityPage::_update_display_thermostat();
   } else if (strcmp(data, "back") == 0) {
     EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
@@ -641,7 +667,7 @@ void EntityPage::_send_thermostat_option_command() {
       }
     } else {
       ESP_LOGE("EntityPage", "Failed to pack protobuf command.");
-      EntityPage::_update_display_light(); // Update display to reset values to those stored
+      EntityPage::_update_display_thermostat(); // Update display to reset values to those stored
     }
   }
 }

@@ -179,8 +179,8 @@ void ButtonManager::_button2_press(void) {
 
 void ButtonManager::_set_relay_state(uint8_t relay, bool state, bool send_mqtt_update) {
   if (relay == 1) {
-    // Only allow relay state to be changed once every 250ms.
-    if (esp_timer_get_time() - ButtonManager::_last_relay1_change < 250000) {
+    // Only allow relay state to be changed once every 250ms if we have actually been running for more than 250ms.  This will not allow default relay mode to be set otherwise.
+    if (esp_timer_get_time() >= 250000 && esp_timer_get_time() - ButtonManager::_last_relay1_change < 250000) {
       return;
     }
 
@@ -214,8 +214,8 @@ void ButtonManager::_set_relay_state(uint8_t relay, bool state, bool send_mqtt_u
     }
     ButtonManager::_last_relay1_change = esp_timer_get_time();
   } else if (relay == 2) {
-    // Only allow relay state to be changed once every 250ms.
-    if (esp_timer_get_time() - ButtonManager::_last_relay2_change < 250000) {
+    // Only allow relay state to be changed once every 250ms if we have actually been running for more than 250ms. This will not allow default relay mode to be set otherwise.
+    if (esp_timer_get_time() >= 250000 && esp_timer_get_time() - ButtonManager::_last_relay2_change < 250000) {
       return;
     }
 
@@ -395,7 +395,7 @@ void ButtonManager::_nspm_configmanager_event_handler(void *arg, esp_event_base_
       ConfigManager::relay1_thermostat_cool_mode = false;
 
       if (config->relay1_default_mode != ButtonManager::_relay1_default_mode) {
-        ESP_LOGI("ButtonManager", "Relay1 default state changed. Setting new state.");
+        ESP_LOGI("ButtonManager", "Relay1 default state changed. Setting new state %s -> %s.", ButtonManager::_relay1_default_mode ? "ON" : "OFF", config->relay1_default_mode ? "ON" : "OFF");
         ConfigManager::relay1_default_mode = config->relay1_default_mode;
         ButtonManager::_relay1_default_mode = config->relay1_default_mode;
         ButtonManager::_set_relay_state(1, config->relay1_default_mode, true);
@@ -426,7 +426,7 @@ void ButtonManager::_nspm_configmanager_event_handler(void *arg, esp_event_base_
       ConfigManager::relay2_thermostat_heat_mode = false;
 
       if (config->relay2_default_mode != ButtonManager::_relay2_default_mode) {
-        ESP_LOGI("ButtonManager", "Relay2 default state changed. Setting new state.");
+        ESP_LOGI("ButtonManager", "Relay2 default state changed. Setting new state %s -> %s.", ButtonManager::_relay2_default_mode ? "ON" : "OFF", config->relay2_default_mode ? "ON" : "OFF");
         ConfigManager::relay2_default_mode = config->relay2_default_mode;
         ButtonManager::_relay2_default_mode = config->relay2_default_mode;
         ButtonManager::_set_relay_state(2, config->relay2_default_mode, true);
