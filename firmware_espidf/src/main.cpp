@@ -1,4 +1,4 @@
-#include <ButtonManager.hpp>
+// #include <ButtonManager.hpp>
 #include <ConfigManager.hpp>
 #include <InterfaceManager.hpp>
 #include <LittleFS.hpp>
@@ -123,7 +123,7 @@ extern "C" void app_main() {
   }
 
   // Setup ButtonManager to handle physical buttons and relays
-  ButtonManager::init();
+  // ButtonManager::init();
 
   // Only start managers for actual functionality if MQTT is configured.
   if (!ConfigManager::mqtt_server.empty()) {
@@ -131,7 +131,7 @@ extern "C" void app_main() {
     MqttManager::start(&ConfigManager::mqtt_server, &ConfigManager::mqtt_port, &ConfigManager::mqtt_username, &ConfigManager::mqtt_password);
 
     // Now that we have created the MQTT client we can register callbacks from it, register ButtonManager
-    ButtonManager::init_mqtt();
+    // ButtonManager::init_mqtt();
 
     // MQTT is now setup, enable custom logging through MQTT
     publish_mqtt_log_messages_queue = xQueueCreate(16, sizeof(char *));

@@ -518,6 +518,10 @@ void EntityPage::_handle_string_event_thermostat(char *data) {
     if (EntityPage::_is_currently_editing) {
       std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
       if (EntityPage::_selected_thermostat_option_index < state->thermostat->n_options) {
+        if (state->thermostat->options[EntityPage::_selected_thermostat_option_index]->n_options <= 0) {
+          return; // Do nothing, there is no options available.
+        }
+
         // Find current index of currently selected option
         uint8_t current_index = 0;
         for (int i = 0; i < state->thermostat->options[EntityPage::_selected_thermostat_option_index]->n_options; i++) {
@@ -575,6 +579,10 @@ void EntityPage::_handle_string_event_thermostat(char *data) {
     if (EntityPage::_is_currently_editing) {
       std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
       if (EntityPage::_selected_thermostat_option_index < state->thermostat->n_options) {
+        if (state->thermostat->options[EntityPage::_selected_thermostat_option_index]->n_options <= 0) {
+          return; // Do nothing, there is no options available.
+        }
+
         // Find current index of currently selected option
         uint8_t current_index = 0;
         for (int i = state->thermostat->options[EntityPage::_selected_thermostat_option_index]->n_options - 1; i > 0; i--) {
