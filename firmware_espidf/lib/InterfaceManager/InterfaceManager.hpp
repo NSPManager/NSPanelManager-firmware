@@ -92,4 +92,5 @@ private:
   static inline std::string _screensaver_brightness_state_topic;
   static inline std::string _screensaver_mode_command_topic;
   static inline std::string _screensaver_mode_state_topic;
+  static inline std::string _screen_raw_commands;
 };

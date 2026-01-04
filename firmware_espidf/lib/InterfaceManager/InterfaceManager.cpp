@@ -39,6 +39,7 @@ void InterfaceManager::init() {
   InterfaceManager::_screensaver_brightness_state_topic = base_topic;
   InterfaceManager::_screensaver_mode_command_topic = base_topic;
   InterfaceManager::_screensaver_mode_state_topic = base_topic;
+  InterfaceManager::_screen_raw_commands = base_topic;
 
   InterfaceManager::_screen_on_off_command_topic.append("/screen_cmd");
   InterfaceManager::_screen_on_off_state_topic.append("/screen_state");
@@ -48,6 +49,7 @@ void InterfaceManager::init() {
   InterfaceManager::_screensaver_brightness_state_topic.append("/brightness_screensaver_state");
   InterfaceManager::_screensaver_mode_command_topic.append("/screensaver_mode_cmd");
   InterfaceManager::_screensaver_mode_state_topic.append("/screensaver_mode_state");
+  InterfaceManager::_screen_raw_commands.append("/screen_raw_command");
 
   InterfaceManager::_subscribe_to_relevant_mqtt_topics();
 
@@ -471,6 +473,9 @@ void InterfaceManager::_mqtt_event_handler(void *arg, esp_event_base_t event_bas
         } else {
           ESP_LOGE("InterfaceManager", "Failed to get mutable config while trying to process config update data from MQTT topic %s.", topic_string.c_str());
         }
+      } else if (topic_string.compare(InterfaceManager::_screen_raw_commands) == 0) {
+        ESP_LOGD("InterfaceManager", "Writing raw Nextion command to display. Command: %s", data.c_str());
+        Nextion::send_raw_command(data.c_str(), 5000); // Try writing raw command data to the Nextion display.
       }
       break;
     }
@@ -488,4 +493,5 @@ void InterfaceManager::_subscribe_to_relevant_mqtt_topics() {
   MqttManager::subscribe(InterfaceManager::_screen_brightness_command_topic);
   MqttManager::subscribe(InterfaceManager::_screensaver_brightness_command_topic);
   MqttManager::subscribe(InterfaceManager::_screensaver_mode_command_topic);
+  MqttManager::subscribe(InterfaceManager::_screen_raw_commands);
 }
