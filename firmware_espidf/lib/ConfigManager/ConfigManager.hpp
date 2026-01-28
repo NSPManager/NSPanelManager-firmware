@@ -108,4 +108,10 @@ public:
 
   // Number of boots that latest less then 3 seconds. Used to reset panel when turning it off/on/off many times in a row.
   static inline uint8_t num_failed_boots = 0;
+
+  // fallback mode of all button_press actions  
+  static inline uint8_t button1_fallback_mode=0;
+  static inline uint8_t button2_fallback_mode=0;
+  static inline uint8_t button1_long_fallback_mode=0;
+  static inline uint8_t button2_long_fallback_mode=0;
 };
