@@ -21,6 +21,11 @@ void ButtonManager::init() {
   ButtonManager::_relay2_default_mode = ConfigManager::relay2_default_mode;
   ButtonManager::_min_button_push_time = ConfigManager::min_button_push_time;
   ButtonManager::_min_button_long_push_time = ConfigManager::min_button_long_push_time;
+  ButtonManager::_button1_fallback_mode = static_cast<NSPanelConfig__NSPanelButtonFallbackMode>(ConfigManager::button1_fallback_mode);
+  ButtonManager::_button2_fallback_mode = static_cast<NSPanelConfig__NSPanelButtonFallbackMode>(ConfigManager::button2_fallback_mode);
+  ButtonManager::_button1_long_fallback_mode = static_cast<NSPanelConfig__NSPanelButtonFallbackMode>(ConfigManager::button1_long_fallback_mode);
+  ButtonManager::_button2_long_fallback_mode = static_cast<NSPanelConfig__NSPanelButtonFallbackMode>(ConfigManager::button2_long_fallback_mode);
+
 
   esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, ButtonManager::_nspm_configmanager_event_handler, NULL);
   esp_event_handler_register(STATUSUPDATEMANAGER_EVENT, statusupdatemanagerevent_t::AVERAGE_TEMP_UPDATE, ButtonManager::_new_temperature_event, NULL);
@@ -121,8 +126,12 @@ void ButtonManager::_button1_press(void) {
       size_t packed_data_size = nspanel_mqttmanager_command__pack(&command, buffer.data());
       if (packed_data_size == packed_length) [[likely]] {
         if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) [[unlikely]] {
-          ESP_LOGE("ButtonManager", "Failed to publish command that button was pressed.");
-        }
+          if (ButtonManager::_button1_fallback_mode == 0){
+            ESP_LOGE("ButtonManager", "Failed to publish command that button1 was pressed.");
+          } else{
+            ESP_LOGE("ButtonManager", "Failed to publish command that button1 was pressed. Fallback toggle relay");
+            ButtonManager::_set_relay_state(ButtonManager::_button1_fallback_mode, !ButtonManager::_get_relay_state(ButtonManager::_button1_fallback_mode), true); // Toggle output
+          }        }
       }
     } else {
       ESP_LOGE("ButtonManager", "Failed to get config while trying to process button press event and as such could not sent event to manager for further handling.");
@@ -161,7 +170,12 @@ void ButtonManager::_button2_press(void) {
       size_t packed_data_size = nspanel_mqttmanager_command__pack(&command, buffer.data());
       if (packed_data_size == packed_length) [[likely]] {
         if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) [[unlikely]] {
-          ESP_LOGE("ButtonManager", "Failed to publish command that button was pressed.");
+          if (ButtonManager::_button2_fallback_mode == 0){
+            ESP_LOGE("ButtonManager", "Failed to publish command that button2 was pressed.");
+          } else{
+            ESP_LOGE("ButtonManager", "Failed to publish command that button2 was pressed. Fallback toggle relay");
+            ButtonManager::_set_relay_state(ButtonManager::_button2_fallback_mode, !ButtonManager::_get_relay_state(ButtonManager::_button2_fallback_mode), true); // Toggle output
+          }
         }
       }
     } else {
@@ -183,15 +197,15 @@ void ButtonManager::_button2_press(void) {
 
 void ButtonManager::_button1_longpress(void) {
   ESP_LOGW("ButtonManager", "button1 longpress");
-  ButtonManager::_button_longpress(ButtonManager::_button1_long_mode, 1);
+  ButtonManager::_button_longpress(ButtonManager::_button1_long_mode, 1, ButtonManager::_button2_long_fallback_mode);
 }
 
 void ButtonManager::_button2_longpress(void) {
   ESP_LOGW("ButtonManager", "button2 longpress");
-  ButtonManager::_button_longpress(ButtonManager::_button2_long_mode, 2);
+  ButtonManager::_button_longpress(ButtonManager::_button2_long_mode, 2, ButtonManager::_button2_long_fallback_mode);
 }
 
-void ButtonManager::_button_longpress(NSPanelConfig__NSPanelButtonMode mode, int button_id) {
+void ButtonManager::_button_longpress(NSPanelConfig__NSPanelButtonMode mode, int button_id, int fallback_mode) {
   switch (mode) {
   case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT: {
     ButtonManager::_set_relay_state(button_id, !ButtonManager::_get_relay_state(button_id), true); // Toggle output
@@ -213,7 +227,12 @@ void ButtonManager::_button_longpress(NSPanelConfig__NSPanelButtonMode mode, int
       size_t packed_data_size = nspanel_mqttmanager_command__pack(&command, buffer.data());
       if (packed_data_size == packed_length) [[likely]] {
         if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) [[unlikely]] {
-          ESP_LOGE("ButtonManager", "Failed to publish command that button was pressed.");
+          if (fallback_mode == 0){
+            ESP_LOGE("ButtonManager", "Failed to publish command that button was long pressed.");
+          } else{
+            ESP_LOGE("ButtonManager", "Failed to publish command that button was long pressed. Fallback toggle relay");
+            ButtonManager::_set_relay_state(fallback_mode, !ButtonManager::_get_relay_state(fallback_mode), true); // Toggle output
+          }
         }
       }
     } else {
@@ -505,6 +524,34 @@ void ButtonManager::_nspm_configmanager_event_handler(void *arg, esp_event_base_
 
       ButtonManager::_button1->setLongPressInterval(ButtonManager::_min_button_long_push_time);
       ButtonManager::_button2->setLongPressInterval(ButtonManager::_min_button_long_push_time);
+      save = true;
+    }
+
+    if (config->button1_fallback_mode != ButtonManager::_button1_fallback_mode) {
+      ButtonManager::_button1_fallback_mode = config->button1_fallback_mode;
+      ConfigManager::button1_fallback_mode = ButtonManager::_button1_fallback_mode;
+
+      save = true;
+    }
+
+    if (config->button2_fallback_mode != ButtonManager::_button2_fallback_mode) {
+      ButtonManager::_button2_fallback_mode = config->button2_fallback_mode;
+      ConfigManager::button2_fallback_mode = ButtonManager::_button2_fallback_mode;
+
+      save = true;
+    }
+
+    if (config->button1_long_fallback_mode != ButtonManager::_button1_long_fallback_mode) {
+      ButtonManager::_button1_long_fallback_mode = config->button1_long_fallback_mode;
+      ConfigManager::button1_long_fallback_mode = ButtonManager::_button1_long_fallback_mode;
+
+      save = true;
+    }
+
+    if (config->button2_long_fallback_mode != ButtonManager::_button2_long_fallback_mode) {
+      ButtonManager::_button2_long_fallback_mode = config->button2_long_fallback_mode;
+      ConfigManager::button2_long_fallback_mode = ButtonManager::_button2_long_fallback_mode;
+
       save = true;
     }
 

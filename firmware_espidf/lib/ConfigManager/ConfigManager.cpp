@@ -173,6 +173,26 @@ esp_err_t ConfigManager::load_config() {
     ConfigManager::relay2_upper_temperature = item->valueint;
   }
 
+  item = cJSON_GetObjectItem(json, "button1_fallback_mode");
+  if (cJSON_IsNumber(item)) {
+    ConfigManager::button1_fallback_mode = item->valueint;
+  }
+
+  item = cJSON_GetObjectItem(json, "button2_fallback_mode");
+  if (cJSON_IsNumber(item)) {
+    ConfigManager::button2_fallback_mode = item->valueint;
+  }
+
+    item = cJSON_GetObjectItem(json, "button1_long_fallback_mode");
+  if (cJSON_IsNumber(item)) {
+    ConfigManager::button1_long_fallback_mode = item->valueint;
+  }
+
+  item = cJSON_GetObjectItem(json, "button2_long_fallback_mode");
+  if (cJSON_IsNumber(item)) {
+    ConfigManager::button2_long_fallback_mode = item->valueint;
+  }
+
   cJSON_Delete(json);
   free(read_buffer);
 
@@ -206,6 +226,11 @@ void ConfigManager::create_default() {
   ConfigManager::nextion_upload_baudrate = 115200;
   ConfigManager::communication_baud_rate = 115200;
   ConfigManager::log_level = ESP_LOG_WARN;
+
+  ConfigManager::button1_fallback_mode=0;
+  ConfigManager::button2_fallback_mode=0;
+  ConfigManager::button1_long_fallback_mode=0;
+  ConfigManager::button2_long_fallback_mode=0;
 }
 
 esp_err_t ConfigManager::save_config() {
@@ -238,6 +263,10 @@ esp_err_t ConfigManager::save_config() {
   cJSON_AddNumberToObject(json, "relay1_upper_temperature", ConfigManager::relay1_upper_temperature);
   cJSON_AddNumberToObject(json, "relay2_lower_temperature", ConfigManager::relay2_lower_temperature);
   cJSON_AddNumberToObject(json, "relay2_upper_temperature", ConfigManager::relay2_upper_temperature);
+  cJSON_AddNumberToObject(json, "button1_fallback_mode", ConfigManager::button1_fallback_mode);
+  cJSON_AddNumberToObject(json, "button2_fallback_mode", ConfigManager::button2_fallback_mode);
+  cJSON_AddNumberToObject(json, "button1_long_fallback_mode", ConfigManager::button1_long_fallback_mode);
+  cJSON_AddNumberToObject(json, "button2_long_fallback_mode", ConfigManager::button2_long_fallback_mode);
 
   if (ConfigManager::use_latest_nextion_upload_protocol) {
     cJSON_AddTrueToObject(json, "use_new_upload_protocol");

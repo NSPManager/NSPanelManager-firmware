@@ -62,7 +62,7 @@ private:
   /** 
    * actual handler for longpress. could be reused for other button events
    */
-  static void _button_longpress(NSPanelConfig__NSPanelButtonMode mode, int button_id);
+  static void _button_longpress(NSPanelConfig__NSPanelButtonMode mode, int button_id, int fallback_mode);
 
   /**
    * Set the state of a relay and send state update to MQTT
@@ -101,9 +101,13 @@ private:
   static inline std::atomic<bool> _relay1_current_state = false;
   static inline std::atomic<bool> _relay2_current_state = false;
   static inline NSPanelConfig__NSPanelButtonMode _button1_mode = NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT; // Start by using default direct mode
+  static inline NSPanelConfig__NSPanelButtonFallbackMode _button1_fallback_mode = NSPanelConfig__NSPanelButtonFallbackMode::NSPANEL_CONFIG__NSPANEL_BUTTON_FALLBACK_MODE__DISABLED; // Start by using fallback disabled
   static inline NSPanelConfig__NSPanelButtonMode _button2_mode = NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT; // Start by using default direct mode;
+  static inline NSPanelConfig__NSPanelButtonFallbackMode _button2_fallback_mode = NSPanelConfig__NSPanelButtonFallbackMode::NSPANEL_CONFIG__NSPANEL_BUTTON_FALLBACK_MODE__DISABLED; // Start by using fallback disabled
   static inline NSPanelConfig__NSPanelButtonMode _button1_long_mode = NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT; // Start by using default direct mode
+  static inline NSPanelConfig__NSPanelButtonFallbackMode _button1_long_fallback_mode = NSPanelConfig__NSPanelButtonFallbackMode::NSPANEL_CONFIG__NSPANEL_BUTTON_FALLBACK_MODE__DISABLED; // Start by using fallback disabled
   static inline NSPanelConfig__NSPanelButtonMode _button2_long_mode = NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT; // Start by using default direct mode;
+  static inline NSPanelConfig__NSPanelButtonFallbackMode _button2_long_fallback_mode = NSPanelConfig__NSPanelButtonFallbackMode::NSPANEL_CONFIG__NSPANEL_BUTTON_FALLBACK_MODE__DISABLED; // Start by using fallback disabled
 
 
   // Queue of interrupt events to handle
