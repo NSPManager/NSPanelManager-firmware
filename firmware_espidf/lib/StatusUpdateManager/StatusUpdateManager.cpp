@@ -6,6 +6,7 @@
 #include <StatusUpdateManager_events.hpp>
 #include <UpdateManager_event.hpp>
 #include <WiFiManager.hpp>
+#include <NSPM_version.hpp>
 #include <cmath>
 #include <driver/adc.h>
 #include <esp_adc_cal.h>
@@ -31,6 +32,7 @@ void StatusUpdateManager::init() {
   StatusUpdateManager::_status_report.rssi = 0;
   StatusUpdateManager::_status_report.temperature = 0;
   StatusUpdateManager::_status_report.mac_address = (char *)WiFiManager::mac_string();
+  StatusUpdateManager::_status_report.version = NSPM_VERSION;
   StatusUpdateManager::_status_report.md5_firmware = (char *)ConfigManager::md5_firmware.c_str();
   StatusUpdateManager::_status_report.md5_littlefs = (char *)ConfigManager::md5_data_file.c_str();
   StatusUpdateManager::_status_report.md5_tft_gui = (char *)ConfigManager::md5_gui.c_str();
@@ -82,6 +84,10 @@ void StatusUpdateManager::_send_status_update(void *arg) {
     StatusUpdateManager::_status_report.heap_used_pct = heap_used_pct;
     StatusUpdateManager::_status_report.ip_address = (char *)WiFiManager::ip_string().c_str();
     StatusUpdateManager::_status_report.temperature = StatusUpdateManager::_measured_average_temperature.get();
+    StatusUpdateManager::_status_report.version = NSPM_VERSION;
+    StatusUpdateManager::_status_report.md5_firmware = (char *)ConfigManager::md5_firmware.c_str();
+    StatusUpdateManager::_status_report.md5_littlefs = (char *)ConfigManager::md5_data_file.c_str();
+    StatusUpdateManager::_status_report.md5_tft_gui = (char *)ConfigManager::md5_gui.c_str();
 
     // TODO: Load warnings
     // Send status update

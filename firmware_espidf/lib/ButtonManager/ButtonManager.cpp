@@ -46,6 +46,7 @@ void ButtonManager::init() {
   ButtonManager::_button1->bind(Event_KeyDown, &ButtonManager::_button1_key_down);
   ButtonManager::_button1->bind(Event_KeyUp, &ButtonManager::_button1_key_up);
   ButtonManager::_button1->bind(Event_KeyPress, &ButtonManager::_button1_press);
+  ButtonManager::_button1->bind(Event_LongKeyPress, &ButtonManager::_button1_longpress);
 
   // Init button2
   if (ButtonManager::_button2 != nullptr) {
@@ -56,6 +57,8 @@ void ButtonManager::init() {
   ButtonManager::_button2->bind(Event_KeyDown, &ButtonManager::_button2_key_down);
   ButtonManager::_button2->bind(Event_KeyUp, &ButtonManager::_button2_key_up);
   ButtonManager::_button2->bind(Event_KeyPress, &ButtonManager::_button2_press);
+  ButtonManager::_button2->bind(Event_LongKeyPress, &ButtonManager::_button2_longpress);
+
 
   InterruptButton::setMenuCount(0);
   InterruptButton::setMenuLevel(0);
@@ -165,6 +168,57 @@ void ButtonManager::_button2_press(void) {
       ESP_LOGE("ButtonManager", "Failed to get config while trying to process button press event and as such could not sent event to manager for further handling.");
     }
 
+    break;
+  }
+
+  case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__FOLLOW:
+    break; // Simply do nothing, this is handled in "key down" and "key up" events.
+
+  default:
+    ESP_LOGE("ButtonManager", "Unknown button action. Will not perform any action.");
+    break;
+  }
+}
+
+
+void ButtonManager::_button1_longpress(void) {
+  ESP_LOGW("ButtonManager", "button1 longpress");
+  ButtonManager::_button_longpress(ButtonManager::_button1_long_mode, 1);
+}
+
+void ButtonManager::_button2_longpress(void) {
+  ESP_LOGW("ButtonManager", "button2 longpress");
+  ButtonManager::_button_longpress(ButtonManager::_button2_long_mode, 2);
+}
+
+void ButtonManager::_button_longpress(NSPanelConfig__NSPanelButtonMode mode, int button_id) {
+  switch (mode) {
+  case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT: {
+    ButtonManager::_set_relay_state(button_id, !ButtonManager::_get_relay_state(button_id), true); // Toggle output
+    break;
+  }
+
+  case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__NOTIFY_MANAGER: {
+    std::shared_ptr<NSPanelConfig> config;
+    if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+      NSPanelMQTTManagerCommand command = NSPANEL_MQTTMANAGER_COMMAND__INIT;
+      NSPanelMQTTManagerCommand__ButtonPressed pressed_command = NSPANEL_MQTTMANAGER_COMMAND__BUTTON_LONG_PRESSED__INIT;
+      pressed_command.button_id = button_id;
+      command.button_pressed = &pressed_command;
+      command.nspanel_id = config->nspanel_id;
+      command.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_BUTTON_LONGPRESSED;
+
+      uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&command);
+      std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
+      size_t packed_data_size = nspanel_mqttmanager_command__pack(&command, buffer.data());
+      if (packed_data_size == packed_length) [[likely]] {
+        if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) [[unlikely]] {
+          ESP_LOGE("ButtonManager", "Failed to publish command that button was pressed.");
+        }
+      }
+    } else {
+      ESP_LOGE("ButtonManager", "Failed to get config while trying to process button press event and as such could not sent event to manager for further handling.");
+    }
     break;
   }
 
@@ -370,6 +424,8 @@ void ButtonManager::_nspm_configmanager_event_handler(void *arg, esp_event_base_
     ButtonManager::_reverse_relays = config->reverse_relays;
     ButtonManager::_button1_mode = config->button1_mode;
     ButtonManager::_button2_mode = config->button2_mode;
+    ButtonManager::_button1_long_mode = config->button1_long_mode;
+    ButtonManager::_button2_long_mode = config->button2_long_mode;
 
     bool save = false;
     if (config->button1_mode == NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__THERMOSTAT_HEAT || config->button1_mode == NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__THERMOSTAT_COOL) {
