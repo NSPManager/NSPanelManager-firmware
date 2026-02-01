@@ -97,6 +97,8 @@ void ButtonManager::_button2_key_up(void) {
 }
 
 void ButtonManager::_button1_press(void) {
+  ESP_LOGD("ButtonManager", "Button 1 pressed.");
+
   switch (ButtonManager::_button1_mode) {
   case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT: {
     ButtonManager::_set_relay_state(1, !ButtonManager::_get_relay_state(1), true); // Toggle output
@@ -137,6 +139,8 @@ void ButtonManager::_button1_press(void) {
 }
 
 void ButtonManager::_button2_press(void) {
+  ESP_LOGD("ButtonManager", "Button 2 pressed.");
+
   switch (ButtonManager::_button2_mode) {
   case NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT: {
     ButtonManager::_set_relay_state(2, !ButtonManager::_get_relay_state(2), true); // Toggle output

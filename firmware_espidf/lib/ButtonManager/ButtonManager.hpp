@@ -93,15 +93,26 @@ private:
   // Button data
   static inline std::atomic<uint32_t> _min_button_push_time;
   static inline std::atomic<uint32_t> _min_button_long_push_time;
-  static constexpr const uint8_t _button1_pin = 14;
-  static constexpr const uint8_t _button2_pin = 27;
+#if defined(BOARD_SONOFF)
+  static constexpr const gpio_num_t _button1_pin = gpio_num_t::GPIO_NUM_14;
+  static constexpr const gpio_num_t _button2_pin = gpio_num_t::GPIO_NUM_27;
+#elif defined(BOARD_CUSTOM)
+  static constexpr const gpio_num_t _button1_pin = gpio_num_t::GPIO_NUM_14;
+  static constexpr const gpio_num_t _button2_pin = gpio_num_t::GPIO_NUM_15;
+#endif
+
   static inline InterruptButton *_button1 = nullptr;
   static inline InterruptButton *_button2 = nullptr;
 
   // Relay data
   static inline gpio_config_t _relay_io_config;
+#if defined(BOARD_SONOFF)
   static constexpr const gpio_num_t _relay1_pin = gpio_num_t::GPIO_NUM_22;
   static constexpr const gpio_num_t _relay2_pin = gpio_num_t::GPIO_NUM_19;
+#elif defined(BOARD_CUSTOM)
+  static constexpr const gpio_num_t _relay1_pin = gpio_num_t::GPIO_NUM_16;
+  static constexpr const gpio_num_t _relay2_pin = gpio_num_t::GPIO_NUM_17;
+#endif
   static constexpr const uint32_t _relay_pin_mask = ((1ULL << _relay1_pin) | (1ULL << _relay2_pin));
 
   static inline uint64_t _last_relay1_change = 0;

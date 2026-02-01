@@ -53,6 +53,18 @@ public:
   static esp_err_t send_raw_command(const char *command, uint16_t mutex_timeout);
 
   /**
+   * @brief Send raw command data to the Nextion display.
+   * @param x: Start X of rectangle
+   * @param y: Start Y of rectangle
+   * @param width: The width of the rectangle
+   * @param height: The height of the rectangle
+   * @param color: The 565 color value to fill the rectangle with
+   * @param mutex_timeout: Timeout (in ms) of how long to wait for UART mutex
+   * @return ESP_OK or ESP_ERR_TIMEOUT
+   */
+  static esp_err_t fill(const uint32_t x, const uint32_t y, const uint32_t width, const uint32_t height, const uint16_t color, uint16_t mutex_timeout);
+
+  /**
    * @brief Set the text on the given component
    * @param component_id: The component to change
    * @param text: What text is to be displayed

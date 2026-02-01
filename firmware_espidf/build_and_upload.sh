@@ -4,6 +4,7 @@
 
 NSPanelManager_address="127.0.0.1"
 NSPanelManager_port="8000"
+BOARD_TYPE="custom_pcb" # Valid options are "custom_pcb" and "sonoff"
 
 function update_panel_version() {
   # Update version file.
@@ -26,7 +27,7 @@ else
 fi
 
 # Build firmware and LittleFS
-platformio run --environment esp32doit-devkit-v1
+platformio run --environment "${BOARD_TYPE}"
 firmware_build_result="$?"
 
 if [ "$firmware_build_result" -ne 0 ]; then
@@ -38,8 +39,8 @@ touch littlefs.md5
 current_littlefs_md5="$(cat littlefs.md5)"
 new_littlefs_md5="$(find data/ -type f -exec md5sum {} \; | sort | md5sum | cut -d ' ' -f 1)"
 
-if [ "$current_littlefs_md5" != "$new_littlefs_md5" ] || [ ! -f ".pio/build/esp32doit-devkit-v1/littlefs.bin" ]; then
-  platformio run --target buildfs --environment esp32doit-devkit-v1
+if [ "$current_littlefs_md5" != "$new_littlefs_md5" ] || [ ! -f ".pio/"${BOARD_TYPE}"/littlefs.bin" ]; then
+  platformio run --target buildfs --environment "${BOARD_TYPE}"
 
   if [ "$?" -ne 0 ]; then
     echo "--- LittleFS build failed. Will not upload to NSPanelManager ---"
@@ -51,12 +52,12 @@ else
   echo "LittleFS has not changed. Will not build."
 fi
 
-source ./build_image.sh
+source ./build_image.sh "${BOARD_TYPE}"
 
 # Upload firmware and LittleFS to NSPanelManager
-curl http://"$NSPanelManager_address":"$NSPanelManager_port"/save_new_firmware -F firmware=@.pio/build/esp32doit-devkit-v1/firmware.bin
+curl http://"$NSPanelManager_address":"$NSPanelManager_port"/save_new_firmware -F firmware=@.pio/build/"${BOARD_TYPE}"/firmware.bin
 firmware_status="$?"
-curl http://"$NSPanelManager_address":"$NSPanelManager_port"/save_new_data_file -F data_file=@.pio/build/esp32doit-devkit-v1/littlefs.bin
+curl http://"$NSPanelManager_address":"$NSPanelManager_port"/save_new_data_file -F data_file=@.pio/build/"${BOARD_TYPE}"/littlefs.bin
 data_file_status="$?"
 
 curl http://"$NSPanelManager_address":"$NSPanelManager_port"/save_new_merged_flash -F bin=@merged-flash.bin

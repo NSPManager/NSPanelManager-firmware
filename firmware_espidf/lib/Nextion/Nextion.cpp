@@ -47,7 +47,11 @@ esp_err_t Nextion::init() {
 
   uart_driver_install(UART_NUM_2, NEXTION_UART_BUFFER_SIZE * 2, 6000, 8, &Nextion::_uart_event_queue, 0); // Setup UART driver
   uart_param_config(UART_NUM_2, &Nextion::_uart_config);
+#if defined(BOARD_SONOFF)
   uart_set_pin(UART_NUM_2, GPIO_NUM_16, GPIO_NUM_17, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+#elif defined(BOARD_CUSTOM)
+  uart_set_pin(UART_NUM_2, GPIO_NUM_3, GPIO_NUM_46, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+#endif
   uart_enable_pattern_det_baud_intr(UART_NUM_2, 0xFF, 3, 9, 0, 0); // Setup pattern detection to trigger interrupt when 3 consecutive 0xFF has been received.
   uart_pattern_queue_reset(UART_NUM_2, 8);
 
@@ -396,6 +400,38 @@ esp_err_t Nextion::send_raw_command(const char *command, uint16_t mutex_timeout)
 
   if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
     uart_write_bytes(UART_NUM_2, command, strlen(command));
+
+    // Send command finished sequence
+    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
+    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
+
+    xSemaphoreGive(Nextion::_uart_write_mutex);
+    return ESP_OK;
+  }
+  return ESP_ERR_TIMEOUT;
+}
+
+esp_err_t Nextion::fill(const uint32_t x, const uint32_t y, const uint32_t width, const uint32_t height, const uint16_t color, uint16_t mutex_timeout) {
+  // Verify that the Nextion state is "running" as we don't want to send data that may interrupt other processes such as updating the GUI
+  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
+    if (Nextion::_current_nextion_state != nextion_state_t::RUNNING) {
+      xSemaphoreGive(Nextion::_nextion_state_mutex);
+      return ESP_ERR_TIMEOUT;
+    }
+    xSemaphoreGive(Nextion::_nextion_state_mutex);
+  }
+
+  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
+    uart_write_bytes(UART_NUM_2, "fill ", strlen("fill "));
+    uart_write_bytes(UART_NUM_2, std::to_string(x).c_str(), std::to_string(x).length());
+    uart_write_bytes(UART_NUM_2, ",", strlen(","));
+    uart_write_bytes(UART_NUM_2, std::to_string(y).c_str(), std::to_string(y).length());
+    uart_write_bytes(UART_NUM_2, ",", strlen(","));
+    uart_write_bytes(UART_NUM_2, std::to_string(width).c_str(), std::to_string(width).length());
+    uart_write_bytes(UART_NUM_2, ",", strlen(","));
+    uart_write_bytes(UART_NUM_2, std::to_string(height).c_str(), std::to_string(height).length());
+    uart_write_bytes(UART_NUM_2, ",", strlen(","));
+    uart_write_bytes(UART_NUM_2, std::to_string(color).c_str(), std::to_string(color).length());
 
     // Send command finished sequence
     uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
