@@ -210,6 +210,20 @@ private:
    * @return ESP_OK on success, otherwise return ESP_ERR_NOT_FINISHED.
    */
   static esp_err_t _write_command(char *data);
+
+  /**
+   * @brief Write data to Nextion display
+   */
+  static int nextion_write(const void* src, size_t size);
+
+  /**
+   * @brief write end 0xff,0xff,0xff to Nextion display
+   */
+  static void nextion_write_end();
+
+  
+
+
 public:
   /**
    * @brief works in the same way as _write_command, but handles buffer overflow, 
@@ -256,4 +270,12 @@ private:
 
   // When starting the Nextion display, did we receive the "NSPM" flag indicating that our NSPanel Manager firmware is running on the Nextion display?
   static inline bool _has_received_nspm_flag;
+
+  // Buffer overflow protection, used in nextion_write_end
+  static inline SemaphoreHandle_t _cmd_success_mutex;
+
+  // buffer overlow protection, keep track of how many bytes currently waiting.
+  static inline int nextion_buffer_out;
+
+
 };
