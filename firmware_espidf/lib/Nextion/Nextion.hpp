@@ -19,6 +19,7 @@ enum nextion_state_t {
 static constexpr uint16_t NEXTION_UART_EVENT_LOOP_STACK_SIZE = 3096;
 static constexpr uint16_t NEXTION_UART_EVENT_LOOP_QUEUE_SIZE = 6;
 
+
 class Nextion {
 public:
   /**
@@ -219,6 +220,26 @@ private:
    */
   static esp_err_t _write_command(char *data);
 
+  /**
+   * @brief Write data to Nextion display
+   */
+  static int nextion_write(const void* src, size_t size);
+
+  /**
+   * @brief write end 0xff,0xff,0xff to Nextion display
+   */
+  static void nextion_write_end();
+
+  
+
+
+public:
+  /**
+   * @brief works in the same way as _write_command, but handles buffer overflow, 
+   */
+  static esp_err_t write_command(char *data);
+private:
+
   // VARIABLES:
   // Event loop handle for custom events that happens from UART read -> handle mqtt message
   static inline esp_event_loop_handle_t _handle_uart_data_event_loop;
@@ -258,4 +279,12 @@ private:
 
   // When starting the Nextion display, did we receive the "NSPM" flag indicating that our NSPanel Manager firmware is running on the Nextion display?
   static inline bool _has_received_nspm_flag;
+
+  // Buffer overflow protection, used in nextion_write_end
+  static inline SemaphoreHandle_t _cmd_finished_bin_sem;
+
+  // buffer overlow protection, keep track of how many bytes currently waiting.
+  static inline int _nextion_buffer_out;
+
+
 };
