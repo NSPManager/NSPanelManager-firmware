@@ -10,6 +10,36 @@
 
 ESP_EVENT_DEFINE_BASE(NEXTION_EVENT);
 
+
+
+
+uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
+int nextion_buffer_out = 0;
+SemaphoreHandle_t cmd_success_mutex = xSemaphoreCreateBinary();
+
+char command_bk3[] = "bkcmd=3" "\xff" "\xff" "\xff";
+char command_bk0[] = "bkcmd=0" "\xff" "\xff" "\xff";
+
+int nextion_write(const void* src, size_t size) {
+  nextion_buffer_out += size;
+  return uart_write_bytes(UART_NUM_2, src, size);
+}
+
+void nextion_write_end() {
+    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
+    if (nextion_buffer_out > 800) {
+      //bkcmd=3, will return success, lets wait for it
+      uart_write_bytes(UART_NUM_2, command_bk3, sizeof(command_bk3) - 1); //-1, no need to send null
+      xSemaphoreTake(cmd_success_mutex, 200);
+      //bkcmd=0, will return nothing, no need to wait again.
+      uart_write_bytes(UART_NUM_2, command_bk0, sizeof(command_bk0) - 1); //-1, no need to send null
+      nextion_buffer_out = 0;
+    }
+}
+
+
+
+
 esp_err_t Nextion::init() {
   esp_log_level_set("Nextion", ConfigManager::log_level);
   ESP_LOGI("Nextion", "Initializing Nextion display.");
@@ -274,6 +304,8 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
     esp_event_post(NEXTION_EVENT, nextion_event_t::STRING_EVENT, data->data(), data->size(), pdMS_TO_TICKS(16)); // TODO: Is there a better way than simply sending raw bytes as te length cannot be access when receiving the event
   } else if (data->data()[0] == NEX_OUT_SLEEP) {
     esp_event_post(NEXTION_EVENT, nextion_event_t::SLEEP_EVENT, NULL, 0, pdMS_TO_TICKS(5000));
+  } else if (data->data()[0] == NEX_RET_CMD_FINISHED) {
+    xSemaphoreGive(cmd_success_mutex);
   } else if (data->data()[0] == NEX_OUT_WAKE) {
     esp_event_post(NEXTION_EVENT, nextion_event_t::WAKE_EVENT, NULL, 0, pdMS_TO_TICKS(5000));
   } else if (data->size() >= strlen("NSPM") && strncmp(data->data() + data->size() - strlen("NSPM"), "NSPM", strlen("NSPM")) == 0) { // TODO: Compare last bytes of message instead of first as there may be garbage data output from the panel before sending NSPM-flag
@@ -343,6 +375,21 @@ void Nextion::_wait_for_event_event_handler(void *arg, esp_event_base_t event_ba
     xSemaphoreGive(Nextion::_event_wait_mutex);
   }
 }
+
+
+esp_err_t Nextion::write_command(char *data) {
+  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(32)) == pdTRUE) {    
+    int len = nextion_write(data, strlen(data));
+    nextion_write_end();
+    xSemaphoreGive(Nextion::_uart_write_mutex);
+    if (len == strlen(data)) {
+      return ESP_OK;
+    }
+  }
+  return ESP_ERR_NOT_FINISHED;
+}
+
+
 
 esp_err_t Nextion::_write_command(char *data) {
   if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(32)) == pdTRUE) {
