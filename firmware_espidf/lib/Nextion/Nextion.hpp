@@ -19,9 +19,6 @@ enum nextion_state_t {
 static constexpr uint16_t NEXTION_UART_EVENT_LOOP_STACK_SIZE = 3096;
 static constexpr uint16_t NEXTION_UART_EVENT_LOOP_QUEUE_SIZE = 6;
 
-int nextion_write(const void* src, size_t size);
-void nextion_write_end();
-
 
 class Nextion {
 public:
@@ -272,10 +269,10 @@ private:
   static inline bool _has_received_nspm_flag;
 
   // Buffer overflow protection, used in nextion_write_end
-  static inline SemaphoreHandle_t _cmd_success_mutex;
+  static inline SemaphoreHandle_t _cmd_finished_bin_sem;
 
   // buffer overlow protection, keep track of how many bytes currently waiting.
-  static inline int nextion_buffer_out;
+  static inline int _nextion_buffer_out;
 
 
 };
