@@ -4,6 +4,7 @@
 #include <WiFiManager.hpp>
 #include <cJSON.h>
 #include <esp_log.h>
+#include <NSPM_version.hpp>
 
 void MqttManager::start(std::string *server, uint16_t *port, std::string *username, std::string *password) {
   esp_log_level_set("MqttManager", ConfigManager::log_level);
@@ -142,6 +143,7 @@ void MqttManager::_send_mqtt_online_update() {
     if (json != NULL) {
       cJSON_AddStringToObject(json, "mac", WiFiManager::mac_string());
       cJSON_AddStringToObject(json, "state", "online");
+      cJSON_AddStringToObject(json, "version", NSPM_VERSION);
     } else {
       ESP_LOGE("MqttManager", "Failed to create cJSON object when trying to send online state update!");
       return;

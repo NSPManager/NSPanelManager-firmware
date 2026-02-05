@@ -49,6 +49,22 @@ private:
   static void _button2_press(void);
 
   /**
+   * Handle longpress event of button1. This is triggered on release of button.
+   */
+  static void _button1_longpress(void);
+
+  /**
+   * Handle longpress event of button2. This is triggered on release of button.
+   */
+  static void _button2_longpress(void);
+
+
+  /** 
+   * actual handler for longpress. could be reused for other button events
+   */
+  static void _button_longpress(NSPanelConfig__NSPanelButtonMode mode, int button_id);
+
+  /**
    * Set the state of a relay and send state update to MQTT
    */
   static void _set_relay_state(uint8_t relay, bool state, bool send_mqtt_update);
@@ -86,6 +102,9 @@ private:
   static inline std::atomic<bool> _relay2_current_state = false;
   static inline NSPanelConfig__NSPanelButtonMode _button1_mode = NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT; // Start by using default direct mode
   static inline NSPanelConfig__NSPanelButtonMode _button2_mode = NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT; // Start by using default direct mode;
+  static inline NSPanelConfig__NSPanelButtonMode _button1_long_mode = NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT; // Start by using default direct mode
+  static inline NSPanelConfig__NSPanelButtonMode _button2_long_mode = NSPanelConfig__NSPanelButtonMode::NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT; // Start by using default direct mode;
+
 
   // Queue of interrupt events to handle
   static inline QueueHandle_t _interrupt_queue;
