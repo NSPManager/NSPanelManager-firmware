@@ -242,7 +242,12 @@ void UpdateManager::update_firmware(void *param) {
   firmware_md5_string.append(NSPM_ConfigManager::get_manager_address());
   firmware_md5_string.append(":");
   firmware_md5_string.append(std::to_string(NSPM_ConfigManager::get_manager_port()));
-  firmware_md5_string.append("/checksum_firmware");
+  firmware_md5_string.append("/checksum_firmware?model=");
+#if defined(BOARD_SONOFF)
+  firmware_md5_string.append("sonoff");
+#elif defined(BOARD_CUSTOM)
+  firmware_md5_string.append("custom");
+#endif
 
   std::vector<uint8_t> data;
   if (UpdateManager::_force_update || UpdateManager::_download_data(&data, firmware_md5_string.c_str(), -1, -1) == ESP_OK) {
@@ -287,7 +292,12 @@ void UpdateManager::update_littlefs(void *param, bool force_update) {
   littlefs_md5_string.append(NSPM_ConfigManager::get_manager_address());
   littlefs_md5_string.append(":");
   littlefs_md5_string.append(std::to_string(NSPM_ConfigManager::get_manager_port()));
-  littlefs_md5_string.append("/checksum_data_file");
+  littlefs_md5_string.append("/checksum_data_file?model=");
+#if defined(BOARD_SONOFF)
+  littlefs_md5_string.append("sonoff");
+#elif defined(BOARD_CUSTOM)
+  littlefs_md5_string.append("custom");
+#endif
 
   std::vector<uint8_t> data;
   if (UpdateManager::_download_data(&data, littlefs_md5_string.c_str(), -1, -1) == ESP_OK) {
@@ -327,7 +337,12 @@ void UpdateManager::update_internal_firmware_checksum() {
     firmware_md5_string.append(NSPM_ConfigManager::get_manager_address());
     firmware_md5_string.append(":");
     firmware_md5_string.append(std::to_string(NSPM_ConfigManager::get_manager_port()));
-    firmware_md5_string.append("/checksum_firmware");
+    firmware_md5_string.append("/checksum_firmware?model=");
+#if defined(BOARD_SONOFF)
+    firmware_md5_string.append("sonoff");
+#elif defined(BOARD_CUSTOM)
+    firmware_md5_string.append("custom");
+#endif
 
     std::vector<uint8_t> data;
     if (UpdateManager::_download_data(&data, firmware_md5_string.c_str(), -1, -1) == ESP_OK) {
@@ -538,7 +553,12 @@ esp_err_t UpdateManager::_update_firmware_ota() {
   firmware_download_url.append(NSPM_ConfigManager::get_manager_address());
   firmware_download_url.append(":");
   firmware_download_url.append(std::to_string(NSPM_ConfigManager::get_manager_port()));
-  firmware_download_url.append("/download_firmware");
+  firmware_download_url.append("/download_firmware?model=");
+#if defined(BOARD_SONOFF)
+  firmware_download_url.append("sonoff");
+#elif defined(BOARD_CUSTOM)
+  firmware_download_url.append("custom");
+#endif
 
   // Send event that we actually started with firmware update
   esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::FIRMWARE_UPDATE_STARTED, NULL, 0, pdMS_TO_TICKS(500));
@@ -628,7 +648,12 @@ esp_err_t UpdateManager::_update_littlefs_ota() {
   littlefs_download_url.append(NSPM_ConfigManager::get_manager_address());
   littlefs_download_url.append(":");
   littlefs_download_url.append(std::to_string(NSPM_ConfigManager::get_manager_port()));
-  littlefs_download_url.append("/download_data_file");
+  littlefs_download_url.append("/download_data_file?model=");
+#if defined(BOARD_SONOFF)
+  littlefs_download_url.append("sonoff");
+#elif defined(BOARD_CUSTOM)
+  littlefs_download_url.append("custom");
+#endif
 
   // Send event that we actually started with littlefs update
   esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::LITTLEFS_UPDATE_STARTED, NULL, 0, pdMS_TO_TICKS(500));

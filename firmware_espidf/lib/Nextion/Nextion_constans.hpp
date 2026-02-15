@@ -1,7 +1,11 @@
 #pragma once
 
 #define NEXTION_UART_BUFFER_SIZE 256
+#if defined(BOARD_SONOFF)
 #define NEXTION_ON_OFF_GPIO GPIO_NUM_4
+#elif defined(BOARD_CUSTOM)
+#define NEXTION_ON_OFF_GPIO GPIO_NUM_9
+#endif
 
 // Return data from command execution
 #define NEX_RET_CMD_FAILED (0x00)

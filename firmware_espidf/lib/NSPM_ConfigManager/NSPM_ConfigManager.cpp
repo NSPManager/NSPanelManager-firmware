@@ -279,6 +279,11 @@ void NSPM_ConfigManager::_task_send_register_request(void *arg) {
   cJSON_AddStringToObject(json, "md5_data_file", ConfigManager::md5_data_file.c_str());
   cJSON_AddStringToObject(json, "md5_tft_file", ConfigManager::md5_gui.c_str());
   cJSON_AddStringToObject(json, "address", ip_address_str);
+#if defined(BOARD_SONOFF)
+  cJSON_AddStringToObject(json, "model", "sonoff");
+#elif defined(BOARD_CUSTOM)
+  cJSON_AddStringToObject(json, "model", "custom");
+#endif
   char *json_string = cJSON_Print(json);
 
   while (NSPM_ConfigManager::_send_register_requests) {
