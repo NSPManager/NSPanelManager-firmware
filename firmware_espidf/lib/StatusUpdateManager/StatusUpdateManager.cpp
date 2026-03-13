@@ -101,6 +101,10 @@ void StatusUpdateManager::init() {
   }
 }
 
+float StatusUpdateManager::current_temperature() {
+  return StatusUpdateManager::_measured_average_temperature.get();
+}
+
 void StatusUpdateManager::_send_status_update(void *arg) {
   int current_wifi_rssi;
   if (esp_wifi_sta_get_rssi(&current_wifi_rssi) == ESP_OK) {

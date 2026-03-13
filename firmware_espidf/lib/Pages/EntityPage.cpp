@@ -7,6 +7,7 @@
 #include <NSPM_ConfigManager.hpp>
 #include <Nextion.hpp>
 #include <Nextion_event.hpp>
+#include <StatusUpdateManager.hpp>
 #include <esp_log.h>
 #include <protobuf_nspanel_entity.pb-c.h>
 
@@ -426,11 +427,12 @@ void EntityPage::_update_display_thermostat() {
   }
 
   Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::room_name_label_name, state->thermostat->name, 1000);
+  chars_written = 0;
   if (state->thermostat->has_current_temperature) {
     chars_written = snprintf(buf, sizeof(buf), "%.1f°", state->thermostat->current_temperature);
   } else {
-    ESP_LOGE("EntityPage", "Thermostat does not have a valid temperature for location. will display -°");
-    chars_written = snprintf(buf, sizeof(buf), "-°");
+    ESP_LOGI("EntityPage", "Thermostat does not have a valid temperature for location. Will use internal sensor.");
+    chars_written = snprintf(buf, sizeof(buf), "%.1f°", StatusUpdateManager::current_temperature());
   }
 
   if (chars_written > 0) {

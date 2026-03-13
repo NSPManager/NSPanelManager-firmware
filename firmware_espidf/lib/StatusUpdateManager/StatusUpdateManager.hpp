@@ -18,6 +18,9 @@ public:
    */
   static void init();
 
+  // Get the currently calculated average temperature
+  static float current_temperature();
+
 private:
   /**
    * Create a NSPanelStatusReport protobuf object and fill in all data. Then send it out over MQTT.
