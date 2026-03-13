@@ -254,7 +254,7 @@
           document.getElementById("mqtt_connection_badge").classList.remove("text-green-800");
         }
 
-        if (data.nspanelmanager_status.startsWith("Connected")) {
+        if (data.nspanelmanager_status.startsWith("Accepted by ")) {
           document.getElementById("nspanelmanager_connection_badge").innerText = data.nspanelmanager_status;
           document.getElementById("nspanelmanager_connection_badge").classList.remove("bg-red-100");
           document.getElementById("nspanelmanager_connection_badge").classList.remove("text-red-800");
