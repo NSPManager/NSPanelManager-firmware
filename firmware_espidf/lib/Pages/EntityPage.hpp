@@ -77,6 +77,9 @@ private:
   // If currently editing, check what has changed and sent the new setting to the manager to apply setting.
   static void _send_thermostat_option_command();
 
+  // Send new set temp for a thermostat
+  static void _send_thermostat_setpoint_command();
+
   // What is the page currently showing
   enum _entity_page_modes {
     LIGHT_COLOR_TEMPERATURE,

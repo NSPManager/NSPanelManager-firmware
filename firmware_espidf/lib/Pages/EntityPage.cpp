@@ -491,31 +491,15 @@ void EntityPage::_handle_string_event_thermostat(char *data) {
     EntityPage::_is_currently_editing = false;
     EntityPage::_update_display_thermostat();
   } else if (strcmp(data, "deactivatetemp") == 0) { // We've changed the temperature. Send updated temperature to manager.
-    NSPanelMQTTManagerCommand__ThermostatTemperatureCommand command = NSPANEL_MQTTMANAGER_COMMAND__THERMOSTAT_TEMPERATURE_COMMAND__INIT;
-    std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
-    command.thermostat_id = state->thermostat->thermostat_id;
-    command.temperature = state->thermostat->set_temperature;
-
-    NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
-    cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_THERMOSTAT_TEMPERATURE_COMMAND;
-    cmd.thermostat_temperature_command = &command;
-    cmd.nspanel_id = NSPM_ConfigManager::get_nspanel_id();
-
-    uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
-    std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
-    size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
-    if (packed_data_size == packed_length) [[likely]] {
-      if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) [[unlikely]] {
-        ESP_LOGE("EntityPage", "Failed to send MQTT message with command payload.");
-      }
-    } else {
-      ESP_LOGE("EntityPage", "Failed to pack protobuf command.");
-      EntityPage::_update_display_thermostat(); // Update display to reset values to those stored
-    }
-
-    EntityPage::_update_display_thermostat();
+    EntityPage::_send_thermostat_setpoint_command();
   } else if (strcmp(data, "back") == 0) {
     EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
+
+    if (EntityPage::_is_currently_editing) [[unlikely]] { // We are currently in editing mode, send the current option.
+      EntityPage::_send_thermostat_option_command();
+    } else {
+      EntityPage::_send_thermostat_setpoint_command();
+    }
   } else if (strcmp(data, "tempup") == 0) {
     if (EntityPage::_is_currently_editing) {
       std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
@@ -679,5 +663,33 @@ void EntityPage::_send_thermostat_option_command() {
       ESP_LOGE("EntityPage", "Failed to pack protobuf command.");
       EntityPage::_update_display_thermostat(); // Update display to reset values to those stored
     }
+  }
+}
+
+void EntityPage::_send_thermostat_setpoint_command() {
+  if (!EntityPage::_is_currently_editing) {
+    NSPanelMQTTManagerCommand__ThermostatTemperatureCommand command = NSPANEL_MQTTMANAGER_COMMAND__THERMOSTAT_TEMPERATURE_COMMAND__INIT;
+    std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+    command.thermostat_id = state->thermostat->thermostat_id;
+    command.temperature = state->thermostat->set_temperature;
+
+    NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
+    cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_THERMOSTAT_TEMPERATURE_COMMAND;
+    cmd.thermostat_temperature_command = &command;
+    cmd.nspanel_id = NSPM_ConfigManager::get_nspanel_id();
+
+    uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
+    std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
+    size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
+    if (packed_data_size == packed_length) [[likely]] {
+      if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) [[unlikely]] {
+        ESP_LOGE("EntityPage", "Failed to send MQTT message with command payload.");
+      }
+    } else {
+      ESP_LOGE("EntityPage", "Failed to pack protobuf command.");
+      EntityPage::_update_display_thermostat(); // Update display to reset values to those stored
+    }
+
+    EntityPage::_update_display_thermostat();
   }
 }
