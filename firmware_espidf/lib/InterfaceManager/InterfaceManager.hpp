@@ -80,6 +80,9 @@ private:
   // Has the status for the home page been loaded from the manager yet?
   static inline bool _home_page_status_loaded = false;
 
+  // Has the panel been accepted by a manager as of yet?
+  static inline bool _has_been_associated_with_manager = false;
+
   // Current NSPanelConfig. Primarily used to check if current screensaver timeout has changed and if so update the interval.
   static inline std::shared_ptr<NSPanelConfig> _nspm_cur_config;
 

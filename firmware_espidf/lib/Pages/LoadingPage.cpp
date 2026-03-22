@@ -4,6 +4,10 @@
 #include <Nextion.hpp>
 
 void LoadingPage::show() {
+  if (LoadingPage::_currently_showing) {
+    return; // Do now show page multiple times.
+  }
+
   InterfaceManager::call_unshow_callback();
   InterfaceManager::current_page_unshow_callback.set(LoadingPage::unshow);
   Nextion::go_to_page(GUI_LOADING_PAGE::page_name, 250);

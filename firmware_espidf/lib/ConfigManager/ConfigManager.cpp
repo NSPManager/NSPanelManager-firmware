@@ -39,6 +39,9 @@ esp_err_t ConfigManager::load_config() {
   cJSON *item = cJSON_GetObjectItem(json, "log_level");
   if (cJSON_IsNumber(item)) {
     ConfigManager::log_level = static_cast<esp_log_level_t>(item->valueint);
+    ESP_LOGE("ConfigManager", "Loaded log level: %d", item->valueint);
+  } else {
+    ESP_LOGE("ConfigManager", "Log level is not of type int!");
   }
 
   item = cJSON_GetObjectItem(json, "wifi_hostname");
