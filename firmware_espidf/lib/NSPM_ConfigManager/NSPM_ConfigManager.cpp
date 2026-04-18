@@ -28,7 +28,7 @@ void NSPM_ConfigManager::init() {
   }
 
   // Resubscribe to manager status topic
-  NSPM_ConfigManager::_mqtt_manager_status_topic = "nspanel/";
+  NSPM_ConfigManager::_mqtt_manager_status_topic = "nspanel/mqttmanager_";
   NSPM_ConfigManager::_mqtt_manager_status_topic.append(NSPM_ConfigManager::get_manager_address());
   NSPM_ConfigManager::_mqtt_manager_status_topic.append("/status/status");
 
@@ -78,7 +78,7 @@ void NSPM_ConfigManager::_mqtt_event_handler(void *arg, esp_event_base_t event_b
     }
 
     // Resubscribe to manager status topic
-    NSPM_ConfigManager::_mqtt_manager_status_topic = "nspanel/";
+    NSPM_ConfigManager::_mqtt_manager_status_topic = "nspanel/mqttmanager_";
     NSPM_ConfigManager::_mqtt_manager_status_topic.append(NSPM_ConfigManager::get_manager_address());
     NSPM_ConfigManager::_mqtt_manager_status_topic.append("/status/status");
 
@@ -87,8 +87,8 @@ void NSPM_ConfigManager::_mqtt_event_handler(void *arg, esp_event_base_t event_b
       vTaskDelay(pdMS_TO_TICKS(100));
     }
   } else if (event_id == MQTT_EVENT_DISCONNECTED) {
-    esp_event_post(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::MANAGER_STATE_CHANGE, NULL, 0, pdMS_TO_TICKS(250));
     NSPM_ConfigManager::_manager_online = false;
+    esp_event_post(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::MANAGER_STATE_CHANGE, NULL, 0, pdMS_TO_TICKS(250));
   }
 }
 

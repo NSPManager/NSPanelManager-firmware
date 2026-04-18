@@ -163,6 +163,7 @@ esp_err_t WebManager::_handle_uri_save_config(httpd_req_t *req) {
   httpd_resp_set_hdr(req, "Location", "/"); // Set the Location header
   httpd_resp_send(req, NULL, 0);            // Send the response
 
+  ConfigManager::num_failed_boots = 0; // Reset num failed boots to try to connect to WiFi again.
   ConfigManager::save_config();
   esp_restart();
   return ESP_OK;
@@ -174,6 +175,10 @@ esp_err_t WebManager::_handle_uri_reboot(httpd_req_t *req) {
   httpd_resp_set_status(req, "302 Found");  // Set the status code
   httpd_resp_set_hdr(req, "Location", "/"); // Set the Location header
   httpd_resp_send(req, NULL, 0);            // Send the response
+
+  // Reset num failed boots as the user manually rebooted.
+  ConfigManager::num_failed_boots = 0;
+  ConfigManager::save_config();
 
   vTaskDelay(pdMS_TO_TICKS(250));
   esp_restart();

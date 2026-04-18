@@ -113,7 +113,11 @@ extern "C" void app_main() {
     ConfigManager::save_config(); // Save so that we can read back the number of failed boots.
                                   // Number of failed boots gets reset at the end of main after everything is up and running.
     if (ConfigManager::wifi_ssid.empty() || ConfigManager::num_failed_boots >= 5) {
-      ESP_LOGE("Main", "Successfully loaded config from LittleFS but the config is not valid. Empty WiFi SSID, will load default values and start Access Point.");
+      if (ConfigManager::wifi_ssid.empty()) {
+        ESP_LOGE("Main", "Successfully loaded config from LittleFS but the config is not valid. Empty WiFi SSID, will load default values and start Access Point.");
+      } else {
+        ESP_LOGI("Main", "Num failed boots: %i. Will start AP mode.", ConfigManager::num_failed_boots);
+      }
 
       WiFiManager::start_ap(&ConfigManager::wifi_hostname);
     } else {

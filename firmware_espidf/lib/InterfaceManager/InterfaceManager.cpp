@@ -376,7 +376,7 @@ void InterfaceManager::_nspm_configmanager_event_handler(void *arg, esp_event_ba
 
 void InterfaceManager::_room_manager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
   // Received event that all rooms has been loaded AND we are currently on the loading page.
-  // This should only happen on first boot of panel, force navigate to Home page.
+  // This should only happen on first boot of panel, force navigate to default page.
   if (event_id == roommanager_event_t::HOME_PAGE_UPDATED) {
     InterfaceManager::_home_page_status_loaded = true;
     if (InterfaceManager::_home_page_status_loaded && InterfaceManager::_nspm_config_loaded && LoadingPage::showing() && !InterfaceManager::_has_been_associated_with_manager) {
