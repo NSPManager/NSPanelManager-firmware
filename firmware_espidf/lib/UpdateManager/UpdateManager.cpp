@@ -61,6 +61,7 @@ void UpdateManager::update_gui(void *param) {
     esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::NEXTION_UPDATE_STARTED, NULL, 0, pdMS_TO_TICKS(500));
 
     std::vector<uint8_t> tft_data_buffer;
+    uint8_t consecutive_errors = 0;
     esp_http_client_handle_t http_client;
     for (;;) { // Try forever to setup a valid HTTP client
       http_client = esp_http_client_init(&http_client_config);
@@ -104,6 +105,7 @@ void UpdateManager::update_gui(void *param) {
     float progress;
     for (;;) {
       if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(20000)) == pdPASS) {
+        consecutive_errors = 0;
         if (UpdateManager::_nextion_update_reset_http_client) {
           esp_http_client_cleanup(http_client);
           UpdateManager::_nextion_update_reset_http_client = false;
@@ -191,7 +193,13 @@ void UpdateManager::update_gui(void *param) {
           break; // Update complete
         }
       } else {
-        ESP_LOGE("UpdateManager", "Have still not received a new Nextion update event while waiting for 20s. Will retry.");
+        consecutive_errors++;
+        ESP_LOGE("UpdateManager", "No Nextion update event in 20s (error %u/3). Will retry.", consecutive_errors);
+        if (consecutive_errors >= 3) {
+          ESP_LOGE("UpdateManager", "Too many consecutive update timeouts — rebooting.");
+          vTaskDelay(pdMS_TO_TICKS(2000));
+          esp_restart();
+        }
         while (Nextion::start_update(ConfigManager::nextion_upload_baudrate, ConfigManager::use_latest_nextion_upload_protocol, remote_tft_file_size) != ESP_OK) {
           ESP_LOGW("UpdateManager", "Failed to init update process with Nextion display. Will try again in 5000ms");
           vTaskDelay(pdMS_TO_TICKS(5000));
