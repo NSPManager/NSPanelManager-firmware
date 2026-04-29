@@ -33,7 +33,7 @@ esp_err_t HttpEventHandler(esp_http_client_event_t *event) {
     if (!esp_http_client_is_chunked_response(event->client)) {
       _download_data_store.insert(_download_data_store.end(), (uint8_t *)event->data, (uint8_t *)event->data + event->data_len);
     } else {
-      ESP_LOGE("UpdateManager", "Download data is chunked. Not supported!");
+      ESP_LOGE("ScreensaverPage", "Download data is chunked. Not supported!");
     }
     break;
   }
@@ -45,6 +45,7 @@ esp_err_t HttpEventHandler(esp_http_client_event_t *event) {
 }
 
 void ScreensaverPage::show() {
+  ESP_LOGD("ScreensaverPage", "Showing screensaver page. Currently shown? %s", ScreensaverPage::_currently_shown ? "Yes" : "No");
   if (ScreensaverPage::_currently_shown) {
     // Do not "show" page again when it's already showing.
     return;
