@@ -823,6 +823,12 @@ esp_err_t Nextion::start_update(uint32_t upload_baudrate, bool use_new_upload_pr
     uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
     vTaskDelay(pdMS_TO_TICKS(50));
 
+    // Wake sleeping displays before whmi-wri — a sleeping display silently ignores whmi-wri.
+    // This is a no-op if the display is already awake.
+    uart_write_bytes(UART_NUM_2, "sleep=0", strlen("sleep=0"));
+    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
+    vTaskDelay(pdMS_TO_TICKS(50));
+
     ESP_LOGI("Nextion", "Will try to init Nextion update process. New TFT file size: %llu", upload_file_size);
     std::string init_upload_command = use_new_upload_protocol ? "whmi-wris " : "whmi-wri ";
     init_upload_command.append(std::to_string(upload_file_size));
