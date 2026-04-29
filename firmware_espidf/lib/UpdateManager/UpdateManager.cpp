@@ -128,7 +128,7 @@ void UpdateManager::update_gui(void *param) {
         tft_data_buffer.resize(UpdateManager::_download_data_max_bytes);
         size_t downloaded_bytes = 0;
         while (downloaded_bytes < UpdateManager::_nextion_update_next_chunk_size) {
-          size_t chunk_size = esp_http_client_read(http_client, (char *)tft_data_buffer.data() + (downloaded_bytes * sizeof(uint8_t *)), UpdateManager::_nextion_update_next_chunk_size - downloaded_bytes);
+          size_t chunk_size = esp_http_client_read(http_client, (char *)tft_data_buffer.data() + downloaded_bytes, UpdateManager::_nextion_update_next_chunk_size - downloaded_bytes);
           if (chunk_size > 0) {
             downloaded_bytes += chunk_size;
             if (downloaded_bytes < UpdateManager::_nextion_update_next_chunk_size) {
