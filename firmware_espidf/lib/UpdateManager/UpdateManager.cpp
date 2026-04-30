@@ -73,6 +73,12 @@ void UpdateManager::update_gui(void *param) {
       std::string range_header = "bytes=";
       range_header.append(std::to_string(UpdateManager::_nextion_update_current_offset));
       range_header.append("-");
+      // NOTE: RFC 7233 byte ranges are inclusive, so the correct end would be
+      // (remote_tft_file_size - 1). However, the server-side implementation uses
+      // Python slice notation data[start:end] (exclusive end), so it interprets
+      // the range end as exclusive too. Both sides use the same non-standard
+      // convention and the protocol works correctly as a result. Do not change
+      // this without a coordinated fix to the server. See PR #12 for context.
       range_header.append(std::to_string(remote_tft_file_size));
       esp_err_t err = esp_http_client_set_header(http_client, "Range", range_header.c_str());
       if (err != ESP_OK) {
@@ -151,6 +157,7 @@ void UpdateManager::update_gui(void *param) {
               std::string range_header = "bytes=";
               range_header.append(std::to_string(UpdateManager::_nextion_update_current_offset + downloaded_bytes));
               range_header.append("-");
+              // See comment above: end is intentionally non-RFC-compliant to match server.
               range_header.append(std::to_string(remote_tft_file_size));
               esp_err_t err = esp_http_client_set_header(http_client, "Range", range_header.c_str());
               if (err != ESP_OK) {
@@ -391,6 +398,7 @@ esp_err_t UpdateManager::_setup_http_client(esp_http_client_handle_t *client, st
     std::string range_header = "bytes=";
     range_header.append(std::to_string(offset));
     range_header.append("-");
+    // See comment in update_gui(): end is intentionally non-RFC-compliant to match server.
     range_header.append(std::to_string(offset + length));
     esp_err_t err = esp_http_client_set_header(*client, "Range", range_header.c_str());
     if (err != ESP_OK) {
