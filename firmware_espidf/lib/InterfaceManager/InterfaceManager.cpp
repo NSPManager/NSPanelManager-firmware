@@ -352,11 +352,11 @@ void InterfaceManager::_nspm_configmanager_event_handler(void *arg, esp_event_ba
     if (NSPM_ConfigManager::get_manager_online()) {
       // Manager became online again after being offline.
       InterfaceManager::_screensaver_blocked = false;
-      ScreensaverPage::show();
 
       std::shared_ptr<NSPanelConfig> config;
       if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-        Nextion::set_brightness_level(config->screensaver_dim_level, 1000);
+        ESP_LOGD("InterfaceManager", "Manager became online and valid config exists. Showing screensaver page.");
+        ScreensaverPage::show();
       } else {
         ESP_LOGE("InterfaceManager", "Failed to get NSPanel Config when unshowing screensaver page!");
       }

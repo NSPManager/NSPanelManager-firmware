@@ -84,9 +84,6 @@ private:
   static void _subscribe_to_mqtt_topics();
 
   // Vars:
-  // The current config/last known config of the panel. Used to compare with new config to determine changes.
-  static inline std::shared_ptr<NSPanelConfig> _nspanel_current_config;
-
   // The most current weather data for forecast and current weather
   static inline std::shared_ptr<NSPanelWeatherUpdate> _weather_update_data = nullptr;
   static inline std::vector<uint8_t> _weather_update_mqtt_data; // Raw data received from MQTT

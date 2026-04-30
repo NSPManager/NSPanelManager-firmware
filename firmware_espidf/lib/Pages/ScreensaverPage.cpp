@@ -63,7 +63,16 @@ void ScreensaverPage::show() {
   ScreensaverPage::_update_displayed_date();
   ScreensaverPage::_update_displayed_time();
   ScreensaverPage::_update_displayed_temperature();
-  xTaskCreatePinnedToCore(ScreensaverPage::_task_update_displayed_weather_data, "update_weather_data", 4096, NULL, 2, NULL, 1);
+
+  std::shared_ptr<NSPanelConfig> config;
+  if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+    if (config->screensaver_mode == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITH_BACKGROUND || config->screensaver_mode == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITHOUT_BACKGROUND) {
+      xTaskCreatePinnedToCore(ScreensaverPage::_task_update_displayed_weather_data, "update_weather_data", 4096, NULL, 2, NULL, 1);
+    }
+  } else {
+    ESP_LOGE("ScreensaverPage", "Failed to get current config while trying to display screensaver page. Will update weather data just in case screensaver mode is with weather data.");
+    xTaskCreatePinnedToCore(ScreensaverPage::_task_update_displayed_weather_data, "update_weather_data", 4096, NULL, 2, NULL, 1);
+  }
 
   RoomManager::go_to_default_room(); // Go to default room so that it is the room that is shown when the screensaver is hidden.
 
@@ -213,27 +222,23 @@ void ScreensaverPage::_nspm_config_event_handler(void *arg, esp_event_base_t eve
     if (ScreensaverPage::_currently_shown) {
       std::shared_ptr<NSPanelConfig> new_config;
       if (NSPM_ConfigManager::get_config(&new_config) == ESP_OK) [[likely]] {
-        if (ScreensaverPage::_nspanel_current_config == nullptr || ScreensaverPage::_nspanel_current_config->screensaver_mode != new_config->screensaver_mode) {
+        if (ScreensaverPage::_current_screensaver_mode.get() != new_config->screensaver_mode) {
+          ScreensaverPage::_current_screensaver_mode.set(new_config->screensaver_mode);
+
           ScreensaverPage::_go_to_nextion_page();
           ScreensaverPage::_update_displayed_date();
           ScreensaverPage::_update_displayed_time();
           xTaskCreatePinnedToCore(ScreensaverPage::_task_update_displayed_weather_data, "update_weather_data", 4096, NULL, 2, NULL, 1);
         }
 
-        if (ScreensaverPage::_nspanel_current_config != nullptr && ScreensaverPage::_screensaver_brightness != new_config->screensaver_dim_level) {
+        if (ScreensaverPage::_screensaver_brightness != new_config->screensaver_dim_level) {
           ScreensaverPage::_update_display_brightness();
         }
-
-        ScreensaverPage::_nspanel_current_config = new_config;
       } else {
         ESP_LOGE("ScreensaverPage", "Failed to get config while processing 'new config event'. May become out of sync with manager until next config update.");
       }
 
       RoomManager::go_to_default_room(); // Go to default room so that it is the room that is shown when the screensaver is hidden.
-    }
-
-    if (NSPM_ConfigManager::get_config(&ScreensaverPage::_nspanel_current_config) != ESP_OK) [[unlikely]] {
-      ESP_LOGW("ScreensaverPage", "Failed to update local reference to current config. May become out of sync with manager until next config update.");
     }
     break;
   }
@@ -399,10 +404,11 @@ void ScreensaverPage::_task_update_displayed_weather_data(void *param) {
 void ScreensaverPage::_update_display_brightness() {
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-    ScreensaverPage::_current_screensaver_mode.set(config->screensaver_mode);
     if (ScreensaverPage::_current_screensaver_mode.get() == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__NO_SCREENSAVER) {
+      ESP_LOGD("ScreensaverPage", "Screensaver mode is 'no_screensaver'. Setting display brightness to 0.");
       Nextion::set_brightness_level(0, 1000); // No screensaver is to be shown, simply set brightness to 0
     } else {
+      ESP_LOGD("ScreensaverPage", "Setting screensaver display brightness to 0.");
       Nextion::set_brightness_level(config->screensaver_dim_level, 1000);
     }
     ScreensaverPage::_screensaver_brightness = config->screensaver_dim_level;
@@ -418,10 +424,11 @@ void ScreensaverPage::_go_to_nextion_page() {
     ESP_LOGE("ScreensaverPage", "Failed to get NSPanel Config when showing screensaver page! Will cancel operation.");
     return;
   }
-  ScreensaverPage::_update_display_brightness();
+  ScreensaverPage::_current_screensaver_mode = config->screensaver_mode;
 
   switch (ScreensaverPage::_current_screensaver_mode.get()) {
   case NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITH_BACKGROUND: {
+    ESP_LOGD("ScreensaverPage", "Showing screensaver: weather with background");
     Nextion::set_component_value(GUI_SCREENSAVER_PAGE::screensaver_background_control_variable_name, 1, 250);
     Nextion::go_to_page(GUI_SCREENSAVER_PAGE::page_name, 250);
     ScreensaverPage::_currently_shown = true;
@@ -432,6 +439,7 @@ void ScreensaverPage::_go_to_nextion_page() {
   }
 
   case NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITHOUT_BACKGROUND: {
+    ESP_LOGD("ScreensaverPage", "Showing screensaver: weather without background");
     Nextion::set_component_value(GUI_SCREENSAVER_PAGE::screensaver_background_control_variable_name, 0, 250);
     Nextion::go_to_page(GUI_SCREENSAVER_PAGE::page_name, 250);
     ScreensaverPage::_currently_shown = true;
@@ -442,6 +450,7 @@ void ScreensaverPage::_go_to_nextion_page() {
   }
 
   case NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__DATETIME_WITH_BACKGROUND: {
+    ESP_LOGD("ScreensaverPage", "Showing screensaver: minimal with background");
     Nextion::set_component_value(GUI_SCREENSAVER_PAGE::screensaver_minimal_background_control_variable_name, 1, 250);
     Nextion::go_to_page(GUI_SCREENSAVER_PAGE::screensaver_minimal_page_name, 250);
     ScreensaverPage::_currently_shown = true;
@@ -454,6 +463,7 @@ void ScreensaverPage::_go_to_nextion_page() {
   }
 
   case NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__DATETIME_WITHOUT_BACKGROUND: {
+    ESP_LOGD("ScreensaverPage", "Showing screensaver: minimal without background");
     Nextion::set_component_value(GUI_SCREENSAVER_PAGE::screensaver_minimal_background_control_variable_name, 0, 250);
     Nextion::go_to_page(GUI_SCREENSAVER_PAGE::screensaver_minimal_page_name, 250);
     ScreensaverPage::_currently_shown = true;
@@ -465,15 +475,17 @@ void ScreensaverPage::_go_to_nextion_page() {
     break;
 
   case NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__NO_SCREENSAVER:
+    ESP_LOGD("ScreensaverPage", "Showing screensaver: no screensaver");
     Nextion::go_to_page(GUI_SCREENSAVER_PAGE::screensaver_minimal_page_name, 250);
     ScreensaverPage::_currently_shown = true;
     break;
-
-    // TODO: Implement "No screensaver"
   }
 
   default:
     ESP_LOGE("ScreensaverPage", "Unknown screensaver mode when showing screensaver!");
     break;
   }
+
+  vTaskDelay(pdMS_TO_TICKS(50)); // Wait for screen to go to page.
+  ScreensaverPage::_update_display_brightness();
 }
