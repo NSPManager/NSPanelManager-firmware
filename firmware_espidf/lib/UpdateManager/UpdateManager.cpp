@@ -366,7 +366,7 @@ void UpdateManager::update_internal_firmware_checksum() {
           ESP_LOGE("UpdateManager", "Failed to save config!");
         }
 
-        vTaskDelay(pdTICKS_TO_MS(10));
+        vTaskDelay(pdMS_TO_TICKS(10));
         esp_restart();
       } else {
         ESP_LOGI("UpdateManager", "Stored firmware checksum is correct, will not update!");
