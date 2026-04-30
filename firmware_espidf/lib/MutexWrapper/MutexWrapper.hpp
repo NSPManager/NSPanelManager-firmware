@@ -5,7 +5,7 @@
 template <typename T>
 class MutexWrapped {
 public:
-  MutexWrapped() {
+  MutexWrapped() : _value{} {
     this->_mutex = portMUX_INITIALIZER_UNLOCKED;
   }
 
