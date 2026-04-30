@@ -287,12 +287,13 @@ void NSPM_ConfigManager::_task_send_register_request(void *arg) {
   cJSON_AddStringToObject(json, "model", "custom");
 #endif
   char *json_string = cJSON_Print(json);
+  cJSON_Delete(json);
 
   while (NSPM_ConfigManager::_send_register_requests) {
     MqttManager::publish("nspanel/mqttmanager/command", json_string, strlen(json_string), false);
     vTaskDelay(pdMS_TO_TICKS(5000));
   }
 
-  cJSON_Delete(json);
+  cJSON_free(json_string);
   vTaskDelete(NULL); // Delete own task.
 }

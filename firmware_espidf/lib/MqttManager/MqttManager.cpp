@@ -149,12 +149,13 @@ void MqttManager::_send_mqtt_online_update() {
     }
 
     char *json_string = cJSON_Print(json);
+    cJSON_Delete(json);
     while (MqttManager::publish(MqttManager::_state_topic, json_string, strlen(json_string), true) != ESP_OK) {
       ESP_LOGE("MqttManager", "Failed to send online state update to topic %s! Will try again in 200ms.", MqttManager::_state_topic.c_str());
       vTaskDelay(pdMS_TO_TICKS(200));
     }
 
-    cJSON_Delete(json);
+    cJSON_free(json_string);
   }
 }
 
