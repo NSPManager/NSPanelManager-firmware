@@ -1,4 +1,6 @@
 #pragma once
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <mqtt_client.h>
 #include <string>
 #include <vector>
@@ -66,9 +68,11 @@ private:
   static void _mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
   /**
-   * Send status update that we are online
+   * Task that publishes the "online" retained status message, retrying every 5s
+   * until successful. Spawned on MQTT_EVENT_CONNECTED; cancelled on
+   * MQTT_EVENT_DISCONNECTED or when a new CONNECTED event supersedes it.
    */
-  static void _send_mqtt_online_update();
+  static void _task_send_online_update(void *param);
 
   /**
    * The configuration used to init and setup the MQTT client.
@@ -94,4 +98,18 @@ private:
    * When disconnected from MQTT, send this message to tell all other entities on MQTT that the panel is offline.
    */
   static inline std::string _last_will_message;
+
+  /**
+   * Pre-built "online" JSON payload published by _task_send_online_update.
+   * Built once in start() so the task holds no heap allocation of its own
+   * and can be safely deleted at any time.
+   */
+  static inline std::string _online_status_message;
+
+  /**
+   * Handle of the currently live online-status publish task, or NULL.
+   * Written only from the MQTT event handler (serialised) and from the
+   * task itself on successful completion.
+   */
+  static inline TaskHandle_t _send_online_update_task_handle = NULL;
 };

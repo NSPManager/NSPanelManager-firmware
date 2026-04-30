@@ -30,20 +30,33 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
   MqttManager::_state_topic.append(WiFiManager::mac_string());
   MqttManager::_state_topic.append("/status");
 
-  // Create JSON object for state offline message used in last will for MQTT connection.
+  std::string mac_string = WiFiManager::mac_string();
+
+  // Build "offline" last-will payload
   cJSON *json = cJSON_CreateObject();
   if (json != NULL) {
-    std::string mac_string = WiFiManager::mac_string();
     cJSON_AddStringToObject(json, "mac", mac_string.c_str());
     cJSON_AddStringToObject(json, "state", "offline");
   } else {
-    ESP_LOGE("MqttManager", "Failed to create cJSON object when trying to send online state update!");
+    ESP_LOGE("MqttManager", "Failed to create cJSON object for last-will message!");
     return;
   }
-
-  // Format JSON to string
   char *json_string = cJSON_Print(json);
   MqttManager::_last_will_message = json_string;
+  cJSON_free(json_string);
+  cJSON_Delete(json);
+
+  // Build "online" payload (pre-built so the retry task owns no heap allocation)
+  json = cJSON_CreateObject();
+  if (json != NULL) {
+    cJSON_AddStringToObject(json, "mac", mac_string.c_str());
+    cJSON_AddStringToObject(json, "state", "online");
+  } else {
+    ESP_LOGE("MqttManager", "Failed to create cJSON object for online status message!");
+    return;
+  }
+  json_string = cJSON_Print(json);
+  MqttManager::_online_status_message = json_string;
   cJSON_free(json_string);
   cJSON_Delete(json);
 
@@ -110,12 +123,24 @@ void MqttManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
   case MQTT_EVENT_CONNECTED:
     ESP_LOGI("MqttManager", "Connected to MQTT server.");
     MqttManager::_connected = true;
-    MqttManager::_send_mqtt_online_update();
+    // Cancel any pending retry from a previous connection attempt, then
+    // spawn a fresh task to publish the retained "online" status.
+    if (MqttManager::_send_online_update_task_handle != NULL) {
+      vTaskDelete(MqttManager::_send_online_update_task_handle);
+      MqttManager::_send_online_update_task_handle = NULL;
+    }
+    xTaskCreatePinnedToCore(MqttManager::_task_send_online_update, "mqtt_online_upd",
+                            2048, NULL, 2, &MqttManager::_send_online_update_task_handle, 1);
     break;
 
   case MQTT_EVENT_DISCONNECTED:
     ESP_LOGW("MqttManager", "Lost connection to MQTT server.");
     MqttManager::_connected = false;
+    // Cancel any pending online-status retry — pointless while disconnected.
+    if (MqttManager::_send_online_update_task_handle != NULL) {
+      vTaskDelete(MqttManager::_send_online_update_task_handle);
+      MqttManager::_send_online_update_task_handle = NULL;
+    }
     break;
 
   case MQTT_EVENT_ERROR:
@@ -137,26 +162,16 @@ void MqttManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
   }
 }
 
-void MqttManager::_send_mqtt_online_update() {
-  if (!MqttManager::_state_topic.empty()) {
-    cJSON *json = cJSON_CreateObject();
-    if (json != NULL) {
-      cJSON_AddStringToObject(json, "mac", WiFiManager::mac_string());
-      cJSON_AddStringToObject(json, "state", "online");
-    } else {
-      ESP_LOGE("MqttManager", "Failed to create cJSON object when trying to send online state update!");
-      return;
-    }
-
-    char *json_string = cJSON_Print(json);
-    cJSON_Delete(json);
-    while (MqttManager::publish(MqttManager::_state_topic, json_string, strlen(json_string), true) != ESP_OK) {
-      ESP_LOGE("MqttManager", "Failed to send online state update to topic %s! Will try again in 200ms.", MqttManager::_state_topic.c_str());
-      vTaskDelay(pdMS_TO_TICKS(200));
-    }
-
-    cJSON_free(json_string);
+void MqttManager::_task_send_online_update(void *param) {
+  while (MqttManager::publish(MqttManager::_state_topic,
+                               MqttManager::_online_status_message.c_str(),
+                               MqttManager::_online_status_message.size(),
+                               true) != ESP_OK) {
+    ESP_LOGE("MqttManager", "Failed to publish online status to %s. Will retry in 5s.", MqttManager::_state_topic.c_str());
+    vTaskDelay(pdMS_TO_TICKS(5000));
   }
+  MqttManager::_send_online_update_task_handle = NULL;
+  vTaskDelete(NULL);
 }
 
 bool MqttManager::connected() {
