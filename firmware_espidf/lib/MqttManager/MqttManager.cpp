@@ -44,7 +44,8 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
   // Format JSON to string
   char *json_string = cJSON_Print(json);
   MqttManager::_last_will_message = json_string;
-  cJSON_free(json);
+  cJSON_free(json_string);
+  cJSON_Delete(json);
 
   // Set last will message in config and update config of client
   MqttManager::_mqtt_config.session.last_will.msg = MqttManager::_last_will_message.c_str();
@@ -153,7 +154,7 @@ void MqttManager::_send_mqtt_online_update() {
       vTaskDelay(pdMS_TO_TICKS(200));
     }
 
-    cJSON_free(json);
+    cJSON_Delete(json);
   }
 }
 

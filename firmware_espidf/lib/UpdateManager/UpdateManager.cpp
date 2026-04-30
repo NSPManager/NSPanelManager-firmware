@@ -523,7 +523,7 @@ void UpdateManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
         }
       }
 
-      cJSON_free(json);
+      cJSON_Delete(json);
     }
   } else if (event_id == MQTT_EVENT_CONNECTED) {
     std::string command_topic = "nspanel/";
