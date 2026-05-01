@@ -9,6 +9,7 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
   esp_log_level_set("MqttManager", ConfigManager::log_level);
   ESP_LOGI("MqttManager", "Starting MQTTManager, will connect to %s:%d", server->c_str(), *port);
   MqttManager::_connected = false;
+  MqttManager::_send_online_update_task_mutex = xSemaphoreCreateMutex();
   MqttManager::_mqtt_config.broker.address.hostname = server->c_str();
   MqttManager::_mqtt_config.broker.address.port = *port;
   MqttManager::_mqtt_config.broker.address.transport = esp_mqtt_transport_t::MQTT_TRANSPORT_OVER_TCP;
@@ -125,22 +126,26 @@ void MqttManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
     MqttManager::_connected = true;
     // Cancel any pending retry from a previous connection attempt, then
     // spawn a fresh task to publish the retained "online" status.
+    xSemaphoreTake(MqttManager::_send_online_update_task_mutex, portMAX_DELAY);
     if (MqttManager::_send_online_update_task_handle != NULL) {
       vTaskDelete(MqttManager::_send_online_update_task_handle);
       MqttManager::_send_online_update_task_handle = NULL;
     }
     xTaskCreatePinnedToCore(MqttManager::_task_send_online_update, "mqtt_online_upd",
                             2048, NULL, 2, &MqttManager::_send_online_update_task_handle, 1);
+    xSemaphoreGive(MqttManager::_send_online_update_task_mutex);
     break;
 
   case MQTT_EVENT_DISCONNECTED:
     ESP_LOGW("MqttManager", "Lost connection to MQTT server.");
     MqttManager::_connected = false;
     // Cancel any pending online-status retry — pointless while disconnected.
+    xSemaphoreTake(MqttManager::_send_online_update_task_mutex, portMAX_DELAY);
     if (MqttManager::_send_online_update_task_handle != NULL) {
       vTaskDelete(MqttManager::_send_online_update_task_handle);
       MqttManager::_send_online_update_task_handle = NULL;
     }
+    xSemaphoreGive(MqttManager::_send_online_update_task_mutex);
     break;
 
   case MQTT_EVENT_ERROR:
@@ -170,7 +175,9 @@ void MqttManager::_task_send_online_update(void *param) {
     ESP_LOGE("MqttManager", "Failed to publish online status to %s. Will retry in 5s.", MqttManager::_state_topic.c_str());
     vTaskDelay(pdMS_TO_TICKS(5000));
   }
+  xSemaphoreTake(MqttManager::_send_online_update_task_mutex, portMAX_DELAY);
   MqttManager::_send_online_update_task_handle = NULL;
+  xSemaphoreGive(MqttManager::_send_online_update_task_mutex);
   vTaskDelete(NULL);
 }
 

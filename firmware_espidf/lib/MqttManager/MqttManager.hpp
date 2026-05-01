@@ -1,5 +1,6 @@
 #pragma once
 #include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <freertos/task.h>
 #include <mqtt_client.h>
 #include <string>
@@ -108,8 +109,13 @@ private:
 
   /**
    * Handle of the currently live online-status publish task, or NULL.
-   * Written only from the MQTT event handler (serialised) and from the
-   * task itself on successful completion.
+   * Must be accessed only while holding _send_online_update_task_mutex.
    */
   static inline TaskHandle_t _send_online_update_task_handle = NULL;
+
+  /**
+   * Guards _send_online_update_task_handle. Prevents the task's self-cleanup
+   * (NULL + vTaskDelete) from racing with the event handler's delete/create.
+   */
+  static inline SemaphoreHandle_t _send_online_update_task_mutex = NULL;
 };
