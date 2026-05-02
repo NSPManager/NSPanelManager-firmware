@@ -90,13 +90,12 @@ void HomePage::_update_display() {
       return;
     }
   } else if (HomePage::_current_affect_mode == HomePageAffectMode::ALL) {
-    if (RoomManager::get_home_page_status_all_rooms(&status) == ESP_OK) [[likely]] {
-      Nextion::set_component_text(GUI_HOME_PAGE::mode_label_name, "All lights", 100);
-      Nextion::set_component_text(GUI_HOME_PAGE::room_label_name, "All", 100);
-      Nextion::set_component_pic(GUI_HOME_PAGE::button_scenes_name, GUI_HOME_PAGE::button_scenes_all_rooms_pic, 250);
-      Nextion::set_component_pic2(GUI_HOME_PAGE::button_scenes_name, GUI_HOME_PAGE::button_scenes_all_rooms_pic2, 250);
-    } else {
-      ESP_LOGE("HomePage", "Failed to get status object for home page (all rooms). Will abort update.");
+    Nextion::set_component_text(GUI_HOME_PAGE::mode_label_name, "All lights", 100);
+    Nextion::set_component_text(GUI_HOME_PAGE::room_label_name, "All", 100);
+    Nextion::set_component_pic(GUI_HOME_PAGE::button_scenes_name, GUI_HOME_PAGE::button_scenes_all_rooms_pic, 250);
+    Nextion::set_component_pic2(GUI_HOME_PAGE::button_scenes_name, GUI_HOME_PAGE::button_scenes_all_rooms_pic2, 250);
+    if (RoomManager::get_home_page_status_all_rooms(&status) != ESP_OK) [[unlikely]] {
+      ESP_LOGW("HomePage", "All-rooms status not yet available; slider updates deferred until MQTT data arrives.");
       return;
     }
   } else {
