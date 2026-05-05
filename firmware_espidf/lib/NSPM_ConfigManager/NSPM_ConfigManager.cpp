@@ -56,12 +56,10 @@ void NSPM_ConfigManager::_mqtt_event_handler(void *arg, esp_event_base_t event_b
       if (!NSPM_ConfigManager::_manager_online && strncmp("online", event->data, event->data_len) == 0) {
         ESP_LOGI("NSPM_ConfigManager", "Manager is online!");
         NSPM_ConfigManager::_manager_online = true;
-        vTaskDelay(pdMS_TO_TICKS(250)); // Wait for changes to settle
         esp_event_post(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::MANAGER_STATE_CHANGE, NULL, 0, pdMS_TO_TICKS(250));
       } else if (NSPM_ConfigManager::_manager_online && strncmp("offline", event->data, event->data_len) == 0) {
         ESP_LOGE("NSPM_ConfigManager", "Manager is offline!");
         NSPM_ConfigManager::_manager_online = false;
-        vTaskDelay(pdMS_TO_TICKS(250)); // Wait for changes to settle
         esp_event_post(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::MANAGER_STATE_CHANGE, NULL, 0, pdMS_TO_TICKS(250));
       }
     }
@@ -287,12 +285,13 @@ void NSPM_ConfigManager::_task_send_register_request(void *arg) {
   cJSON_AddStringToObject(json, "model", "custom");
 #endif
   char *json_string = cJSON_Print(json);
+  cJSON_Delete(json);
 
   while (NSPM_ConfigManager::_send_register_requests) {
     MqttManager::publish("nspanel/mqttmanager/command", json_string, strlen(json_string), false);
     vTaskDelay(pdMS_TO_TICKS(5000));
   }
 
-  cJSON_Delete(json);
+  cJSON_free(json_string);
   vTaskDelete(NULL); // Delete own task.
 }
