@@ -230,7 +230,7 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
   if (data->size() <= 0) [[unlikely]] {
     return;
   }
-  ESP_LOGD("Nextion", "Read Nextion data: %.*s, size: %d", data->size(), data->data(), data->size());
+  // ESP_LOGD("Nextion", "Read Nextion data: %.*s, size: %d", data->size(), data->data(), data->size());
 
   if (data->data()[0] == NEX_RET_NUMBER_HEAD) {
     // Got numeric data
@@ -352,9 +352,8 @@ void Nextion::_wait_for_event_event_handler(void *arg, esp_event_base_t event_ba
   }
 }
 
-
 esp_err_t Nextion::write_command(char *data) {
-  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(32)) == pdTRUE) {    
+  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(32)) == pdTRUE) {
     int len = Nextion::nextion_write(data, strlen(data));
     Nextion::nextion_write_end();
     xSemaphoreGive(Nextion::_uart_write_mutex);
@@ -364,8 +363,6 @@ esp_err_t Nextion::write_command(char *data) {
   }
   return ESP_ERR_NOT_FINISHED;
 }
-
-
 
 esp_err_t Nextion::_write_command(char *data) {
   if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(32)) == pdTRUE) {
@@ -869,24 +866,27 @@ esp_err_t Nextion::write_update_bytes(uint8_t *data, uint16_t size) {
   return ESP_ERR_NOT_FINISHED;
 }
 
-int Nextion::nextion_write(const void* src, size_t size) {
+int Nextion::nextion_write(const void *src, size_t size) {
   Nextion::_nextion_buffer_out += size;
   return uart_write_bytes(UART_NUM_2, src, size);
 }
-
-
-
 
 void Nextion::nextion_write_end() {
   uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
   uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
   if (Nextion::_nextion_buffer_out > 800) {
-    char command_bk3[] = "bkcmd=3" "\xff" "\xff" "\xff";
-    char command_bk0[] = "bkcmd=0" "\xff" "\xff" "\xff";
-    //bkcmd=3, will return success, lets wait for it
+    char command_bk3[] = "bkcmd=3"
+                         "\xff"
+                         "\xff"
+                         "\xff";
+    char command_bk0[] = "bkcmd=0"
+                         "\xff"
+                         "\xff"
+                         "\xff";
+    // bkcmd=3, will return success, lets wait for it
     uart_write_bytes(UART_NUM_2, command_bk3, strlen(command_bk3));
     xSemaphoreTake(Nextion::_cmd_finished_bin_sem, pdMS_TO_TICKS(200));
-    //bkcmd=0, will return nothing, no need to wait again.
+    // bkcmd=0, will return nothing, no need to wait again.
     uart_write_bytes(UART_NUM_2, command_bk0, strlen(command_bk0));
     Nextion::_nextion_buffer_out = 0;
   }

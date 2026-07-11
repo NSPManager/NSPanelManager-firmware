@@ -21,6 +21,9 @@ public:
   // Get the currently calculated average temperature
   static float current_temperature();
 
+  // Send the reboot state over MQTT and then reboot.
+  static void reboot();
+
 private:
   /**
    * Create a NSPanelStatusReport protobuf object and fill in all data. Then send it out over MQTT.

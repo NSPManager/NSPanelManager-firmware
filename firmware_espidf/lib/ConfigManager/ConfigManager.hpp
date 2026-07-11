@@ -104,7 +104,7 @@ public:
   static inline bool has_updated;
 
   // Global log level to set for all components
-  static inline esp_log_level_t log_level = esp_log_level_t::ESP_LOG_INFO;
+  static inline esp_log_level_t log_level = esp_log_level_t::ESP_LOG_DEBUG;
 
   // Number of boots that latest less then 3 seconds. Used to reset panel when turning it off/on/off many times in a row.
   static inline uint8_t num_failed_boots = 0;

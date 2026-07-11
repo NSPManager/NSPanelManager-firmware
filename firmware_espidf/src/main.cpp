@@ -102,12 +102,14 @@ extern "C" void app_main() {
   ConfigManager::create_default(); // Set default values on all config entities
 
   if (ConfigManager::load_config() != ESP_OK) {
-    ESP_LOGE("Main", "Failed to load config from LittleFS. If this is the first time running the panel this is normal as not config has been saved yet.");
+    ESP_LOGE("Main", "Failed to load config from LittleFS. If this is the first time running the panel this is normal as no config has been saved yet.");
     ESP_LOGI("Main", "Default config values has been applied, will save t§se to create a config file.");
     esp_err_t config_save_result = ConfigManager::save_config();
     if (config_save_result != ESP_OK) {
       ESP_LOGE("Main", "Failed to save config to LittleFS, got error %s!", esp_err_to_name(config_save_result));
     }
+
+    WiFiManager::start_ap(&ConfigManager::wifi_hostname);
   } else {
     ConfigManager::num_failed_boots++;
     ConfigManager::save_config(); // Save so that we can read back the number of failed boots.

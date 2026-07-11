@@ -4,6 +4,7 @@
 #include <NSPM_ConfigManager.hpp>
 #include <Nextion.hpp>
 #include <Nextion_event.hpp>
+#include <StatusUpdateManager.hpp>
 #include <UpdateManager.hpp>
 #include <UpdateManager_event.hpp>
 #include <WiFiManager.hpp>
@@ -198,7 +199,7 @@ void UpdateManager::update_gui(void *param) {
         if (consecutive_errors >= 3) {
           ESP_LOGE("UpdateManager", "Too many consecutive update timeouts — rebooting.");
           vTaskDelay(pdMS_TO_TICKS(2000));
-          esp_restart();
+          StatusUpdateManager::reboot();
         }
         while (Nextion::start_update(ConfigManager::nextion_upload_baudrate, ConfigManager::use_latest_nextion_upload_protocol, remote_tft_file_size) != ESP_OK) {
           ESP_LOGW("UpdateManager", "Failed to init update process with Nextion display. Will try again in 5000ms");
@@ -233,10 +234,10 @@ void UpdateManager::update_gui(void *param) {
     ConfigManager::md5_gui = gui_md5;
     ConfigManager::save_config();
 
-    ESP_LOGI("UpdateManager", "GUI file successfully updated and new md5 checksum stored. Will reboot in 10 seconds.");
-    vTaskDelay(pdMS_TO_TICKS(10000));
+    ESP_LOGI("UpdateManager", "GUI file successfully updated and new md5 checksum stored. Will reboot in 5 seconds.");
+    vTaskDelay(pdMS_TO_TICKS(5000));
 
-    esp_restart();
+    StatusUpdateManager::reboot();
     vTaskDelete(NULL);
   } else {
     ESP_LOGE("UpdateManager", "Failed to get NSPanelConfig when trying to update GUI.");
@@ -280,7 +281,7 @@ void UpdateManager::update_firmware(void *param) {
 
         ESP_LOGI("UpdateManager", "Update complete. Will restart in 2 seconds");
         vTaskDelay(pdMS_TO_TICKS(2000));
-        esp_restart();
+        StatusUpdateManager::reboot();
       }
     } else {
       ESP_LOGI("UpdateManager", "Firmware already up to date. Will check LittleFS.");
@@ -324,7 +325,7 @@ void UpdateManager::update_littlefs(void *param, bool force_update) {
 
         ESP_LOGI("UpdateManager", "Update complete. Will start in 2 seconds");
         vTaskDelay(pdMS_TO_TICKS(2000));
-        esp_restart();
+        StatusUpdateManager::reboot();
       }
     } else {
       ESP_LOGI("UpdateManager", "LittleFS already up to date.");
@@ -367,7 +368,7 @@ void UpdateManager::update_internal_firmware_checksum() {
         }
 
         vTaskDelay(pdTICKS_TO_MS(10));
-        esp_restart();
+        StatusUpdateManager::reboot();
       } else {
         ESP_LOGI("UpdateManager", "Stored firmware checksum is correct, will not update!");
       }
@@ -506,7 +507,7 @@ void UpdateManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
 
         if (command_string.compare("reboot") == 0) { // TODO: Move to some place more fitting.
           ESP_LOGI("UpgradeManager", "Received command to reboot. Will reboot NSPanel.");
-          esp_restart();
+          StatusUpdateManager::reboot();
         } else if (command_string.compare("firmware_update") == 0 && UpdateManager::_current_update_task == NULL) {
           xTaskCreatePinnedToCore(UpdateManager::update_firmware, "update_firmware", 8192, NULL, 2, &UpdateManager::_current_update_task, 1);
         } else if (command_string.compare("firmware_update_force") == 0 && UpdateManager::_current_update_task == NULL) {

@@ -19,9 +19,16 @@ esp_err_t ConfigManager::load_config() {
   long file_size = ftell(f);
   fseek(f, 0, SEEK_SET);
 
-  char *read_buffer = (char *)malloc(file_size);
-  if (read_buffer == NULL) {
-    ESP_LOGE("ConfigManager", "Failed to allocate %ld bytes for read buffer while reading config from LittleFS.", file_size);
+  char *read_buffer = NULL;
+  if (file_size != 0) {
+    read_buffer = (char *)malloc(file_size);
+    if (read_buffer == NULL) {
+      ESP_LOGE("ConfigManager", "Failed to allocate %ld bytes for read buffer while reading config from LittleFS.", file_size);
+      fclose(f);
+      return ESP_ERR_NOT_FINISHED;
+    }
+  } else {
+    ESP_LOGE("ConfigManager", "Returned invalid file size %ld of config file.", file_size);
     fclose(f);
     return ESP_ERR_NOT_FINISHED;
   }

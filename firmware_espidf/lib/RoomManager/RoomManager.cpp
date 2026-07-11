@@ -298,17 +298,14 @@ esp_err_t RoomManager::go_to_entities_page_id(uint32_t page_id) {
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
     bool valid_page_id = false;
-    uint32_t entities_page_room_id = 0; // The ID of the room that the entity page is attached to.
     for (int i = 0; i < config->n_room_infos && !valid_page_id; i++) {
       for (int j = 0; j < config->room_infos[i]->n_entity_page_ids && !valid_page_id; j++) {
         if (config->room_infos[i]->entity_page_ids[j] == page_id) {
-          entities_page_room_id = config->room_infos[i]->room_id;
           valid_page_id = true;
         }
       }
       for (int j = 0; j < config->room_infos[i]->n_scene_page_ids && !valid_page_id; j++) {
         if (config->room_infos[i]->scene_page_ids[j] == page_id) {
-          entities_page_room_id = config->room_infos[i]->room_id;
           valid_page_id = true;
         }
       }

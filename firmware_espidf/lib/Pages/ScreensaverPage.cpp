@@ -9,7 +9,7 @@
 #include <RoomManager.hpp>
 #include <ScreensaverPage.hpp>
 #include <StatusUpdateManager_events.hpp>
-#include <cJSON.h>
+// #include <cJSON.h>
 #include <esp_http_client.h>
 #include <esp_log.h>
 

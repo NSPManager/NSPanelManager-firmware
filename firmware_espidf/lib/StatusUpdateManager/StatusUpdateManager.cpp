@@ -65,7 +65,7 @@ void StatusUpdateManager::init() {
       .clk_source = I2C_CLK_SRC_DEFAULT,
       .glitch_ignore_cnt = 7,
       .flags = {
-          .enable_internal_pullup = false,
+          .enable_internal_pullup = true,
       }};
 
   // Create master bus
@@ -84,11 +84,13 @@ void StatusUpdateManager::init() {
     ESP_LOGE("StatusUpdateManager", "Failed to start ESP timer to periodically measure temperature! Error: %s", esp_err_to_name(err));
   }
 
-  // Setup ADC for reading temperature
+// Setup ADC for reading temperature
+#if not defined(BOARD_CUSTOM)
   adc1_config_width(ADC_WIDTH_BIT_12);
   adc1_config_channel_atten(ADC1_CHANNEL_2, ADC_ATTEN_DB_11);
   StatusUpdateManager::_adc_chars = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
   esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 0, StatusUpdateManager::_adc_chars);
+#endif
 
   err = esp_timer_start_periodic(StatusUpdateManager::_status_update_timer, 30000 * 1000); // Send status update every 30 seconds
   if (err != ESP_OK) {
@@ -105,9 +107,18 @@ float StatusUpdateManager::current_temperature() {
   return StatusUpdateManager::_measured_average_temperature.get();
 }
 
+void StatusUpdateManager::reboot() {
+  esp_timer_stop(StatusUpdateManager::_status_update_timer);
+  StatusUpdateManager::_status_report.nspanel_state = NSPANEL_STATUS_REPORT__STATE__REBOOTING;
+  StatusUpdateManager::_send_status_update(NULL);
+
+  vTaskDelay(pdMS_TO_TICKS(2000)); // Wait two seconds to message to be sent then reboot
+  esp_restart();
+}
+
 void StatusUpdateManager::_send_status_update(void *arg) {
   int current_wifi_rssi;
-  if (esp_wifi_sta_get_rssi(&current_wifi_rssi) == ESP_OK) {
+  if (esp_wifi_sta_get_rssi(&current_wifi_rssi) == ESP_OK) [[likely]] {
     StatusUpdateManager::_status_report.rssi = current_wifi_rssi;
   } else {
     ESP_LOGW("StatusUpdateManager", "Failed to get current wifi RSSI. Will use old value.");
@@ -475,6 +486,7 @@ void StatusUpdateManager::_update_manager_event_handler(void *arg, esp_event_bas
   case updatemanager_event_t::FIRMWARE_UPDATE_FINISHED: {
     if (xSemaphoreTake(StatusUpdateManager::_status_report_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
       StatusUpdateManager::_status_report.update_progress = 100;
+      StatusUpdateManager::_status_report.nspanel_state = NSPanelStatusReport__State::NSPANEL_STATUS_REPORT__STATE__REBOOTING;
       xSemaphoreGive(StatusUpdateManager::_status_report_mutex);
     }
     break;
@@ -483,6 +495,7 @@ void StatusUpdateManager::_update_manager_event_handler(void *arg, esp_event_bas
   case updatemanager_event_t::LITTLEFS_UPDATE_FINISHED: {
     if (xSemaphoreTake(StatusUpdateManager::_status_report_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
       StatusUpdateManager::_status_report.update_progress = 100;
+      StatusUpdateManager::_status_report.nspanel_state = NSPanelStatusReport__State::NSPANEL_STATUS_REPORT__STATE__REBOOTING;
       xSemaphoreGive(StatusUpdateManager::_status_report_mutex);
     }
     break;
@@ -491,6 +504,7 @@ void StatusUpdateManager::_update_manager_event_handler(void *arg, esp_event_bas
   case updatemanager_event_t::NEXTION_UPDATE_FINISHED: {
     if (xSemaphoreTake(StatusUpdateManager::_status_report_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
       StatusUpdateManager::_status_report.update_progress = 100;
+      StatusUpdateManager::_status_report.nspanel_state = NSPanelStatusReport__State::NSPANEL_STATUS_REPORT__STATE__REBOOTING;
       xSemaphoreGive(StatusUpdateManager::_status_report_mutex);
     }
     break;
@@ -510,9 +524,13 @@ bool StatusUpdateManager::_initialize_bme280() {
   if (bmx280_init(StatusUpdateManager::_bme280_dev_handle) == ESP_OK) {
     bmx280_config_t bme280_config = BMX280_DEFAULT_CONFIG;
     if (bmx280_configure(StatusUpdateManager::_bme280_dev_handle, &bme280_config) == ESP_OK) {
-      StatusUpdateManager::_bme280_initialized = true;
-      ESP_LOGE("StatusUpdateManager", "BME280 initialized!");
-      return true;
+      if (bmx280_setMode(StatusUpdateManager::_bme280_dev_handle, BMX280_MODE_CYCLE) == ESP_OK) {
+        StatusUpdateManager::_bme280_initialized = true;
+        ESP_LOGE("StatusUpdateManager", "BME280 initialized!");
+        return true;
+      } else {
+        ESP_LOGE("StatusUpdateManager", "Failed to set BME280 mode!");
+      }
     } else {
       ESP_LOGE("StatusUpdateManager", "Failed to initialize the BME280 sensor!");
     }

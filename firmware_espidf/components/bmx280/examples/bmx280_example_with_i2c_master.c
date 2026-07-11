@@ -53,7 +53,6 @@ void app_main(void)
         } while(bmx280_isSampling(bmx280));
 
         ESP_ERROR_CHECK(bmx280_readoutFloat(bmx280, &temp, &pres, &hum));
-        ESP_LOGI("test", "Read Values: temp = %f, pres = %f, hum = %f", temp, pres, hum);
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
     
