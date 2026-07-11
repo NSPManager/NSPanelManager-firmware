@@ -81,6 +81,8 @@ int custom_log_vprintf(const char *fmt, va_list args) {
   return len;
 }
 
+static_assert(INCLUDE_vTaskSuspend == 1, "portMAX_DELAY is not an indefinite block; audit all mutex/queue waits using portMAX_DELAY");
+
 extern "C" void app_main() {
   ESP_LOGI("Main", "Starting NSPanel Manager firmware. Version " NSPM_VERSION ". Marking boot as successful.");
   UpdateManager::mark_boot_successful();

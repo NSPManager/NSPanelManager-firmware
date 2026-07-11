@@ -36,7 +36,7 @@ void RoomManager::init() {
 }
 
 esp_err_t RoomManager::get_home_page_status(std::shared_ptr<NSPanelRoomStatus> *status) {
-  if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250) == pdPASS)) {
+  if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
     if (RoomManager::_home_page == nullptr) [[unlikely]] {
       xSemaphoreGive(RoomManager::_home_page_mutex);
       ESP_LOGE("RoomManager", "Failed to get home page status, is NULL.");
@@ -53,7 +53,7 @@ esp_err_t RoomManager::get_home_page_status(std::shared_ptr<NSPanelRoomStatus> *
 }
 
 esp_err_t RoomManager::get_home_page_status_all_rooms(std::shared_ptr<NSPanelRoomStatus> *status) {
-  if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250) == pdPASS)) {
+  if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
     if (RoomManager::_home_page_all_rooms == nullptr) [[unlikely]] {
       xSemaphoreGive(RoomManager::_home_page_mutex);
       ESP_LOGE("RoomManager", "Failed to get home page status (all rooms), is NULL.");
@@ -70,7 +70,7 @@ esp_err_t RoomManager::get_home_page_status_all_rooms(std::shared_ptr<NSPanelRoo
 }
 
 esp_err_t RoomManager::get_home_page_status_mutable(std::shared_ptr<NSPanelRoomStatus> *status) {
-  if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250) == pdPASS)) {
+  if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
     if (RoomManager::_home_page == nullptr) [[unlikely]] {
       xSemaphoreGive(RoomManager::_home_page_mutex);
       return ESP_ERR_NOT_FINISHED;
@@ -97,7 +97,7 @@ esp_err_t RoomManager::get_home_page_status_mutable(std::shared_ptr<NSPanelRoomS
 }
 
 esp_err_t RoomManager::get_home_page_status_mutable_all_rooms(std::shared_ptr<NSPanelRoomStatus> *status) {
-  if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250) == pdPASS)) {
+  if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
     if (RoomManager::_home_page == nullptr) [[unlikely]] {
       xSemaphoreGive(RoomManager::_home_page_mutex);
       return ESP_ERR_NOT_FINISHED;
@@ -252,7 +252,7 @@ uint32_t RoomManager::get_current_room_id() {
 }
 
 esp_err_t RoomManager::replace_home_page_status(std::shared_ptr<NSPanelRoomStatus> status) {
-  if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250) == pdPASS)) {
+  if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
     RoomManager::_home_page = status;
     xSemaphoreGive(RoomManager::_home_page_mutex);
 
@@ -263,7 +263,7 @@ esp_err_t RoomManager::replace_home_page_status(std::shared_ptr<NSPanelRoomStatu
 }
 
 esp_err_t RoomManager::replace_home_page_status_all_rooms(std::shared_ptr<NSPanelRoomStatus> status) {
-  if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250) == pdPASS)) {
+  if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
     RoomManager::_home_page_all_rooms = status;
     xSemaphoreGive(RoomManager::_home_page_mutex);
 
@@ -274,7 +274,7 @@ esp_err_t RoomManager::replace_home_page_status_all_rooms(std::shared_ptr<NSPane
 }
 
 esp_err_t RoomManager::get_current_room_entities_page_status(std::shared_ptr<NSPanelRoomEntitiesPage> *status) {
-  if (xSemaphoreTake(RoomManager::_entities_page_mutex, pdMS_TO_TICKS(500) == pdPASS)) {
+  if (xSemaphoreTake(RoomManager::_entities_page_mutex, pdMS_TO_TICKS(500)) == pdPASS) {
     if (RoomManager::_entities_page == nullptr) [[unlikely]] {
       xSemaphoreGive(RoomManager::_entities_page_mutex);
       ESP_LOGE("RoomManager", "Failed to get current room entities page. Current page is NULL.");
@@ -328,7 +328,7 @@ esp_err_t RoomManager::go_to_entities_page_id(uint32_t page_id) {
     new_mqtt_entities_page_status_topic.append("/state");
     std::string current_topic = std::string(RoomManager::_current_entities_page_status_topic.get());
 
-    if (xSemaphoreTake(RoomManager::_entities_page_mutex, pdMS_TO_TICKS(250) == pdTRUE)) {
+    if (xSemaphoreTake(RoomManager::_entities_page_mutex, pdMS_TO_TICKS(250)) == pdTRUE) {
       ESP_LOGD("RoomManager", "Request to navigate to entities page ID %lu", page_id);
 
       if (new_mqtt_entities_page_status_topic.compare(current_topic) == 0) {
