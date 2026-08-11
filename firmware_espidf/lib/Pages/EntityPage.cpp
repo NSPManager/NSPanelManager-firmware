@@ -451,7 +451,6 @@ void EntityPage::_handle_string_event_thermostat(char *data) {
       ESP_LOGD("EntityPage", "Activating thermostat options set1");
       EntityPage::_is_currently_editing = true;
       EntityPage::_selected_thermostat_option_index = 0;
-      ESP_LOGD("EntityPage", "Setting value: %s", EntityPage::_current_state->thermostat->options[0]->current_value);
       Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, EntityPage::_current_state->thermostat->options[0]->current_value, 1000);
     }
   } else if (strcmp(data, "activate:set2") == 0) {
@@ -525,6 +524,7 @@ void EntityPage::_handle_string_event_thermostat(char *data) {
         bool alloc_failed = false;
         uint16_t new_value_len = strlen(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->options[current_index]->value);
         uint16_t new_icon_len = strlen(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->options[current_index]->icon);
+
         char *new_value = (char *)malloc(new_value_len + 1);
         char *new_icon = (char *)malloc(new_icon_len + 1);
 
@@ -534,7 +534,9 @@ void EntityPage::_handle_string_event_thermostat(char *data) {
           if (new_icon != NULL) {
             free(new_icon); // Free new icon as it won't be used when alloc failed.
           }
-        } else if (new_icon == NULL) {
+        }
+
+        if (new_icon == NULL) {
           alloc_failed = true;
           ESP_LOGE("EntityPage", "Failed to allocate memory for new icon. New icon length: %u", new_value_len);
           free(new_value); // Free new value as it won't be used when alloc failed.
@@ -545,11 +547,17 @@ void EntityPage::_handle_string_event_thermostat(char *data) {
           strncpy(new_icon, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->options[current_index]->icon, new_icon_len);
           new_value[new_value_len] = '\0';
           new_icon[new_icon_len] = '\0';
+
           taskENTER_CRITICAL(&EntityPage::_entity_page_spinlock);
-          free(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value);
-          free(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_icon);
-          state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value = new_value;
-          state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_icon = new_icon;
+          if (new_value_len != 0) {
+            free(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value);
+            state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value = new_value;
+          }
+
+          if (new_icon_len != 0) {
+            free(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_icon);
+            state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_icon = new_icon;
+          }
           taskEXIT_CRITICAL(&EntityPage::_entity_page_spinlock);
         }
 
