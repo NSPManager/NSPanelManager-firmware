@@ -12,8 +12,8 @@
 #include <WebManager.hpp>
 #include <WiFiManager.hpp>
 #include <esp_log.h>
-#include <format>
 #include <nvs_flash.h>
+#include <string>
 
 // Topic on MQTT to send log messages to
 std::string mqtt_log_topic;
@@ -168,7 +168,7 @@ extern "C" void app_main() {
     // MQTT is now setup, enable custom logging through MQTT
     publish_mqtt_log_messages_queue = xQueueCreate(16, sizeof(char *));
     xTaskCreatePinnedToCore(task_publish_mqtt_log_message, "pub_mqtt_log", 4096, NULL, 3, &task_publish_mqtt_log_message_handle, 1);
-    mqtt_log_topic = std::format("nspanel/{}/log", WiFiManager::mac_string());
+    mqtt_log_topic = std::string("nspanel/") + WiFiManager::mac_string() + "/log";
     esp_log_set_vprintf(custom_log_vprintf);
 
     // Start RoomManager

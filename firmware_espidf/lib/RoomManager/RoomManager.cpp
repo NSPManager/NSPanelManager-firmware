@@ -8,7 +8,6 @@
 #include <WiFiManager.hpp>
 #include <esp_event.h>
 #include <esp_log.h>
-#include <format>
 #include <vector>
 
 ESP_EVENT_DEFINE_BASE(ROOMMANAGER_EVENT);
