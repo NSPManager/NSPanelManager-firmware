@@ -274,7 +274,7 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
     }
   } else if (data->data()[0] == NEX_OUT_STRING_DATA) {
     data->erase(data->begin());                // Remove first byte that represents the even type:
-    if (*(data->end()--) != '\n') [[likely]] { // Add termination char at end of string for proper processing when receiving the event.
+    if (data->empty() || data->back() != '\n') [[likely]] { // Add termination char at end of string for proper processing when receiving the event.
       data->push_back('\0');
     }
     esp_event_post(NEXTION_EVENT, nextion_event_t::STRING_EVENT, data->data(), data->size(), pdMS_TO_TICKS(16)); // TODO: Is there a better way than simply sending raw bytes as te length cannot be access when receiving the event
