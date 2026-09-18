@@ -3,5 +3,5 @@ set(CMAKE_C_STANDARD 11)
 idf_component_register(
     SRCS bmx280.c
     INCLUDE_DIRS "include"
-    REQUIRES driver
+    REQUIRES driver esp_driver_i2c
 )

@@ -6,14 +6,6 @@ if [ -z "${BOARD_TYPE}" ]; then
   exit 1
 fi
 
-pio_core_path="$(pio system info | grep "PlatformIO Core Directory" | grep -oEe "/.+$")"
-boot_app0_bin_path="$pio_core_path/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin"
-
-if [ ! -e "$boot_app0_bin_path" ]; then
-  echo "boot_app0.bin file does not exist as $boot_app0_bin_path!"
-  echo "Have you installed the esp32 platform in PlatformIO?"
-  exit 1
-fi
 
 function get_partition_offset {
   partition="$1"
@@ -23,9 +15,9 @@ function get_partition_offset {
 
 echo "Building image from existing .bin-files"
 if [ "${BOARD_TYPE}" == "custom" ]; then
-  esptool.py --chip esp32s3 merge_bin -o merged-flash.bin --flash_mode qio --flash_size 16MB 0x1000 .pio/build/custom_pcb/bootloader.bin 0x8000 .pio/build/custom_pcb/partitions.bin 0xe000 "$boot_app0_bin_path" 0x10000 .pio/build/custom_pcb/firmware.bin $(get_partition_offset spiffs) .pio/build/custom_pcb/littlefs.bin
+  esptool.py --chip esp32s3 merge_bin -o merged-flash.bin --flash_mode qio --flash_size 16MB 0x1000 .pio/build/custom_pcb/bootloader.bin 0x8000 .pio/build/custom_pcb/partitions.bin 0x10000 .pio/build/custom_pcb/firmware.bin $(get_partition_offset spiffs) .pio/build/custom_pcb/littlefs.bin
 elif [ "${BOARD_TYPE}" == "sonoff" ]; then
-  esptool.py --chip esp32 merge_bin -o merged-flash.bin --flash_mode dio --flash_size 4MB 0x1000 .pio/build/original_sonoff/bootloader.bin 0x8000 .pio/build/original_sonoff/partitions.bin 0xe000 "$boot_app0_bin_path" 0x10000 .pio/build/original_sonoff/firmware.bin $(get_partition_offset spiffs) .pio/build/original_sonoff/littlefs.bin
+  esptool.py --chip esp32 merge_bin -o merged-flash.bin --flash_mode dio --flash_size 4MB 0x1000 .pio/build/original_sonoff/bootloader.bin 0x8000 .pio/build/original_sonoff/partitions.bin 0x10000 .pio/build/original_sonoff/firmware.bin $(get_partition_offset spiffs) .pio/build/original_sonoff/littlefs.bin
 else
   echo "Unknown board type ${BOARD_TYPE}! Will error exit!"
   exit 2

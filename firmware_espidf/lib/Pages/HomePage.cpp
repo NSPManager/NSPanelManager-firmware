@@ -37,19 +37,17 @@ void HomePage::show() {
 
   if (HomePage::_special_mode_timer_handle == NULL) {
     // This is the first time this page is shown, create timers
-    HomePage::_special_mode_create_timer_args = {
-        .callback = &HomePage::_special_mode_timer_callback,
-        .name = "special_mode_timer",
-    };
+    HomePage::_special_mode_create_timer_args = {};
+    HomePage::_special_mode_create_timer_args.callback = &HomePage::_special_mode_timer_callback;
+    HomePage::_special_mode_create_timer_args.name = "special_mode_timer";
     esp_err_t err = esp_timer_create(&HomePage::_special_mode_create_timer_args, &HomePage::_special_mode_timer_handle);
     if (err != ESP_OK) {
       ESP_LOGE("HomePage", "Failed to create 'Special mode timer'. Special mode will not be functional! Got error: %s", esp_err_to_name(err));
     }
 
-    HomePage::_special_mode_timeout_create_timer_args = {
-        .callback = &HomePage::_special_mode_timeout_timer_callback,
-        .name = "special_mode_timeout_timer",
-    };
+    HomePage::_special_mode_timeout_create_timer_args = {};
+    HomePage::_special_mode_timeout_create_timer_args.callback = &HomePage::_special_mode_timeout_timer_callback;
+    HomePage::_special_mode_timeout_create_timer_args.name = "special_mode_timeout_timer";
     err = esp_timer_create(&HomePage::_special_mode_timeout_create_timer_args, &HomePage::_special_mode_timeout_timer_handle);
     if (err != ESP_OK) {
       ESP_LOGE("HomePage", "Failed to create 'Special mode timeout timer'. Special mode will not be functional! Got error: %s", esp_err_to_name(err));

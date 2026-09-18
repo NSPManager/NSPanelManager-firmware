@@ -14,6 +14,7 @@
 #include <esp_log.h>
 #include <format>
 #include <nvs_flash.h>
+#include <string>
 
 // Topic on MQTT to send log messages to
 std::string mqtt_log_topic;
@@ -48,12 +49,27 @@ void task_print_mem_usage(void *param) {
   }
 }
 
-void task_publish_mqtt_log_message(void *param) {
+void task_publish_log_messages(void *param) {
   char *log_message;
+  uint16_t message_len = 0;
+
+  // Create a local var of the complete log message as Log V2 calls vprintf multiple times but always ends with a single \n char as the last argument
+  std::string complete_log;
+  complete_log.reserve(256); // No log message is likely longer than this
   for (;;) {
     if (xQueueReceive(publish_mqtt_log_messages_queue, &log_message, portMAX_DELAY) == pdTRUE) {
-      if (MqttManager::connected()) {
-        MqttManager::publish(mqtt_log_topic, log_message, strlen(log_message), false);
+      message_len = strlen(log_message);
+      if (message_len <= 0) [[unlikely]] {
+        continue;
+      }
+
+      complete_log.append(log_message);
+      if ((*log_message == 0x1b && log_message[message_len - 1] == 0x0a) || (message_len == 1 && log_message[0] == '\n')) { // First char in last byte of message is escape to cancel out current color and last char is a newline, ie. end of log message
+        printf(complete_log.c_str());
+        if (publish_mqtt_log_messages_queue != NULL && task_publish_mqtt_log_message_handle != NULL && MqttManager::connected()) {
+          MqttManager::publish(mqtt_log_topic, complete_log.c_str(), complete_log.length(), false);
+        }
+        complete_log.clear();
       }
       free(log_message);
     }
@@ -66,14 +82,7 @@ int custom_log_vprintf(const char *fmt, va_list args) {
   char *buffer = NULL;
   int len = vasprintf(&buffer, fmt, args);
   if (len != -1) {
-    printf(buffer);
-    // Wait a maximum of 100ms to get mutex to add message to queue
-    if (publish_mqtt_log_messages_queue != NULL && task_publish_mqtt_log_message_handle != NULL) {
-      // TODO: Is it really necessary to have a separate task for sending logs over MQTT?
-      if (xQueueSend(publish_mqtt_log_messages_queue, &buffer, pdMS_TO_TICKS(100)) != pdTRUE) {
-        free(buffer);
-      }
-    } else {
+    if (xQueueSend(publish_mqtt_log_messages_queue, &buffer, pdMS_TO_TICKS(100)) != pdTRUE) {
       free(buffer);
     }
   }
@@ -103,9 +112,10 @@ extern "C" void app_main() {
 
   ConfigManager::create_default(); // Set default values on all config entities
 
+  WiFiManager::init();
   if (ConfigManager::load_config() != ESP_OK) {
     ESP_LOGE("Main", "Failed to load config from LittleFS. If this is the first time running the panel this is normal as no config has been saved yet.");
-    ESP_LOGI("Main", "Default config values has been applied, will save t§se to create a config file.");
+    ESP_LOGI("Main", "Default config values has been applied, will save to create a config file.");
     esp_err_t config_save_result = ConfigManager::save_config();
     if (config_save_result != ESP_OK) {
       ESP_LOGE("Main", "Failed to save config to LittleFS, got error %s!", esp_err_to_name(config_save_result));
@@ -113,23 +123,8 @@ extern "C" void app_main() {
 
     WiFiManager::start_ap(&ConfigManager::wifi_hostname);
   } else {
-    ConfigManager::num_failed_boots++;
-    ConfigManager::save_config(); // Save so that we can read back the number of failed boots.
-                                  // Number of failed boots gets reset at the end of main after everything is up and running.
-    if (ConfigManager::wifi_ssid.empty() || ConfigManager::num_failed_boots >= 5) {
-      if (ConfigManager::wifi_ssid.empty()) {
-        ESP_LOGE("Main", "Successfully loaded config from LittleFS but the config is not valid. Empty WiFi SSID, will load default values and start Access Point.");
-      } else {
-        ESP_LOGI("Main", "Num failed boots: %i. Will start AP mode.", ConfigManager::num_failed_boots);
-      }
-
-      WiFiManager::start_ap(&ConfigManager::wifi_hostname);
-    } else {
-      ESP_LOGI("Main", "Config loaded successfully. Starting NSPanel as '%s'.", ConfigManager::wifi_hostname.c_str());
-
-      // Start task that handles WiFi connection
-      WiFiManager::start_client(&ConfigManager::wifi_ssid, &ConfigManager::wifi_psk, &ConfigManager::wifi_hostname);
-    }
+    // Start task that handles WiFi connection
+    WiFiManager::start_client(&ConfigManager::wifi_ssid, &ConfigManager::wifi_psk, &ConfigManager::wifi_hostname, &ConfigManager::wifi_hostname);
   }
 
   switch (ConfigManager::log_level) {
@@ -167,7 +162,7 @@ extern "C" void app_main() {
 
     // MQTT is now setup, enable custom logging through MQTT
     publish_mqtt_log_messages_queue = xQueueCreate(16, sizeof(char *));
-    xTaskCreatePinnedToCore(task_publish_mqtt_log_message, "pub_mqtt_log", 4096, NULL, 3, &task_publish_mqtt_log_message_handle, 1);
+    xTaskCreatePinnedToCore(task_publish_log_messages, "pub_log", 4096, NULL, 3, &task_publish_mqtt_log_message_handle, 1);
     mqtt_log_topic = std::format("nspanel/{}/log", WiFiManager::mac_string());
     esp_log_set_vprintf(custom_log_vprintf);
 
@@ -195,8 +190,5 @@ extern "C" void app_main() {
   // We have been accepted, update internal stored checksum of installed software if needed
   UpdateManager::update_internal_firmware_checksum();
 
-  vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5
-  ESP_LOGI("Main", "Boot has been active more than 5 seconds and we have been accepted at a manager, mark as successful.");
-  ConfigManager::num_failed_boots = 0;
-  ConfigManager::save_config();
+  ESP_LOGI("Main", "Task setup OK. Exiting main.");
 }

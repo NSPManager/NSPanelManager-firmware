@@ -1,8 +1,9 @@
 #pragma once
 #include <MutexWrapper.hpp>
-#include <driver/i2c.h>
 #include <driver/i2c_master.h>
-#include <esp_adc_cal.h>
+#include <esp_adc/adc_cali.h>
+#include <esp_adc/adc_cali_scheme.h>
+#include <esp_adc/adc_oneshot.h>
 #include <esp_timer.h>
 #include <protobuf_nspanel.pb-c.h>
 #include <vector>
@@ -57,9 +58,6 @@ private:
   // Should temperature be measured in fahrenheit or celsius?
   static inline bool _measure_temperature_in_fahrenheit = false;
 
-  // Handle to timer responsible for measuring temperature periodically
-  static inline esp_timer_handle_t _measure_temperature_timer;
-
   // What is the current average measured temperature
   static inline MutexWrapped<double> _measured_average_temperature = 0;
 
@@ -74,6 +72,19 @@ private:
 
   // Calibration value for the read temperature from the manager
   static inline float _temperature_offset_calibration;
+
+#if not defined(BOARD_CUSTOM)
+
+  // ADC handle for temperature reading
+  static inline adc_oneshot_unit_handle_t _temp_adc_handle;
+
+  // Temperature ADC calibration data
+  static inline adc_cali_handle_t _temp_calibration_data;
+
+  // ADC characteristics
+  static inline adc_cali_line_fitting_config_t *_adc_chars;
+
+#endif
 
 #if defined(BOARD_CUSTOM)
   // What is the current average measured temperature
@@ -108,9 +119,6 @@ private:
   // Status report object used to send protobuf data to manager
   static inline NSPanelStatusReport _status_report;
 
-  // ADC characteristics
-  static inline esp_adc_cal_characteristics_t *_adc_chars;
-
 #if defined(BOARD_CUSTOM)
   // Custom PCB that uses I2C sensors. Define them:
 
@@ -139,16 +147,4 @@ private:
   // // Device handle for LTR-303ALS-01 sensor on I2C bus.
   // static inline LTR303 *_ltr303_dev_handle = NULL;
 #endif
-
-  // Start arguments for timer responsible for sending status updates
-  static inline constexpr esp_timer_create_args_t _status_update_timer_args = {
-      .callback = StatusUpdateManager::_send_status_update,
-      .name = "status_update_timer",
-  };
-
-  // Start arguments for timer responsible for measuring temperature
-  static inline constexpr esp_timer_create_args_t _measure_temperature_timer_args = {
-      .callback = StatusUpdateManager::_measure_temperature,
-      .name = "temperature_timer",
-  };
 };

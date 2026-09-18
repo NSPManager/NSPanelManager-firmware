@@ -19,7 +19,6 @@ enum nextion_state_t {
 static constexpr uint16_t NEXTION_UART_EVENT_LOOP_STACK_SIZE = 3096;
 static constexpr uint16_t NEXTION_UART_EVENT_LOOP_QUEUE_SIZE = 6;
 
-
 class Nextion {
 public:
   /**
@@ -218,28 +217,25 @@ private:
    * @brief Will attempt to write data onto serial.
    * @return ESP_OK on success, otherwise return ESP_ERR_NOT_FINISHED.
    */
-  static esp_err_t _write_command(char *data);
+  static esp_err_t _write_command(const char *data);
 
   /**
    * @brief Write data to Nextion display
    */
-  static int nextion_write(const void* src, size_t size);
+  static int nextion_write(const void *src, size_t size);
 
   /**
    * @brief write end 0xff,0xff,0xff to Nextion display
    */
   static void nextion_write_end();
 
-  
-
-
 public:
   /**
-   * @brief works in the same way as _write_command, but handles buffer overflow, 
+   * @brief works in the same way as _write_command, but handles buffer overflow,
    */
-  static esp_err_t write_command(char *data);
-private:
+  static esp_err_t write_command(const char *data);
 
+private:
   // VARIABLES:
   // Event loop handle for custom events that happens from UART read -> handle mqtt message
   static inline esp_event_loop_handle_t _handle_uart_data_event_loop;
@@ -285,6 +281,4 @@ private:
 
   // buffer overlow protection, keep track of how many bytes currently waiting.
   static inline int _nextion_buffer_out;
-
-
 };

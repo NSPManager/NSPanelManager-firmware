@@ -20,13 +20,13 @@ enum nextion_event_t {
   UPDATE_FINISHED,
 };
 
-// struct nextion_event_data_t {
-//   // Numbes of bytes read
-//   size_t data_size;
+struct nextion_event_data_t {
+  // Numbes of bytes read
+  size_t data_size;
 
-//   // Data buffer
-//   uint8_t data[NEXTION_UART_BUFFER_SIZE + 1];
-// };
+  // Data buffer
+  char *data;
+};
 
 struct nextion_event_touch_t {
   // What page was pressed

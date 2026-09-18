@@ -8,12 +8,12 @@
 #include <UpdateManager.hpp>
 #include <UpdateManager_event.hpp>
 #include <WiFiManager.hpp>
-#include <cJSON.h>
 #include <cmath>
 #include <esp_https_ota.h>
 #include <esp_log.h>
 #include <esp_ota_ops.h>
 #include <esp_timer.h>
+#include <nlohmann/json.hpp>
 
 ESP_EVENT_DEFINE_BASE(UPDATEMANAGER_EVENT);
 
@@ -41,11 +41,10 @@ void UpdateManager::update_gui(void *param) {
     tft_file_url.append("/download_tft/");
     tft_file_url.append(std::to_string(config->nspanel_id));
 
-    esp_http_client_config_t http_client_config = {
-        .url = tft_file_url.c_str(),
-        .cert_pem = NULL,
-        .keep_alive_enable = true,
-    };
+    esp_http_client_config_t http_client_config = {};
+    http_client_config.url = tft_file_url.c_str();
+    http_client_config.cert_pem = NULL;
+    http_client_config.keep_alive_enable = true;
 
     size_t remote_tft_file_size;
     while (UpdateManager::_get_remote_file_size(tft_file_url, &remote_tft_file_size) != ESP_OK) {
@@ -107,8 +106,6 @@ void UpdateManager::update_gui(void *param) {
     }
 
     // Update started. Wait for notifications and when they arrive, download data from offset into buffer and write to display.
-    uint64_t last_task_delay = esp_timer_get_time(); // Wait for 250ms second every 2 seconds to allow for other tasks, especially the WiFi task to keep connection active.
-    uint8_t retries = 0;                             // Only wait up to 2*20 seconds before recalling Nextion::start_update
     float progress;
     for (;;) {
       if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(20000)) == pdPASS) {
@@ -330,7 +327,7 @@ void UpdateManager::update_littlefs(void *param, bool force_update) {
         LittleFS::mount();
         ConfigManager::save_config();
 
-        ESP_LOGI("UpdateManager", "Update complete. Will start in 2 seconds");
+        ESP_LOGI("UpdateManager", "Update complete. Will restart in 2 seconds");
         vTaskDelay(pdMS_TO_TICKS(2000));
         StatusUpdateManager::reboot();
       }
@@ -388,10 +385,9 @@ void UpdateManager::update_internal_firmware_checksum() {
 esp_err_t UpdateManager::_setup_http_client(esp_http_client_handle_t *client, std::vector<uint8_t> *return_data, const char *download_url, int64_t offset, int64_t length) {
   UpdateManager::_download_data_store = return_data;
 
-  esp_http_client_config_t config = {
-      .url = download_url,
-      .event_handler = UpdateManager::_http_event_handler,
-  };
+  esp_http_client_config_t config = {};
+  config.url = download_url;
+  config.event_handler = UpdateManager::_http_event_handler;
 
   *client = esp_http_client_init(&config);
 
@@ -438,11 +434,10 @@ esp_err_t UpdateManager::_download_data(std::vector<uint8_t> *return_data, const
 
 esp_err_t UpdateManager::_get_remote_file_size(std::string url, size_t *file_size) {
   // Start actual littlefs update
-  esp_http_client_config_t http_config = {
-      .url = url.c_str(),
-      .cert_pem = NULL,
-      .keep_alive_enable = true,
-  };
+  esp_http_client_config_t http_config = {};
+  http_config.url = url.c_str();
+  http_config.cert_pem = NULL;
+  http_config.keep_alive_enable = true;
 
   // Setup HTTP connection:
   esp_http_client_handle_t client = esp_http_client_init(&http_config);
@@ -501,20 +496,19 @@ void UpdateManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
     command_topic.append(WiFiManager::mac_string());
     command_topic.append("/command");
 
-    if (topic_string.compare(command_topic) == 0) {
-      cJSON *json = cJSON_ParseWithLength(event->data, event->data_len);
-      if (json == NULL) {
-        ESP_LOGW("UpgradeManager", "Failed to parse payload as JSON.");
+    if (topic_string.compare(command_topic) == 0 && event->data_len > 0) {
+      nlohmann::json json = nlohmann::json::parse(event->data, event->data + event->data_len, nullptr, false);
+      if (json.is_discarded()) {
+        ESP_LOGW("UpdateManager", "Failed to parse payload as JSON.");
         // Failed to parse as JSON
         return;
       }
 
-      cJSON *item = cJSON_GetObjectItem(json, "command");
-      if (cJSON_IsString(item) && item->valuestring != NULL) {
-        std::string command_string = item->valuestring;
+      if (json.contains("command") && json["command"].is_string()) {
+        std::string command_string = json["command"];
 
         if (command_string.compare("reboot") == 0) { // TODO: Move to some place more fitting.
-          ESP_LOGI("UpgradeManager", "Received command to reboot. Will reboot NSPanel.");
+          ESP_LOGI("UpdateManager", "Received command to reboot. Will reboot NSPanel.");
           StatusUpdateManager::reboot();
         } else if (command_string.compare("firmware_update") == 0 && UpdateManager::_current_update_task == NULL) {
           xTaskCreatePinnedToCore(UpdateManager::update_firmware, "update_firmware", 8192, NULL, 2, &UpdateManager::_current_update_task, 1);
@@ -523,16 +517,14 @@ void UpdateManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
           xTaskCreatePinnedToCore(UpdateManager::update_firmware, "update_firmware", 8192, NULL, 2, &UpdateManager::_current_update_task, 1);
         } else if (command_string.compare("tft_update") == 0 && UpdateManager::_current_update_task == NULL) {
           if (NSPM_ConfigManager::get_manager_address().empty()) {
-            ESP_LOGE("UpgradeManager", "Cannot start TFT update: manager address not yet known.");
+            ESP_LOGE("UpdateManager", "Cannot start TFT update: manager address not yet known.");
           } else {
             xTaskCreatePinnedToCore(UpdateManager::update_gui, "update_gui", 8192, NULL, 2, &UpdateManager::_current_update_task, 1);
           }
         } else {
-          ESP_LOGW("UpgradeManager", "Unknown command: %s", item->valuestring);
+          ESP_LOGW("UpdateManager", "Unknown command: %s", command_string.c_str());
         }
       }
-
-      cJSON_Delete(json);
     }
   } else if (event_id == MQTT_EVENT_CONNECTED) {
     std::string command_topic = "nspanel/";
@@ -585,18 +577,14 @@ esp_err_t UpdateManager::_update_firmware_ota() {
   esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::FIRMWARE_UPDATE_STARTED, NULL, 0, pdMS_TO_TICKS(500));
 
   // Start actual firmware update
-  esp_http_client_config_t http_config = {
-      .url = firmware_download_url.c_str(),
-      .cert_pem = NULL,
-      .keep_alive_enable = true,
-  };
+  esp_http_client_config_t http_config = {};
+  http_config.url = firmware_download_url.c_str();
+  http_config.cert_pem = NULL;
+  http_config.keep_alive_enable = true;
 
   esp_err_t ret;
-  const esp_https_ota_config_t config = {
-      .http_config = &http_config,
-      // .partial_http_download = true,
-      // .max_http_request_size = 16384,
-  };
+  esp_https_ota_config_t config = {};
+  config.http_config = &http_config;
 
   esp_https_ota_handle_t https_ota_handle = 0;
   ret = esp_https_ota_begin(&config, &https_ota_handle);
@@ -680,11 +668,10 @@ esp_err_t UpdateManager::_update_littlefs_ota() {
   esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::LITTLEFS_UPDATE_STARTED, NULL, 0, pdMS_TO_TICKS(500));
 
   // Start actual littlefs update
-  esp_http_client_config_t http_config = {
-      .url = littlefs_download_url.c_str(),
-      .cert_pem = NULL,
-      .keep_alive_enable = true,
-  };
+  esp_http_client_config_t http_config = {};
+  http_config.url = littlefs_download_url.c_str();
+  http_config.cert_pem = NULL;
+  http_config.keep_alive_enable = true;
 
   // Find LittleFS partition
   esp_partition_t *littlefs_partition = NULL;

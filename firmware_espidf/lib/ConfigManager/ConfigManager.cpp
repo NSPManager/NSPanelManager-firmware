@@ -1,10 +1,9 @@
 #include "ConfigManager.hpp"
 #include <LittleFS.hpp>
-#include <cJSON.h>
 #include <esp_log.h>
 #include <esp_mac.h>
 #include <esp_system.h>
-#include <lfs.h>
+#include <nlohmann/json.hpp>
 #include <string.h>
 
 esp_err_t ConfigManager::load_config() {
@@ -36,155 +35,132 @@ esp_err_t ConfigManager::load_config() {
   fread(read_buffer, 1, file_size, f);
   fclose(f);
 
-  cJSON *json = cJSON_Parse(read_buffer);
-  if (json == NULL) {
+  nlohmann::json config_data = nlohmann::json::parse(read_buffer, read_buffer + file_size, nullptr, false);
+  free(read_buffer); // Data parsed, free read buffer.
+
+  if (config_data.is_discarded()) {
     ESP_LOGE("ConfigManager", "Failed to parse JSON while reading config from LittleFS!");
-    free(read_buffer);
     return ESP_ERR_NOT_FINISHED;
   }
 
-  cJSON *item = cJSON_GetObjectItem(json, "log_level");
-  if (cJSON_IsNumber(item)) {
-    ConfigManager::log_level = static_cast<esp_log_level_t>(item->valueint);
-    ESP_LOGE("ConfigManager", "Loaded log level: %d", item->valueint);
+  if (config_data.contains("log_level") && config_data["log_level"].is_number_integer()) {
+    ConfigManager::log_level = static_cast<esp_log_level_t>(config_data.at("log_level").get<int32_t>());
+    ESP_LOGE("ConfigManager", "Loaded log level: %d", config_data.at("log_level").get<int32_t>());
   } else {
     ESP_LOGE("ConfigManager", "Log level is not of type int!");
   }
 
-  item = cJSON_GetObjectItem(json, "wifi_hostname");
-  if (cJSON_IsString(item) && (item->valuestring != NULL)) {
-    ConfigManager::wifi_hostname = item->valuestring;
+  // Handle WiFi settings
+  if (config_data.contains("wifi_hostname") && config_data["wifi_hostname"].is_string()) {
+    ConfigManager::wifi_hostname = config_data["wifi_hostname"].get<std::string>();
   }
 
-  item = cJSON_GetObjectItem(json, "wifi_ssid");
-  if (cJSON_IsString(item) && (item->valuestring != NULL)) {
-    ConfigManager::wifi_ssid = item->valuestring;
+  if (config_data.contains("wifi_ssid") && config_data["wifi_ssid"].is_string()) {
+    ConfigManager::wifi_ssid = config_data["wifi_ssid"].get<std::string>();
   }
 
-  item = cJSON_GetObjectItem(json, "wifi_psk");
-  if (cJSON_IsString(item) && (item->valuestring != NULL)) {
-    ConfigManager::wifi_psk = item->valuestring;
+  if (config_data.contains("wifi_psk") && config_data["wifi_psk"].is_string()) {
+    ConfigManager::wifi_psk = config_data["wifi_psk"].get<std::string>();
   }
 
-  item = cJSON_GetObjectItem(json, "mqtt_server");
-  if (cJSON_IsString(item) && (item->valuestring != NULL)) {
-    ConfigManager::mqtt_server = item->valuestring;
+  // Handle MQTT settings
+  if (config_data.contains("mqtt_server") && config_data["mqtt_server"].is_string()) {
+    ConfigManager::mqtt_server = config_data["mqtt_server"].get<std::string>();
   }
 
-  item = cJSON_GetObjectItem(json, "mqtt_port");
-  if (cJSON_IsNumber(item)) {
-    ConfigManager::mqtt_port = item->valueint;
+  if (config_data.contains("mqtt_port") && config_data["mqtt_port"].is_number_integer()) {
+    ConfigManager::mqtt_port = config_data["mqtt_port"].get<int32_t>();
   }
 
-  item = cJSON_GetObjectItem(json, "mqtt_username");
-  if (cJSON_IsString(item) && (item->valuestring != NULL)) {
-    ConfigManager::mqtt_username = item->valuestring;
+  if (config_data.contains("mqtt_username") && config_data["mqtt_username"].is_string()) {
+    ConfigManager::mqtt_username = config_data["mqtt_username"].get<std::string>();
   }
 
-  item = cJSON_GetObjectItem(json, "mqtt_password");
-  if (cJSON_IsString(item) && (item->valuestring != NULL)) {
-    ConfigManager::mqtt_password = item->valuestring;
+  if (config_data.contains("mqtt_password") && config_data["mqtt_password"].is_string()) {
+    ConfigManager::mqtt_password = config_data["mqtt_password"].get<std::string>();
   }
 
-  item = cJSON_GetObjectItem(json, "md5_firmware");
-  if (cJSON_IsString(item) && (item->valuestring != NULL)) {
-    ConfigManager::md5_firmware = item->valuestring;
+  // Handle MD5 checksums
+  if (config_data.contains("md5_firmware") && config_data["md5_firmware"].is_string()) {
+    ConfigManager::md5_firmware = config_data["md5_firmware"].get<std::string>();
   }
 
-  item = cJSON_GetObjectItem(json, "md5_data_file");
-  if (cJSON_IsString(item) && (item->valuestring != NULL)) {
-    ConfigManager::md5_data_file = item->valuestring;
+  if (config_data.contains("md5_data_file") && config_data["md5_data_file"].is_string()) {
+    ConfigManager::md5_data_file = config_data["md5_data_file"].get<std::string>();
   }
 
-  item = cJSON_GetObjectItem(json, "md5_gui");
-  if (cJSON_IsString(item) && (item->valuestring != NULL)) {
-    ConfigManager::md5_gui = item->valuestring;
+  if (config_data.contains("md5_gui") && config_data["md5_gui"].is_string()) {
+    ConfigManager::md5_gui = config_data["md5_gui"].get<std::string>();
   }
 
-  item = cJSON_GetObjectItem(json, "reverse_relays");
-  if (cJSON_IsBool(item)) {
-    ConfigManager::reverse_relays = cJSON_IsTrue(item);
+  // Handle relay settings
+  if (config_data.contains("reverse_relays") && config_data["reverse_relays"].is_boolean()) {
+    ConfigManager::reverse_relays = config_data["reverse_relays"].get<bool>();
   }
 
-  item = cJSON_GetObjectItem(json, "relay1_default_mode");
-  if (cJSON_IsBool(item)) {
-    ConfigManager::relay1_default_mode = cJSON_IsTrue(item);
+  if (config_data.contains("relay1_default_mode") && config_data["relay1_default_mode"].is_boolean()) {
+    ConfigManager::relay1_default_mode = config_data["relay1_default_mode"].get<bool>();
   }
 
-  item = cJSON_GetObjectItem(json, "relay2_default_mode");
-  if (cJSON_IsBool(item)) {
-    ConfigManager::relay2_default_mode = cJSON_IsTrue(item);
+  if (config_data.contains("relay2_default_mode") && config_data["relay2_default_mode"].is_boolean()) {
+    ConfigManager::relay2_default_mode = config_data["relay2_default_mode"].get<bool>();
   }
 
-  item = cJSON_GetObjectItem(json, "use_new_upload_protocol");
-  if (cJSON_IsBool(item)) {
-    ConfigManager::use_latest_nextion_upload_protocol = cJSON_IsTrue(item);
-  } else if (cJSON_IsString(item) && item->valuestring != NULL) {
-    ConfigManager::use_latest_nextion_upload_protocol = (strncmp("true", item->valuestring, sizeof("true")) == 0);
+  // Handle upload protocol
+  if (config_data.contains("use_new_upload_protocol") && config_data["use_new_upload_protocol"].is_boolean()) {
+    ConfigManager::use_latest_nextion_upload_protocol = config_data["use_new_upload_protocol"].get<bool>();
+  } else if (config_data.contains("use_new_upload_protocol") && config_data["use_new_upload_protocol"].is_string()) {
+    ConfigManager::use_latest_nextion_upload_protocol =
+        (strncmp("true", config_data["use_new_upload_protocol"].get<std::string>().c_str(), sizeof("true")) == 0);
   }
 
-  item = cJSON_GetObjectItem(json, "has_updated");
-  if (cJSON_IsBool(item)) {
-    ConfigManager::has_updated = cJSON_IsTrue(item);
+  // Handle has_updated
+  if (config_data.contains("has_updated") && config_data["has_updated"].is_boolean()) {
+    ConfigManager::has_updated = config_data["has_updated"].get<bool>();
   }
 
-  item = cJSON_GetObjectItem(json, "upload_baud");
-  if (cJSON_IsNumber(item)) {
-    ConfigManager::nextion_upload_baudrate = item->valueint;
+  // Handle baud rates
+  if (config_data.contains("upload_baud") && config_data["upload_baud"].is_number_integer()) {
+    ConfigManager::nextion_upload_baudrate = config_data["upload_baud"].get<int32_t>();
   }
 
-  item = cJSON_GetObjectItem(json, "comms_baud");
-  if (cJSON_IsNumber(item)) {
-    ConfigManager::communication_baud_rate = item->valueint;
+  if (config_data.contains("comms_baud") && config_data["comms_baud"].is_number_integer()) {
+    ConfigManager::communication_baud_rate = config_data["comms_baud"].get<int32_t>();
   }
 
-  item = cJSON_GetObjectItem(json, "num_failed_boots");
-  if (cJSON_IsNumber(item)) {
-    ConfigManager::num_failed_boots = item->valueint;
+  // Handle thermostat modes
+  if (config_data.contains("relay1_is_thermostat_heat_mode") && config_data["relay1_is_thermostat_heat_mode"].is_boolean()) {
+    ConfigManager::relay1_thermostat_heat_mode = config_data["relay1_is_thermostat_heat_mode"].get<bool>();
   }
 
-  item = cJSON_GetObjectItem(json, "relay1_is_thermostat_heat_mode");
-  if (cJSON_IsBool(item)) {
-    ConfigManager::relay1_thermostat_heat_mode = cJSON_IsTrue(item);
+  if (config_data.contains("relay1_is_thermostat_cool_mode") && config_data["relay1_is_thermostat_cool_mode"].is_boolean()) {
+    ConfigManager::relay1_thermostat_cool_mode = config_data["relay1_is_thermostat_cool_mode"].get<bool>();
   }
 
-  item = cJSON_GetObjectItem(json, "relay1_is_thermostat_cool_mode");
-  if (cJSON_IsBool(item)) {
-    ConfigManager::relay1_thermostat_cool_mode = cJSON_IsTrue(item);
+  if (config_data.contains("relay2_is_thermostat_heat_mode") && config_data["relay2_is_thermostat_heat_mode"].is_boolean()) {
+    ConfigManager::relay2_thermostat_heat_mode = config_data["relay2_is_thermostat_heat_mode"].get<bool>();
   }
 
-  item = cJSON_GetObjectItem(json, "relay2_is_thermostat_heat_mode");
-  if (cJSON_IsBool(item)) {
-    ConfigManager::relay2_thermostat_heat_mode = cJSON_IsTrue(item);
+  if (config_data.contains("relay2_is_thermostat_cool_mode") && config_data["relay2_is_thermostat_cool_mode"].is_boolean()) {
+    ConfigManager::relay2_thermostat_cool_mode = config_data["relay2_is_thermostat_cool_mode"].get<bool>();
   }
 
-  item = cJSON_GetObjectItem(json, "relay2_is_thermostat_cool_mode");
-  if (cJSON_IsBool(item)) {
-    ConfigManager::relay2_thermostat_cool_mode = cJSON_IsTrue(item);
+  // Handle temperature thresholds
+  if (config_data.contains("relay1_lower_temperature") && config_data["relay1_lower_temperature"].is_number_integer()) {
+    ConfigManager::relay1_lower_temperature = config_data["relay1_lower_temperature"].get<int32_t>();
   }
 
-  item = cJSON_GetObjectItem(json, "relay1_lower_temperature");
-  if (cJSON_IsNumber(item)) {
-    ConfigManager::relay1_lower_temperature = item->valueint;
+  if (config_data.contains("relay1_upper_temperature") && config_data["relay1_upper_temperature"].is_number_integer()) {
+    ConfigManager::relay1_upper_temperature = config_data["relay1_upper_temperature"].get<int32_t>();
   }
 
-  item = cJSON_GetObjectItem(json, "relay1_upper_temperature");
-  if (cJSON_IsNumber(item)) {
-    ConfigManager::relay1_upper_temperature = item->valueint;
+  if (config_data.contains("relay2_lower_temperature") && config_data["relay2_lower_temperature"].is_number_integer()) {
+    ConfigManager::relay2_lower_temperature = config_data["relay2_lower_temperature"].get<int32_t>();
   }
 
-  item = cJSON_GetObjectItem(json, "relay2_lower_temperature");
-  if (cJSON_IsNumber(item)) {
-    ConfigManager::relay2_lower_temperature = item->valueint;
+  if (config_data.contains("relay2_upper_temperature") && config_data["relay2_upper_temperature"].is_number_integer()) {
+    ConfigManager::relay2_upper_temperature = config_data["relay2_upper_temperature"].get<int32_t>();
   }
-
-  item = cJSON_GetObjectItem(json, "relay2_upper_temperature");
-  if (cJSON_IsNumber(item)) {
-    ConfigManager::relay2_upper_temperature = item->valueint;
-  }
-
-  cJSON_Delete(json);
-  free(read_buffer);
 
   return esp_err_t();
 }
@@ -225,54 +201,42 @@ esp_err_t ConfigManager::save_config() {
     return ESP_ERR_NOT_FINISHED;
   }
 
-  cJSON *json = cJSON_CreateObject();
-  cJSON_AddNumberToObject(json, "log_level", static_cast<int>(ConfigManager::log_level));
-  cJSON_AddStringToObject(json, "wifi_hostname", ConfigManager::wifi_hostname.c_str());
-  cJSON_AddStringToObject(json, "wifi_ssid", ConfigManager::wifi_ssid.c_str());
-  cJSON_AddStringToObject(json, "wifi_psk", ConfigManager::wifi_psk.c_str());
-  cJSON_AddStringToObject(json, "mqtt_server", ConfigManager::mqtt_server.c_str());
-  cJSON_AddNumberToObject(json, "mqtt_port", ConfigManager::mqtt_port);
-  cJSON_AddStringToObject(json, "mqtt_username", ConfigManager::mqtt_username.c_str());
-  cJSON_AddStringToObject(json, "mqtt_password", ConfigManager::mqtt_password.c_str());
-  cJSON_AddStringToObject(json, "md5_firmware", ConfigManager::md5_firmware.c_str());
-  cJSON_AddStringToObject(json, "md5_data_file", ConfigManager::md5_data_file.c_str());
-  cJSON_AddStringToObject(json, "md5_gui", ConfigManager::md5_gui.c_str());
-  cJSON_AddBoolToObject(json, "reverse_relays", ConfigManager::reverse_relays);
-  cJSON_AddBoolToObject(json, "relay1_default_mode", ConfigManager::relay1_default_mode);
-  cJSON_AddBoolToObject(json, "relay2_default_mode", ConfigManager::relay2_default_mode);
-  cJSON_AddBoolToObject(json, "relay1_is_thermostat_heat_mode", ConfigManager::relay1_thermostat_heat_mode);
-  cJSON_AddBoolToObject(json, "relay1_is_thermostat_cool_mode", ConfigManager::relay1_thermostat_cool_mode);
-  cJSON_AddBoolToObject(json, "relay2_is_thermostat_heat_mode", ConfigManager::relay2_thermostat_heat_mode);
-  cJSON_AddBoolToObject(json, "relay2_is_thermostat_cool_mode", ConfigManager::relay2_thermostat_cool_mode);
-  cJSON_AddNumberToObject(json, "relay1_lower_temperature", ConfigManager::relay1_lower_temperature);
-  cJSON_AddNumberToObject(json, "relay1_upper_temperature", ConfigManager::relay1_upper_temperature);
-  cJSON_AddNumberToObject(json, "relay2_lower_temperature", ConfigManager::relay2_lower_temperature);
-  cJSON_AddNumberToObject(json, "relay2_upper_temperature", ConfigManager::relay2_upper_temperature);
+  nlohmann::json json = nlohmann::json::object();
+  json["log_level"] = static_cast<int>(ConfigManager::log_level);
+  json["wifi_hostname"] = ConfigManager::wifi_hostname;
+  json["wifi_ssid"] = ConfigManager::wifi_ssid;
+  json["wifi_psk"] = ConfigManager::wifi_psk;
+  json["mqtt_server"] = ConfigManager::mqtt_server;
+  json["mqtt_port"] = ConfigManager::mqtt_port;
+  json["mqtt_username"] = ConfigManager::mqtt_username;
+  json["mqtt_password"] = ConfigManager::mqtt_password;
+  json["md5_firmware"] = ConfigManager::md5_firmware;
+  json["md5_data_file"] = ConfigManager::md5_data_file;
+  json["md5_gui"] = ConfigManager::md5_gui;
+  json["reverse_relays"] = ConfigManager::reverse_relays;
+  json["relay1_default_mode"] = ConfigManager::relay1_default_mode;
+  json["relay2_default_mode"] = ConfigManager::relay2_default_mode;
+  json["relay1_is_thermostat_heat_mode"] = ConfigManager::relay1_thermostat_heat_mode;
+  json["relay1_is_thermostat_cool_mode"] = ConfigManager::relay1_thermostat_cool_mode;
+  json["relay2_is_thermostat_heat_mode"] = ConfigManager::relay2_thermostat_heat_mode;
+  json["relay2_is_thermostat_cool_mode"] = ConfigManager::relay2_thermostat_cool_mode;
+  json["relay1_lower_temperature"] = ConfigManager::relay1_lower_temperature;
+  json["relay1_upper_temperature"] = ConfigManager::relay1_upper_temperature;
+  json["relay2_lower_temperature"] = ConfigManager::relay2_lower_temperature;
+  json["relay2_upper_temperature"] = ConfigManager::relay2_upper_temperature;
 
-  if (ConfigManager::use_latest_nextion_upload_protocol) {
-    cJSON_AddTrueToObject(json, "use_new_upload_protocol");
-  } else {
-    cJSON_AddFalseToObject(json, "use_new_upload_protocol");
-  }
+  json["use_new_upload_protocol"] = ConfigManager::use_latest_nextion_upload_protocol;
+  json["has_updated"] = ConfigManager::has_updated;
 
-  if (ConfigManager::has_updated) {
-    cJSON_AddTrueToObject(json, "has_updated");
-  } else {
-    cJSON_AddFalseToObject(json, "has_updated");
-  }
+  json["upload_baud"] = ConfigManager::nextion_upload_baudrate;
+  json["comms_baud"] = ConfigManager::communication_baud_rate;
 
-  cJSON_AddNumberToObject(json, "upload_baud", ConfigManager::nextion_upload_baudrate);
-  cJSON_AddNumberToObject(json, "comms_baud", ConfigManager::communication_baud_rate);
-  cJSON_AddNumberToObject(json, "num_failed_boots", ConfigManager::num_failed_boots);
-
-  char *json_string = cJSON_Print(json);
-  size_t bytes_written = fwrite(json_string, sizeof(char), strlen(json_string), f);
+  std::string json_string = json.dump();
+  size_t bytes_written = fwrite(json_string.c_str(), sizeof(char), json_string.length(), f);
 
   ESP_LOGI("ConfigManager", "Saved %d bytes to /littlefs/config.json", bytes_written);
 
-  bool wrote_correct_num_bytes = (bytes_written == (sizeof(char) * strlen(json_string)));
-  cJSON_Delete(json);
-  free(json_string);
+  bool wrote_correct_num_bytes = (bytes_written == (sizeof(char) * strlen(json_string.c_str())));
   fclose(f);
 
   if (wrote_correct_num_bytes) {

@@ -1,0 +1,25 @@
+dependencies:
+  espp/base_component: '>=1.0'
+  espp/logger: '>=1.0'
+  espp/socket: '>=1.0'
+  idf:
+    version: '>=5.0'
+description: DNS server component for captive portal functionality - responds to all
+  DNS queries with a configured IP address
+documentation: https://esp-cpp.github.io/espp/network/dns_server.html
+license: MIT
+maintainers:
+- William Emfinger <waemfinger@gmail.com>
+repository: git://github.com/esp-cpp/espp.git
+repository_info:
+  commit_sha: 5f818d2b7bc5bbcc83e1089072ff24e3e87661b9
+  path: components/dns_server
+tags:
+- cpp
+- DNS
+- Captive-Portal
+- provisioning
+- network
+- WiFi
+url: https://github.com/esp-cpp/espp/tree/main/components/dns_server
+version: 1.3.3

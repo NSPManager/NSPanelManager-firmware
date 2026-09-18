@@ -1,0 +1,19 @@
+Command: ninja size
+[0/1] cd /home/tim/NSPanelManager-firmware/firmware_espidf/build && /usr/bin/cmake -D "IDF_SIZE_TOOL=/home/tim/.espressif/python_env/idf6.0_py3.14_env/bin/python;-m;esp_idf_size" -D MAP_FILE=/home/tim/NSPanelManager-firmware/firmware_espidf/build/firmware_espidf.map -D OUTPUT_JSON= -P /opt/esp-idf/tools/cmake/run_size_tool.cmake
+Memory Type Usage Summary
+┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┓
+┃ Memory Type/Section ┃ Used [bytes] ┃ Used [%] ┃ Remain [bytes] ┃ Total [bytes] ┃
+┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━┩
+│ Flash Code          │        48906 │          │                │               │
+│    .text            │        48906 │          │                │               │
+│ IRAM                │        43919 │    33.51 │          87153 │        131072 │
+│    .text            │        42891 │    32.72 │                │               │
+│    .vectors         │         1028 │     0.78 │                │               │
+│ Flash Data          │        34040 │          │                │               │
+│    .rodata          │        33768 │          │                │               │
+│    .appdesc         │          256 │          │                │               │
+│    .tdata           │           16 │          │                │               │
+│ DRAM                │        13212 │     7.31 │         167524 │        180736 │
+│    .data            │        10748 │     5.95 │                │               │
+│    .bss             │         2464 │     1.36 │                │               │
+└─────────────────────┴──────────────┴──────────┴────────────────┴───────────────┘

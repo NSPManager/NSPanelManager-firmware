@@ -534,7 +534,7 @@ void EntitiesPage::_send_entity_toggle_command_to_manager(uint32_t entity_page_i
 
 void EntitiesPage::_task_save_scene_progress(void *scene_slot) {
   int32_t scene_slot_int = *((int32_t *)scene_slot);
-  delete scene_slot;
+  delete (int32_t *)scene_slot;
 
   ESP_LOGD("EntitiesPage", "Starting save of scene in slot %ld", scene_slot_int);
 

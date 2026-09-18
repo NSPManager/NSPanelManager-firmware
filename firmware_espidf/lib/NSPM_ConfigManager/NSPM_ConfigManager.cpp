@@ -4,10 +4,10 @@
 #include <NSPM_ConfigManager_event.hpp>
 #include <NSPM_version.hpp>
 #include <WiFiManager.hpp>
-#include <cJSON.h>
 #include <esp_log.h>
 #include <esp_mac.h>
 #include <esp_wifi.h>
+#include <nlohmann/json.hpp>
 
 ESP_EVENT_DEFINE_BASE(NSPM_CONFIGMANAGER_EVENT);
 
@@ -91,57 +91,51 @@ void NSPM_ConfigManager::_mqtt_event_handler(void *arg, esp_event_base_t event_b
 }
 
 void NSPM_ConfigManager::_handle_register_accept(const char *data, size_t data_length) {
-  cJSON *json = cJSON_ParseWithLength(data, data_length);
-  if (json != NULL) {
-    cJSON *item = cJSON_GetObjectItem(json, "command");
-    if (cJSON_IsString(item) && item->valuestring != NULL) {
-      if (strcmp("register_accept", item->valuestring) != 0) {
-        cJSON_Delete(json); // Cleanup
-        return;             // Command we received was not a "register_accept" from manager, cancel processing.
-      }
-    }
-
-    item = cJSON_GetObjectItem(json, "address");
-    if (cJSON_IsString(item) && item->valuestring != NULL) {
-      NSPM_ConfigManager::_manager_address = item->valuestring;
-    } else {
-      ESP_LOGE("NSPM_ConfigManager", "register_accept does not contain valid 'address' field.");
-      cJSON_Delete(json); // Cleanup
-      return;
-    }
-
-    item = cJSON_GetObjectItem(json, "port");
-    if (cJSON_IsNumber(item) && item->valueint != 0) {
-      NSPM_ConfigManager::_manager_port = item->valueint;
-    } else {
-      ESP_LOGE("NSPM_ConfigManager", "register_accept does not contain valid 'port' field.");
-      cJSON_Delete(json); // Cleanup
-      return;
-    }
-
-    item = cJSON_GetObjectItem(json, "config_topic");
-    if (cJSON_IsString(item) && item->valuestring != NULL) {
-      NSPM_ConfigManager::_mqtt_config_topic = item->valuestring;
-    } else {
-      ESP_LOGE("NSPM_ConfigManager", "register_accept does not contain valid 'config_topic' field.");
-      cJSON_Delete(json); // Cleanup
-      return;
-    }
-    cJSON_Delete(json); // Cleanup
-
-    ESP_LOGI("NSPM_ConfigManager", "Received register_accept from manager. Registered to manager at %s:%d", NSPM_ConfigManager::_manager_address.c_str(), NSPM_ConfigManager::_manager_port);
-    NSPM_ConfigManager::_send_register_requests = false;
-    NSPM_ConfigManager::_mqtt_manager_command_topic = "nspanel/mqttmanager_";
-    NSPM_ConfigManager::_mqtt_manager_command_topic.append(NSPM_ConfigManager::_manager_address);
-    NSPM_ConfigManager::_mqtt_manager_command_topic.append("/command");
-    // Subscribe to where the NSPanel Manager container will send the config for this panel
-    while (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_config_topic) != ESP_OK) {
-      ESP_LOGE("NSPM_ConfigManager", "Failed to subscribe to NSPanel config topic '%s'.", NSPM_ConfigManager::_mqtt_config_topic.c_str());
-      vTaskDelay(pdMS_TO_TICKS(500));
-    }
-
-    ESP_LOGI("NSPM_ConfigManager", "Register accept fully processed. Subscribed to panel config topic: %s", NSPM_ConfigManager::_mqtt_config_topic.c_str());
+  nlohmann::json json = nlohmann::json::parse(data, data + data_length, nullptr, false);
+  if (json.is_discarded()) {
+    ESP_LOGE("NSPM_ConfigManager", "Failed to parse register accept message!");
+    return;
   }
+
+  if (json.contains("command") && json["command"].is_string()) {
+    if (json["command"].get<std::string>().compare("register_accept") != 0) {
+      return; // Command we received was not a "register_accept" from manager, cancel processing.
+    }
+  }
+
+  if (json.contains("address") && json["address"].is_string() && json["address"].get<std::string>().length() > 0) {
+    NSPM_ConfigManager::_manager_address = json["address"].get<std::string>();
+  } else {
+    ESP_LOGE("NSPM_ConfigManager", "register_accept does not contain valid 'address' field.");
+    return;
+  }
+
+  if (json.contains("port") && json["port"].is_number_integer() && json["port"].get<int32_t>() > 0) {
+    NSPM_ConfigManager::_manager_port = json["port"];
+  } else {
+    ESP_LOGE("NSPM_ConfigManager", "register_accept does not contain valid 'port' field.");
+    return;
+  }
+
+  if (json.contains("config_topic") && json["config_topic"].is_string() && json["config_topic"].get<std::string>().length() > 0) {
+    NSPM_ConfigManager::_mqtt_config_topic = json["config_topic"];
+  } else {
+    ESP_LOGE("NSPM_ConfigManager", "register_accept does not contain valid 'config_topic' field.");
+    return;
+  }
+
+  ESP_LOGI("NSPM_ConfigManager", "Received register_accept from manager. Registered to manager at %s:%d", NSPM_ConfigManager::_manager_address.c_str(), NSPM_ConfigManager::_manager_port);
+  NSPM_ConfigManager::_send_register_requests = false;
+  NSPM_ConfigManager::_mqtt_manager_command_topic = "nspanel/mqttmanager_";
+  NSPM_ConfigManager::_mqtt_manager_command_topic.append(NSPM_ConfigManager::_manager_address);
+  NSPM_ConfigManager::_mqtt_manager_command_topic.append("/command");
+  // Subscribe to where the NSPanel Manager container will send the config for this panel
+  while (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_config_topic) != ESP_OK) {
+    ESP_LOGE("NSPM_ConfigManager", "Failed to subscribe to NSPanel config topic '%s'.", NSPM_ConfigManager::_mqtt_config_topic.c_str());
+    vTaskDelay(pdMS_TO_TICKS(500));
+  }
+
+  ESP_LOGI("NSPM_ConfigManager", "Register accept fully processed. Subscribed to panel config topic: %s", NSPM_ConfigManager::_mqtt_config_topic.c_str());
 }
 
 void NSPM_ConfigManager::_handle_new_config_data(const char *data, size_t data_length) {
@@ -270,28 +264,26 @@ void NSPM_ConfigManager::_task_send_register_request(void *arg) {
   esp_netif_ip_info_t ip_info = WiFiManager::ip_info();
   sprintf(ip_address_str, IPSTR, IP2STR(&ip_info.ip));
 
-  cJSON *json = cJSON_CreateObject();
-  cJSON_AddStringToObject(json, "command", "register_request");
-  cJSON_AddStringToObject(json, "mac_origin", mac_str);
-  cJSON_AddStringToObject(json, "friendly_name", ConfigManager::wifi_hostname.c_str());
-  cJSON_AddStringToObject(json, "version", NSPM_VERSION);
-  cJSON_AddStringToObject(json, "md5_firmware", ConfigManager::md5_firmware.c_str());
-  cJSON_AddStringToObject(json, "md5_data_file", ConfigManager::md5_data_file.c_str());
-  cJSON_AddStringToObject(json, "md5_tft_file", ConfigManager::md5_gui.c_str());
-  cJSON_AddStringToObject(json, "address", ip_address_str);
+  nlohmann::json json;
+  json["command"] = "register_request";
+  json["mac_origin"] = mac_str;
+  json["friendly_name"] = ConfigManager::wifi_hostname.c_str();
+  json["version"] = NSPM_VERSION;
+  json["md5_firmware"] = ConfigManager::md5_firmware.c_str();
+  json["md5_data_file"] = ConfigManager::md5_data_file.c_str();
+  json["md5_tft_file"] = ConfigManager::md5_gui.c_str();
+  json["address"] = ip_address_str;
 #if defined(BOARD_SONOFF)
-  cJSON_AddStringToObject(json, "model", "sonoff");
+  json["model"] = "sonoff";
 #elif defined(BOARD_CUSTOM)
-  cJSON_AddStringToObject(json, "model", "custom");
+  json["model"] = "custom";
 #endif
-  char *json_string = cJSON_Print(json);
-  cJSON_Delete(json);
+  std::string json_string = json.dump();
 
   while (NSPM_ConfigManager::_send_register_requests) {
-    MqttManager::publish("nspanel/mqttmanager/command", json_string, strlen(json_string), false);
+    MqttManager::publish("nspanel/mqttmanager/command", json_string.c_str(), json_string.length(), false);
     vTaskDelay(pdMS_TO_TICKS(5000));
   }
 
-  cJSON_free(json_string);
   vTaskDelete(NULL); // Delete own task.
 }

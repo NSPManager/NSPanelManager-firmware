@@ -1,0 +1,2 @@
+source /home/tim/NSPanelManager-firmware/firmware_espidf/build/gdbinit/symbols
+source /home/tim/NSPanelManager-firmware/firmware_espidf/build/gdbinit/connect

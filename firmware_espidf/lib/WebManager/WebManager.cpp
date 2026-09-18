@@ -4,13 +4,14 @@
 #include <NSPM_version.hpp>
 #include <WebManager.hpp>
 #include <WiFiManager.hpp>
-#include <cJSON.h>
 #include <esp_log.h>
 #include <esp_wifi.h>
+#include <nlohmann/json.hpp>
 
 void WebManager::start() {
   if (WebManager::_server == NULL) {
     WebManager::_config = HTTPD_DEFAULT_CONFIG();
+    WebManager::_config.max_uri_handlers = 12;
 
     if (httpd_start(&WebManager::_server, &WebManager::_config) == ESP_OK) {
       httpd_register_uri_handler(WebManager::_server, &WebManager::_uri_index);                  // Register index view
@@ -21,6 +22,8 @@ void WebManager::start() {
       httpd_register_uri_handler(WebManager::_server, &WebManager::_uri_status_data);            // Register URI for status data
       httpd_register_uri_handler(WebManager::_server, &WebManager::_uri_get_available_networks); // Register URI for getting list of available networks
       httpd_register_uri_handler(WebManager::_server, &WebManager::_uri_static_css);             // Register static CSS uri
+      httpd_register_uri_handler(WebManager::_server, &WebManager::_uri_handle_generate_204);    // Handle /generate_204 for Android captive portal popup
+      httpd_register_uri_handler(WebManager::_server, &WebManager::_uri_handle_generate204);     // Handle /generate204 for Android captive portal popup
     } else {
       ESP_LOGE("Web", "Failed to start web server!");
     }
@@ -32,39 +35,27 @@ esp_err_t WebManager::_handle_uri_index(httpd_req_t *req) {
 }
 
 esp_err_t WebManager::_handle_uri_config_data(httpd_req_t *req) {
-  cJSON *json = cJSON_CreateObject();
-  if (json == NULL) {
-    ESP_LOGE("WebManager", "Failed to create JSON-object when handling request for config data!");
-    return ESP_ERR_NO_MEM;
-  }
-  cJSON_AddStringToObject(json, "version", NSPM_VERSION);
-  cJSON_AddNumberToObject(json, "log_level", ConfigManager::log_level);
-  cJSON_AddStringToObject(json, "wifi_hostname", ConfigManager::wifi_hostname.c_str());
-  cJSON_AddStringToObject(json, "wifi_ssid", ConfigManager::wifi_ssid.c_str());
-  cJSON_AddBoolToObject(json, "wifi_psk_set", !ConfigManager::wifi_psk.empty());
-  cJSON_AddStringToObject(json, "mqtt_server", ConfigManager::mqtt_server.c_str());
-  cJSON_AddNumberToObject(json, "mqtt_port", ConfigManager::mqtt_port);
-  cJSON_AddStringToObject(json, "mqtt_username", ConfigManager::mqtt_username.c_str());
-  cJSON_AddBoolToObject(json, "mqtt_psk_set", !ConfigManager::mqtt_password.empty());
-
-  if (ConfigManager::use_latest_nextion_upload_protocol) {
-    cJSON_AddTrueToObject(json, "use_latest_nextion_upload_protocol");
-  } else {
-    cJSON_AddFalseToObject(json, "use_latest_nextion_upload_protocol");
-  }
-  cJSON_AddNumberToObject(json, "nextion_upload_baudrate", ConfigManager::nextion_upload_baudrate);
-  cJSON_AddNumberToObject(json, "communication_baud_rate", ConfigManager::communication_baud_rate);
+  nlohmann::json json;
+  json["version"] = NSPM_VERSION;
+  json["log_level"] = static_cast<int>(ConfigManager::log_level);
+  json["wifi_hostname"] = ConfigManager::wifi_hostname.c_str();
+  json["wifi_ssid"] = ConfigManager::wifi_ssid.c_str();
+  json["wifi_psk_set"] = !ConfigManager::wifi_psk.empty();
+  json["mqtt_server"] = ConfigManager::mqtt_server.c_str();
+  json["mqtt_port"] = ConfigManager::mqtt_port;
+  json["mqtt_username"] = ConfigManager::mqtt_username.c_str();
+  json["mqtt_psk_set"] = !ConfigManager::mqtt_password.empty();
+  json["use_latest_nextion_upload_protocol"] = ConfigManager::use_latest_nextion_upload_protocol;
+  json["nextion_upload_baudrate"] = ConfigManager::nextion_upload_baudrate;
+  json["communication_baud_rate"] = ConfigManager::communication_baud_rate;
 
   if (httpd_resp_set_type(req, "application/json") != ESP_OK) {
     ESP_LOGE("Web", "Failed to set content type for response!");
   }
 
-  char *json_string = cJSON_Print(json);
-  httpd_resp_send_chunk(req, json_string, strlen(json_string));
+  std::string json_string = json.dump();
+  httpd_resp_send_chunk(req, json_string.c_str(), json_string.length());
   httpd_resp_send_chunk(req, NULL, 0);
-
-  cJSON_Delete(json);
-  free(json_string);
 
   return ESP_OK;
 }
@@ -163,7 +154,6 @@ esp_err_t WebManager::_handle_uri_save_config(httpd_req_t *req) {
   httpd_resp_set_hdr(req, "Location", "/"); // Set the Location header
   httpd_resp_send(req, NULL, 0);            // Send the response
 
-  ConfigManager::num_failed_boots = 0; // Reset num failed boots to try to connect to WiFi again.
   ConfigManager::save_config();
   esp_restart();
   return ESP_OK;
@@ -175,10 +165,6 @@ esp_err_t WebManager::_handle_uri_reboot(httpd_req_t *req) {
   httpd_resp_set_status(req, "302 Found");  // Set the status code
   httpd_resp_set_hdr(req, "Location", "/"); // Set the Location header
   httpd_resp_send(req, NULL, 0);            // Send the response
-
-  // Reset num failed boots as the user manually rebooted.
-  ConfigManager::num_failed_boots = 0;
-  ConfigManager::save_config();
 
   vTaskDelay(pdMS_TO_TICKS(250));
   esp_restart();
@@ -247,7 +233,7 @@ esp_err_t WebManager::_decode_form_data(char *source, std::unordered_map<std::st
 }
 
 esp_err_t WebManager::_handle_uri_status_data(httpd_req_t *req) {
-  cJSON *json = cJSON_CreateObject();
+  nlohmann::json json;
   if (json == NULL) {
     ESP_LOGE("WebManager", "Failed to create JSON-object when handling request for status data!");
     return ESP_ERR_NO_MEM;
@@ -257,51 +243,50 @@ esp_err_t WebManager::_handle_uri_status_data(httpd_req_t *req) {
   if (esp_wifi_get_mode(&current_wifi_mode) == ESP_OK) {
     if (current_wifi_mode == wifi_mode_t::WIFI_MODE_STA) {
       if (WiFiManager::connected()) {
-        cJSON_AddStringToObject(json, "wifi_status", "Connected");
+        json["wifi_status"] = "Connected";
       } else {
-        cJSON_AddStringToObject(json, "wifi_status", "Disconnected");
+        json["wifi_status"] = "Disconnected";
       }
     } else if (current_wifi_mode == wifi_mode_t::WIFI_MODE_AP) {
-      cJSON_AddStringToObject(json, "wifi_status", "Access Point");
+      json["wifi_status"] = "Access Point";
+    } else if (current_wifi_mode == wifi_mode_t::WIFI_MODE_APSTA) {
+      json["wifi_status"] = "Access Point/Station";
     } else {
-      cJSON_AddStringToObject(json, "wifi_status", "Unknown WiFi mode!");
+      json["wifi_status"] = "Unknown WiFi mode!";
     }
   } else {
-    cJSON_AddStringToObject(json, "wifi_status", "Failed to get mode!");
+    json["wifi_status"] = "Failed to get mode!";
   }
 
   if (MqttManager::connected()) {
-    cJSON_AddStringToObject(json, "mqtt_status", "Connected");
+    json["mqtt_status"] = "Connected";
   } else {
-    cJSON_AddStringToObject(json, "mqtt_status", "Disconnected");
+    json["mqtt_status"] = "Disconnected";
   }
 
   std::string manager_address = NSPM_ConfigManager::get_manager_address();
   if (MqttManager::connected()) {
     if (manager_address.empty()) {
-      cJSON_AddStringToObject(json, "nspanelmanager_status", "Searching");
+      json["nspanelmanager_status"] = "Searching";
     } else {
       uint16_t manager_port = NSPM_ConfigManager::get_manager_port();
       std::string ret_string = "Accepted by ";
       ret_string.append(manager_address);
       ret_string.append(":");
       ret_string.append(std::to_string(manager_port));
-      cJSON_AddStringToObject(json, "nspanelmanager_status", ret_string.c_str());
+      json["nspanelmanager_status"] = ret_string.c_str();
     }
   } else {
-    cJSON_AddStringToObject(json, "nspanelmanager_status", "Disconnected");
+    json["nspanelmanager_status"] = "Disconnected";
   }
 
   if (httpd_resp_set_type(req, "application/json") != ESP_OK) {
     ESP_LOGE("Web", "Failed to set content type for response!");
   }
 
-  char *json_string = cJSON_Print(json);
-  httpd_resp_send_chunk(req, json_string, strlen(json_string));
+  std::string json_string = json.dump();
+  httpd_resp_send_chunk(req, json_string.c_str(), json_string.length());
   httpd_resp_send_chunk(req, NULL, 0);
-
-  cJSON_Delete(json);
-  free(json_string);
 
   return ESP_OK;
 }
@@ -310,7 +295,14 @@ esp_err_t WebManager::_handle_uri_main_css(httpd_req_t *req) {
   return WebManager::_read_file_and_response(req, "/littlefs/static/main.css", "text/css");
 }
 
-esp_err_t WebManager::_read_file_and_response(httpd_req_t *req, char *file_path, char *content_type) {
+esp_err_t WebManager::_handle_uri_generate_204(httpd_req_t *req) {
+  ESP_LOGI("WebManager", "Responding to /generate_204 request.");
+  httpd_resp_set_status(req, "302 Found");
+  httpd_resp_set_hdr(req, "Location", "http://192.168.4.1/");
+  return httpd_resp_send(req, NULL, 0); // empty body, sets Content-Length: 0
+}
+
+esp_err_t WebManager::_read_file_and_response(httpd_req_t *req, const char *file_path, const char *content_type) {
   FILE *f = fopen(file_path, "r");
   if (f == NULL) {
     ESP_LOGE("Web", "Failed to open '%s' for reading on LittleFS.", file_path);
@@ -334,11 +326,7 @@ esp_err_t WebManager::_read_file_and_response(httpd_req_t *req, char *file_path,
 }
 
 esp_err_t WebManager::_handle_uri_get_available_networks(httpd_req_t *req) {
-  cJSON *json = cJSON_CreateArray();
-  if (json == NULL) {
-    ESP_LOGE("WebManager", "Failed to create JSON-array when handling request for WiFi networks!");
-    return ESP_ERR_NO_MEM;
-  }
+  nlohmann::json json = nlohmann::json::array();
 
   // Get list of available networks
   std::vector<wifi_ap_record_t> networks = WiFiManager::search_available_networks();
@@ -348,28 +336,21 @@ esp_err_t WebManager::_handle_uri_get_available_networks(httpd_req_t *req) {
       continue;
     }
 
-    cJSON *network_item = cJSON_CreateObject();
-    if (network_item == NULL) {
-      ESP_LOGE("WebManager", "Failed to create JSON-object for AP info when handling request for WiFi networks.");
-      continue;
-    }
+    nlohmann::json network_item = nlohmann::json();
 
-    cJSON_AddStringToObject(network_item, "ssid", (const char *)networks[i].ssid);
-    cJSON_AddNumberToObject(network_item, "security", networks[i].authmode);
-    cJSON_AddNumberToObject(network_item, "rssi", networks[i].rssi);
-    cJSON_AddItemToArray(json, network_item);
+    network_item["ssid"] = (const char *)networks[i].ssid;
+    network_item["security"] = static_cast<int>(networks[i].authmode);
+    network_item["rssi"] = networks[i].rssi;
+    json.push_back(network_item);
   }
 
   if (httpd_resp_set_type(req, "application/json") != ESP_OK) {
     ESP_LOGE("Web", "Failed to set content type for response!");
   }
 
-  char *json_string = cJSON_Print(json);
-  httpd_resp_send_chunk(req, json_string, strlen(json_string));
+  std::string json_string = json.dump();
+  httpd_resp_send_chunk(req, json_string.c_str(), json_string.length());
   httpd_resp_send_chunk(req, NULL, 0);
-
-  cJSON_Delete(json);
-  free(json_string);
 
   return ESP_OK;
 }

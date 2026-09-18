@@ -8,12 +8,11 @@ esp_err_t LittleFS::mount() {
   ESP_LOGI("LittleFS", "Initializing LittleFS.");
   LittleFS::_is_mounted = false;
 
-  esp_vfs_littlefs_conf_t conf = {
-      .base_path = "/littlefs",
-      .partition_label = "spiffs",
-      .format_if_mount_failed = false,
-      .dont_mount = false,
-  };
+  esp_vfs_littlefs_conf_t conf = {};
+  conf.base_path = "/littlefs",
+  conf.partition_label = "spiffs";
+  conf.format_if_mount_failed = false;
+  conf.dont_mount = false;
   esp_err_t result = esp_vfs_littlefs_register(&conf);
 
   if (result == ESP_OK) {

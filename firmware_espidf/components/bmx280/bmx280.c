@@ -70,19 +70,12 @@
 #define BMP280_ID2 0x58
 
 struct bmx280_t{
-    #if !(CONFIG_USE_I2C_MASTER_DRIVER)
-    // I2C port.
-    i2c_port_t i2c_port;
-    // Slave Address of sensor.
-    uint8_t slave;
-    #else
     // I2C master handle via port with configuration
     i2c_master_dev_handle_t i2c_dev;
     // I2C master configuration
     i2c_device_config_t dev_cfg;
     // I2C master handle via port
     i2c_master_bus_handle_t bus_handle;
-    #endif
     // Chip ID of sensor
     uint8_t chip_id;
     // Compensation data
@@ -131,13 +124,9 @@ struct bmx280_t{
  * Returns false if the sensor was not found.
  * @param bmx280 The driver structure.
  */
-#if !(CONFIG_USE_I2C_MASTER_DRIVER)
-#define bmx280_validate(bmx280) (!(bmx280->slave == 0xDE && bmx280->chip_id == 0xAD))
-#else
 #define bmx280_validate(bmx280) (!(bmx280->i2c_dev == NULL && bmx280->chip_id == 0xAD))
-#endif
 
-#if CONFIG_USE_I2C_MASTER_DRIVER
+
 /**
  * Read from sensor.
  * @param bmx280 Driver Sturcture.
@@ -160,7 +149,7 @@ static esp_err_t bmx280_device_create(bmx280_t *bmx280, const uint16_t dev_addr)
         return err;
     }
 }
-#endif
+
 
 /**
  * Read from sensor.
@@ -172,63 +161,12 @@ static esp_err_t bmx280_device_create(bmx280_t *bmx280, const uint16_t dev_addr)
  */
 static esp_err_t bmx280_read(bmx280_t *bmx280, uint8_t addr, uint8_t *dout, size_t size)
 {
-    #if !(CONFIG_USE_I2C_MASTER_DRIVER)
-    esp_err_t err;
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    if (cmd)
-    {
-        // Write register address
-        i2c_master_start(cmd);
-        i2c_master_write_byte(cmd, bmx280->slave | I2C_MASTER_WRITE, true);
-        i2c_master_write_byte(cmd, addr, true);
-
-        // Read Registers
-        i2c_master_start(cmd);
-        i2c_master_write_byte(cmd, bmx280->slave | I2C_MASTER_READ, true);
-        i2c_master_read(cmd, dout, size, I2C_MASTER_LAST_NACK);
-        i2c_master_stop(cmd);
-
-        err = i2c_master_cmd_begin(bmx280->i2c_port, cmd, CONFIG_BMX280_TIMEOUT);
-        i2c_cmd_link_delete(cmd);
-        return err;
-    }
-    else
-    {
-        return ESP_ERR_NO_MEM;
-    }
-    #else
     return i2c_master_transmit_receive(bmx280->i2c_dev, &addr, sizeof(addr), dout, size, CONFIG_BMX280_TIMEOUT);
-    #endif
-
 }
 
 static esp_err_t bmx280_write(bmx280_t* bmx280, uint8_t addr, const uint8_t *din, size_t size)
 {
     esp_err_t err;
-    #if !(CONFIG_USE_I2C_MASTER_DRIVER)
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    if (cmd)
-    {
-        for (int i = 0; i < size; i++)
-        {
-            i2c_master_start(cmd);
-            i2c_master_write_byte(cmd, bmx280->slave | I2C_MASTER_WRITE, true);
-            // Register
-            i2c_master_write_byte(cmd, addr + i, true);
-            //Data
-            i2c_master_write_byte(cmd, din[i], true);
-        }
-        i2c_master_stop(cmd);
-
-        err = i2c_master_cmd_begin(bmx280->i2c_port, cmd, CONFIG_BMX280_TIMEOUT);
-        i2c_cmd_link_delete(cmd);
-        return err;
-    }
-    else
-    {
-        return ESP_ERR_NO_MEM;
-    }
-    #else
     for(uint8_t i = 0; i < size; i++)
     {
         uint8_t dat[2] = {(addr + i), din[i]};
@@ -236,7 +174,6 @@ static esp_err_t bmx280_write(bmx280_t* bmx280, uint8_t addr, const uint8_t *din
             return err;
     }
     return ESP_OK;
-    #endif
 }
 
 static esp_err_t bmx280_probe_address(bmx280_t *bmx280)
@@ -254,11 +191,7 @@ static esp_err_t bmx280_probe_address(bmx280_t *bmx280)
         #endif
         )
         {
-            #if !(CONFIG_USE_I2C_MASTER_DRIVER)
-            ESP_LOGI("bmx280", "Probe success: address=%hhx, id=%hhx", bmx280->slave, bmx280->chip_id);
-            #else
             ESP_LOGI("bmx280", "Probe success: address=%hhx, id=%hhx", bmx280->dev_cfg.device_address, bmx280->chip_id);
-            #endif
             return ESP_OK;
         }
         else
@@ -267,44 +200,12 @@ static esp_err_t bmx280_probe_address(bmx280_t *bmx280)
             err = ESP_ERR_NOT_FOUND;
         }
     }
-    #if !(CONFIG_USE_I2C_MASTER_DRIVER)
-    ESP_LOGW("bmx280", "Probe failure: address=%hhx, id=%hhx, reason=%s", bmx280->slave, bmx280->chip_id, esp_err_to_name(err));
-    #else
     ESP_LOGW("bmx280", "Probe failure: address=%hhx, id=%hhx, reason=%s", bmx280->dev_cfg.device_address, bmx280->chip_id, esp_err_to_name(err));
-    #endif
     return err;
 }
 
 static esp_err_t bmx280_probe(bmx280_t *bmx280)
 {
-    #if !(CONFIG_USE_I2C_MASTER_DRIVER)
-    ESP_LOGI("bmx280", "Probing for BMP280/BME280 sensors on I2C %d", bmx280->i2c_port);
-    esp_err_t err;
-    #if CONFIG_BMX280_ADDRESS_HI
-    bmx280->slave = 0xEE;
-    err = bmx280_probe_address(bmx280);
-    if (err != ESP_OK) ESP_LOGE("bmx280", "Sensor not found at 0x77 , Please check the address.");
-    return err;
-    #elif CONFIG_BMX280_ADDRESS_LO
-    bmx280->slave = 0xEC;
-    err = bmx280_probe_address(bmx280);
-    if (err != ESP_OK) ESP_LOGE("bmx280", "Sensor not found at 0x76 , Please check the address.");
-    return err;
-    #else
-    bmx280->slave = 0xEC;
-    if ((err = bmx280_probe_address(bmx280)) != ESP_OK)
-    {
-        bmx280->slave = 0xEE;
-        if ((err = bmx280_probe_address(bmx280)) != ESP_OK)
-        {
-            ESP_LOGE("bmx280", "Sensor not found.");
-            bmx280->slave = 0xDE;
-            bmx280->chip_id = 0xAD;
-        }
-    }
-    return err;
-    #endif
-    #else
     ESP_LOGI("bmx280", "Probing for BMP280/BME280 sensors on I2C");
     esp_err_t err;
     #if CONFIG_BMX280_ADDRESS_HI
@@ -334,7 +235,6 @@ static esp_err_t bmx280_probe(bmx280_t *bmx280)
         }
     }
     return err;
-    #endif
     #endif
 }
 
@@ -399,26 +299,7 @@ static esp_err_t bmx280_calibrate(bmx280_t *bmx280)
     return ESP_OK;
 }
 
-#if !(CONFIG_USE_I2C_MASTER_DRIVER)
-bmx280_t* bmx280_create_legacy(i2c_port_t port)
-{
-    bmx280_t* bmx280 = malloc(sizeof(bmx280_t));
-    if (bmx280)
-    {
-        memset(bmx280, 0, sizeof(bmx280_t));
-        bmx280->i2c_port = port;
-        bmx280->slave = 0xDE;
-        bmx280->chip_id = 0xAD;
-    }
-    else
-    {
-        ESP_LOGE("bmx280", "Failed to allocate memory for bmx280.");
-        bmx280_close(bmx280);
-        return NULL;
-    }
-    return bmx280;
-}
-#else
+
 bmx280_t* bmx280_create_master(i2c_master_bus_handle_t bus_handle)
 {
     bmx280_t* bmx280 = malloc(sizeof(bmx280_t));
@@ -440,7 +321,6 @@ bmx280_t* bmx280_create_master(i2c_master_bus_handle_t bus_handle)
     }
     return bmx280;
 }
-#endif
 
 esp_err_t bmx280_reset(bmx280_t *bmx280)
 {
@@ -450,10 +330,8 @@ esp_err_t bmx280_reset(bmx280_t *bmx280)
 
 void bmx280_close(bmx280_t *bmx280)
 {
-    #if CONFIG_USE_I2C_MASTER_DRIVER
     if(bmx280 != NULL && bmx280->i2c_dev != NULL)
         i2c_master_bus_rm_device(bmx280->i2c_dev);
-    #endif
     free(bmx280);
 }
 

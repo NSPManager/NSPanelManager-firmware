@@ -2,8 +2,8 @@
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
 #include <WiFiManager.hpp>
-#include <cJSON.h>
 #include <esp_log.h>
+#include <nlohmann/json.hpp>
 
 void MqttManager::start(std::string *server, uint16_t *port, std::string *username, std::string *password) {
   esp_log_level_set("MqttManager", ConfigManager::log_level);
@@ -32,34 +32,31 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
   MqttManager::_state_topic.append("/status");
 
   std::string mac_string = WiFiManager::mac_string();
-
-  // Build "offline" last-will payload
-  cJSON *json = cJSON_CreateObject();
-  if (json != NULL) {
-    cJSON_AddStringToObject(json, "mac", mac_string.c_str());
-    cJSON_AddStringToObject(json, "state", "offline");
-  } else {
-    ESP_LOGE("MqttManager", "Failed to create cJSON object for last-will message!");
-    return;
+  {
+    // Build "offline" last-will payload
+    nlohmann::json json;
+    if (json != NULL) {
+      json["mac"] = mac_string.c_str();
+      json["state"] = "offline";
+    } else {
+      ESP_LOGE("MqttManager", "Failed to create cJSON object for last-will message!");
+      return;
+    }
+    MqttManager::_last_will_message = json.dump();
   }
-  char *json_string = cJSON_Print(json);
-  MqttManager::_last_will_message = json_string;
-  cJSON_free(json_string);
-  cJSON_Delete(json);
 
-  // Build "online" payload (pre-built so the retry task owns no heap allocation)
-  json = cJSON_CreateObject();
-  if (json != NULL) {
-    cJSON_AddStringToObject(json, "mac", mac_string.c_str());
-    cJSON_AddStringToObject(json, "state", "online");
-  } else {
-    ESP_LOGE("MqttManager", "Failed to create cJSON object for online status message!");
-    return;
+  {
+    // Build "online" payload (pre-built so the retry task owns no heap allocation)
+    nlohmann::json json;
+    if (json != NULL) {
+      json["mac"] = mac_string.c_str();
+      json["state"] = "online";
+    } else {
+      ESP_LOGE("MqttManager", "Failed to create cJSON object for online status message!");
+      return;
+    }
+    MqttManager::_online_status_message = json.dump();
   }
-  json_string = cJSON_Print(json);
-  MqttManager::_online_status_message = json_string;
-  cJSON_free(json_string);
-  cJSON_Delete(json);
 
   // Set last will message in config and update config of client
   MqttManager::_mqtt_config.session.last_will.msg = MqttManager::_last_will_message.c_str();
@@ -169,9 +166,9 @@ void MqttManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
 
 void MqttManager::_task_send_online_update(void *param) {
   while (MqttManager::publish(MqttManager::_state_topic,
-                               MqttManager::_online_status_message.c_str(),
-                               MqttManager::_online_status_message.size(),
-                               true) != ESP_OK) {
+                              MqttManager::_online_status_message.c_str(),
+                              MqttManager::_online_status_message.size(),
+                              true) != ESP_OK) {
     ESP_LOGE("MqttManager", "Failed to publish online status to %s. Will retry in 5s.", MqttManager::_state_topic.c_str());
     vTaskDelay(pdMS_TO_TICKS(5000));
   }

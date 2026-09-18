@@ -9,36 +9,42 @@
 // Helper
 #define min(a, b) ((a) < (b) ? (a) : (b))
 
-void WiFiManager::start_client(std::string *ssid, std::string *psk, std::string *hostname) {
-  esp_log_level_set("WiFiManager", ConfigManager::log_level);
-
-  WiFiManager::_connected = false;
-  WiFiManager::_ip_info.set({
-      .ip{
-          .addr = 0,
-      },
-  });
-
+void WiFiManager::init() {
   esp_netif_init();
   esp_netif_create_default_wifi_sta();
+
+  // Create AP netif now; it gets attached when APSTA mode starts.
+  // (Safe to create up front — it just isn't used in STA-only mode.)
+  esp_netif_create_default_wifi_ap();
+
+  esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &WiFiManager::_event_handler, NULL);
+  esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &WiFiManager::_event_handler, NULL);
+
+  WiFiManager::_init_config = WIFI_INIT_CONFIG_DEFAULT();
+  esp_err_t wifi_init_res = esp_wifi_init(&WiFiManager::_init_config);
+  if (wifi_init_res != ESP_OK) {
+    ESP_LOGE("WiFiManager", "Failed to init WiFi, error: %s", esp_err_to_name(wifi_init_res));
+  }
+  ESP_ERROR_CHECK(wifi_init_res);
 
   // Load MAC address from ESP32 into memory
   uint8_t mac[6];
   esp_read_mac(mac, ESP_MAC_WIFI_STA); // Read MAC address for Wi-Fi Station
-  uint8_t mac_len = snprintf(WiFiManager::_mac_address, sizeof(WiFiManager::_mac_address), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  snprintf(WiFiManager::_mac_address, sizeof(WiFiManager::_mac_address), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+}
 
-  WiFiManager::_init_config = WIFI_INIT_CONFIG_DEFAULT();
-  esp_wifi_init(&WiFiManager::_init_config);
+void WiFiManager::start_client(std::string *ssid, std::string *psk, std::string *hostname, std::string *fallback_ssid) {
+  esp_log_level_set("WiFiManager", ConfigManager::log_level);
+  ESP_LOGI("WiFiManager", "Configuring fallback ssid to %s", fallback_ssid->c_str());
+  WiFiManager::_fallback_ssid = *fallback_ssid;
+
+  WiFiManager::_connected = false;
+  WiFiManager::_ip_info.set({});
 
   esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
   if (esp_netif_set_hostname(netif, hostname->c_str()) != ESP_OK) {
     ESP_LOGW("WiFiManager", "Failed to set hostname!");
   }
-
-  esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_START, &WiFiManager::_event_handler, NULL);
-  esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &WiFiManager::_event_handler, NULL);
-  esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_CONNECTED, &WiFiManager::_event_handler, NULL);
-  esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &WiFiManager::_event_handler, NULL);
 
   // Set SSID
   if (ssid->size() > sizeof(WiFiManager::_config.sta.ssid)) {
@@ -54,48 +60,39 @@ void WiFiManager::start_client(std::string *ssid, std::string *psk, std::string 
     return;
   }
   psk->copy((char *)WiFiManager::_config.sta.password, psk->size(), 0);
+  WiFiManager::_has_wifi_config = true;
 
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &WiFiManager::_config));
   ESP_ERROR_CHECK(esp_wifi_start());
+
+  // Start fallback timer and start an AP if we have not connected to WiFi within threshold
+  ESP_LOGI("WiFiManager", "Starting fallback WiFi AP timeout.");
+  WiFiManager::_fallback_timer = xTimerCreate("wifi_fallback", pdMS_TO_TICKS(WIFI_TIMEOUT_MS), pdFALSE, NULL, WiFiManager::_fallback_timer_callback);
+  xTimerStart(WiFiManager::_fallback_timer, 0);
 }
 
 void WiFiManager::start_ap(std::string *ssid) {
-  esp_log_level_set("WiFiManager", esp_log_level_t::ESP_LOG_DEBUG); // TODO: Load from config.
+  esp_log_level_set("WiFiManager", ConfigManager::log_level);
   WiFiManager::_connected = false;
-  WiFiManager::_ip_info.set({
-      .ip{
-          .addr = 0,
-      },
-  });
+  WiFiManager::_ip_info.set({});
 
-  esp_netif_init();
-  esp_netif_create_default_wifi_ap();
+  esp_wifi_stop();
 
-  WiFiManager::_init_config = WIFI_INIT_CONFIG_DEFAULT();
-  esp_err_t wifi_init_res = esp_wifi_init(&WiFiManager::_init_config);
-  if (wifi_init_res != ESP_OK) {
-    ESP_LOGE("WiFiManager", "Failed to init WiFi, error: %s", esp_err_to_name(wifi_init_res));
-  }
-  ESP_ERROR_CHECK(wifi_init_res);
-
-  esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-
-  esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &WiFiManager::_event_handler, NULL);
-  esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &WiFiManager::_event_handler, NULL);
+  wifi_config_t ap_config = {};
 
   // Set SSID
-  if (ssid->size() > sizeof(WiFiManager::_config.ap.ssid)) {
-    ESP_LOGE("WiFiManager", "SSID To long, max length: %d", sizeof(WiFiManager::_config.ap.ssid));
+  if (ssid->size() > sizeof(ap_config.ap.ssid)) {
+    ESP_LOGE("WiFiManager", "SSID To long, max length: %d", sizeof(ap_config.ap.ssid));
     return;
   }
-  ssid->copy((char *)WiFiManager::_config.ap.ssid, ssid->size(), 0); // Set WiFi SSID
-  WiFiManager::_config.ap.ssid_len = ssid->length();
-  ESP_LOGI("WiFiManager", "Will setup WiFi %s", WiFiManager::_config.ap.ssid);
+  ssid->copy((char *)ap_config.ap.ssid, ssid->size(), 0); // Set WiFi SSID
+  ap_config.ap.ssid_len = ssid->length();
+  ESP_LOGI("WiFiManager", "Will setup AP with SSID: %s", ap_config.ap.ssid);
 
   // Setup other default AP parameters
-  WiFiManager::_config.ap.max_connection = 4;
-  WiFiManager::_config.ap.authmode = wifi_auth_mode_t::WIFI_AUTH_OPEN;
+  ap_config.ap.max_connection = 4;
+  ap_config.ap.authmode = wifi_auth_mode_t::WIFI_AUTH_OPEN;
 
   esp_err_t wifi_mode_res = esp_wifi_set_mode(WIFI_MODE_APSTA);
   if (wifi_mode_res != ESP_OK) {
@@ -103,7 +100,7 @@ void WiFiManager::start_ap(std::string *ssid) {
   }
   ESP_ERROR_CHECK(wifi_mode_res);
 
-  esp_err_t wifi_config_res = esp_wifi_set_config(WIFI_IF_AP, &WiFiManager::_config);
+  esp_err_t wifi_config_res = esp_wifi_set_config(WIFI_IF_AP, &ap_config);
   if (wifi_config_res != ESP_OK) {
     ESP_LOGE("WiFiManager", "Failed to config WiFi, error: %s", esp_err_to_name(wifi_config_res));
   }
@@ -125,11 +122,35 @@ void WiFiManager::start_ap(std::string *ssid) {
   sprintf(ip_addr_str, IPSTR, IP2STR(&ip_info.ip));
   ESP_LOGI("WiFiManager", "SoftAP started with IP %s", ip_addr_str);
 
+  if (WiFiManager::_dns_server == nullptr) {
+    espp::DnsServer::Config dns_config{
+        .ip_address = "192.168.4.1",
+        .log_level = espp::Logger::Verbosity::INFO,
+    };
+
+    WiFiManager::_dns_server = new espp::DnsServer(dns_config);
+    std::error_code ec;
+    if (WiFiManager::_dns_server->start(ec)) {
+      ESP_LOGI("WiFiManager", "DNS Server for captive portal popup started.");
+    } else {
+      ESP_LOGE("WiFiManager", "Failed to start DNS server. Captive portal popup will not work in client device. Error code: %d", ec.value());
+    }
+  }
+
   std::string captive_portal_url = "http://";
   captive_portal_url.append(ip_addr_str);
 
-  esp_netif_dhcps_option(netif_handle, ESP_NETIF_OP_SET, ESP_NETIF_CAPTIVEPORTAL_URI, (void *)captive_portal_url.c_str(), captive_portal_url.length());
-  esp_netif_dhcps_start(netif);
+  esp_netif_dhcps_stop(netif_handle);
+  esp_netif_dhcps_option(netif_handle, ESP_NETIF_OP_SET, ESP_NETIF_CAPTIVEPORTAL_URI, (void *)captive_portal_url.c_str(), captive_portal_url.length() + 1);
+  esp_netif_dhcps_start(netif_handle);
+
+  if (WiFiManager::_has_wifi_config) {
+    // We are starting the fallback AP. Keep trying to reconnect to WiFi in the background.
+    esp_wifi_set_config(WIFI_IF_STA, &WiFiManager::_config);
+    esp_wifi_connect();
+  }
+
+  WiFiManager::_ap_active = true;
 }
 
 void WiFiManager::_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -146,6 +167,9 @@ void WiFiManager::_event_handler(void *arg, esp_event_base_t event_base, int32_t
     case WIFI_EVENT_STA_CONNECTED:
       ESP_LOGI("WiFiManager", "Connected to WiFi.");
       WiFiManager::_connected = true;
+      if (WiFiManager::_dns_server != nullptr) {
+        WiFiManager::_dns_server->stop();
+      }
       break;
 
     default:
@@ -157,6 +181,18 @@ void WiFiManager::_event_handler(void *arg, esp_event_base_t event_base, int32_t
       ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
       WiFiManager::_ip_info.set(event->ip_info);
       ESP_LOGI("WiFiManager", "Got IP: " IPSTR ", Netmask: " IPSTR ", Gateway: " IPSTR, IP2STR(&event->ip_info.ip), IP2STR(&event->ip_info.netmask), IP2STR(&event->ip_info.gw));
+
+      if (!WiFiManager::_ap_active) {
+        ESP_LOGI("WiFiManager", "Stopping fallback WiFi AP timeout.");
+        xTimerStop(WiFiManager::_fallback_timer, 0); // Stop fallback timer as we connected successfully
+      } else {
+        ESP_LOGI("WiFiManager", "Connected to WiFi. Closing fallback AP.");
+        esp_wifi_set_mode(WIFI_MODE_STA);
+        esp_wifi_set_config(WIFI_IF_STA, &WiFiManager::_config);
+        esp_wifi_connect();
+
+        WiFiManager::_ap_active = false;
+      }
       break;
     }
 
@@ -166,16 +202,31 @@ void WiFiManager::_event_handler(void *arg, esp_event_base_t event_base, int32_t
   }
 }
 
+void WiFiManager::_fallback_timer_callback(TimerHandle_t timer) {
+  ESP_LOGE("WiFiManager", "Fallback WiFi AP callback called. Starting fallback AP.");
+  if (WiFiManager::_ap_active) {
+    return;
+  }
+
+  // Start AP in task a to handle a higher requirement of stack depth.
+  if (xTaskCreate([](void *arg) {
+        WiFiManager::start_ap(&WiFiManager::_fallback_ssid);
+        vTaskDelete(NULL); // Start AP then exit task cleanly.
+      },
+                  "start_ap_fallback", 6000, NULL, 1, NULL) != ESP_OK) {
+    ESP_LOGE("WiFiManager", "Failed to start task to start fallback SoftAP as we've failed to connect to WiFi.");
+  }
+}
+
 std::vector<wifi_ap_record_t> WiFiManager::search_available_networks() {
   std::vector<wifi_ap_record_t> return_vector;
 
   // Config to scan for all networks, including hidden.
-  wifi_scan_config_t scan_config = {
-      .ssid = NULL,
-      .bssid = NULL,
-      .channel = 0,
-      .show_hidden = true,
-  };
+  wifi_scan_config_t scan_config = {};
+  scan_config.ssid = NULL;
+  scan_config.bssid = NULL;
+  scan_config.channel = 0;
+  scan_config.show_hidden = true;
 
   // Scan for networks
   esp_wifi_scan_start(&scan_config, true);

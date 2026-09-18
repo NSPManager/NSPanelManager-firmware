@@ -1,0 +1,5 @@
+dependencies:
+  espressif/mqtt: "*"
+  joltwallet/littlefs: "1.22.3"
+  mittelab/nlohmann-json: "3.11.3"
+  espp/dns_server: "1.3.3"

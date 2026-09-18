@@ -1,19 +1,25 @@
 #pragma once
 #include <MutexWrapper.hpp>
 #include <atomic>
+#include <dns_server.hpp>
 #include <esp_wifi.h>
 #include <string>
 #include <vector>
 
+#define WIFI_TIMEOUT_MS (1 * 60 * 1000)
+
 class WiFiManager {
 public:
+  // Initialize WiFi
+  static void init();
+
   /**
    * @brief Start the WiFi client in STA-mode and try to connect to given SSID.
    * @param ssid: The name of the WiFi to connect to.
    * @param psk: The password to connect to the WiFi.
    * @param hostname: The hostname of this device
    */
-  static void start_client(std::string *ssid, std::string *psk, std::string *hostname);
+  static void start_client(std::string *ssid, std::string *psk, std::string *hostname, std::string *fallback_ssid);
 
   /**
    * @brief Start the WiFi access point for initial configuration.
@@ -21,8 +27,6 @@ public:
    * @param psk: The password of the WiFi.
    */
   static void start_ap(std::string *ssid);
-
-  // TODO: void start_ap();
 
   /**
    * @brief Get a list of available networks
@@ -57,7 +61,16 @@ public:
 private:
   static void _event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
-  // Vars
+  // This callback is run if the WiFi has not been connected within set limit and start the AP as a "backup"
+  // to get back into the NSPanel.
+  static void _fallback_timer_callback(TimerHandle_t timer);
+
+  // Timer to start the fallback AP if wifi is not connected within WIFI_TIMEOUT_MS threshold
+  static inline TimerHandle_t _fallback_timer;
+
+  // DNS Server to handle captive portal
+  static inline espp::DnsServer *_dns_server = nullptr;
+
   // WiFi initialization config
   static inline wifi_init_config_t _init_config;
 
@@ -67,8 +80,17 @@ private:
   // Is the WiFi connected?
   static inline std::atomic<bool> _connected = false;
 
+  // Is the WiFi connected?
+  static inline std::atomic<bool> _ap_active = false;
+
   // Current IP address
   static inline MutexWrapped<esp_netif_ip_info_t> _ip_info;
+
+  // Connection default for WiFi to connect to
+  static inline std::string _fallback_ssid;
+
+  // Flag to indicate to start_ap function that the _config variable is in fact configured and we are starting a fallback AP.
+  static inline bool _has_wifi_config = false;
 
   // MAC address of ESP32 WiFi
   static inline char _mac_address[18];

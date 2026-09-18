@@ -1,0 +1,14 @@
+dependencies:
+  idf:
+    version: '>=4.1.0'
+description: JSON for Modern C++ (ESP-IDF wrapper)
+documentation: https://json.nlohmann.me
+issues: https://github.com/nlohmann/json/issues
+license: MIT
+maintainers:
+- Pietro Saccardi <lizardm4@gmail.com>
+repository: https://github.com/nlohmann/json
+tags:
+- json
+url: https://git.mittelab.org/proj/nlohmann-json
+version: 3.11.3

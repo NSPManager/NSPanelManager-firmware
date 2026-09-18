@@ -18,6 +18,7 @@ private:
   static esp_err_t _handle_uri_status_data(httpd_req_t *req);
   static esp_err_t _handle_uri_get_available_networks(httpd_req_t *req);
   static esp_err_t _handle_uri_main_css(httpd_req_t *req);
+  static esp_err_t _handle_uri_generate_204(httpd_req_t *req);
 
   /**
    * @brief Read a file from LittleFS and send response
@@ -25,7 +26,7 @@ private:
    * @param file: The file path to read from
    * @param content_type: What content type to send, for example "text/html"
    */
-  static esp_err_t _read_file_and_response(httpd_req_t *req, char *file, char *content_type);
+  static esp_err_t _read_file_and_response(httpd_req_t *req, const char *file, const char *content_type);
 
   /**
    * @brief Decode URI data from base64 encoding to chars and split into fields with associated values
@@ -79,5 +80,15 @@ private:
       .uri = "/static/main.css",
       .method = HTTP_GET,
       .handler = _handle_uri_main_css,
+      .user_ctx = NULL};
+  static inline httpd_uri_t _uri_handle_generate_204 = {
+      .uri = "/generate_204",
+      .method = HTTP_GET,
+      .handler = _handle_uri_generate_204,
+      .user_ctx = NULL};
+  static inline httpd_uri_t _uri_handle_generate204 = {
+      .uri = "/generate204",
+      .method = HTTP_GET,
+      .handler = _handle_uri_generate_204,
       .user_ctx = NULL};
 };

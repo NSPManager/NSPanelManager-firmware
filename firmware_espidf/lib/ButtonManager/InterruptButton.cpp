@@ -133,10 +133,13 @@ void IRAM_ATTR InterruptButton::readButton(void *arg) {
 
     break;
 
-  case ConfirmingPress:  // we get here each time the debounce timer expires (onchange interrupt disabled remember)
-    btn->m_totalPolls++; // Count the number of total reads
-    if (gpio_get_level(btn->m_pin) == btn->m_pressedState)
-      btn->m_validPolls++;                              // Count the number of valid 'PRESSED' reads
+  case ConfirmingPress: { // we get here each time the debounce timer expires (onchange interrupt disabled remember)
+    uint16_t temp = btn->m_totalPolls + 1;
+    btn->m_totalPolls = temp; // Count the number of total reads
+    if (gpio_get_level(btn->m_pin) == btn->m_pressedState) {
+      temp = btn->m_validPolls + 1;
+      btn->m_validPolls = temp; // Count the number of valid 'PRESSED' reads
+    }
     if (btn->m_totalPolls >= TARGET_POLLS) {            // If we have checked the button enough times, then make a decision on key state
       if (btn->m_validPolls * 2 <= btn->m_totalPolls) { // Then it was a false alarm
         btn->m_state = Released;
@@ -147,7 +150,8 @@ void IRAM_ATTR InterruptButton::readButton(void *arg) {
       startTimer(btn->m_buttonPollTimer, btn->m_pollIntervalUS, &readButton, btn, "CP2_"); // Keep sampling pin state
       return;
     }
-    [[fallthrough]];                 // Planned spill through here (no break) if logic requires, ie keyDown confirmed.
+    [[fallthrough]]; // Planned spill through here (no break) if logic requires, ie keyDown confirmed.
+  }
   case Pressing:                     // VALID KEYDOWN, assumed pressed if it had valid polls more than half the time
     btn->action(btn, Event_KeyDown); // Add the keyDown action to the relevant queue
     if (btn->eventEnabled(Event_LongKeyPress) && btn->eventActions[m_menuLevel][Event_LongKeyPress] != nullptr) {
@@ -168,25 +172,28 @@ void IRAM_ATTR InterruptButton::readButton(void *arg) {
     btn->m_state = WaitingForRelease;
     break;
 
-  case WaitingForRelease: // we get here when debounce timer or doubleclick timeout timer alarms (onchange interrupt disabled remember)
-                          // stay in this state until released, because button could remain locked down if release missed.
-    btn->m_totalPolls++;
+  case WaitingForRelease: { // we get here when debounce timer or doubleclick timeout timer alarms (onchange interrupt disabled remember)
+    // stay in this state until released, because button could remain locked down if release missed.
+    uint16_t temp = btn->m_totalPolls + 1;
+    btn->m_totalPolls = temp;
     if (gpio_get_level(btn->m_pin) != btn->m_pressedState) {
-      btn->m_validPolls++;
+      temp = btn->m_validPolls + 1;
+      btn->m_validPolls = temp;
       if (btn->m_totalPolls < TARGET_POLLS || btn->m_validPolls * 2 <= btn->m_totalPolls) {          // If we haven't polled enough or not high enough success rate
         startTimer(btn->m_buttonPollTimer, btn->m_pollIntervalUS, &readButton, btn, "W4R_polling_"); // Then keep sampling pin state until release is confirmed
         return;
       } // Otherwise, spill through to "Releasing"
     } else {
       if (btn->m_validPolls > 0) {
-        btn->m_validPolls--;
+        temp = btn->m_validPolls - 1;
+        btn->m_validPolls = temp;
       } else {
         btn->m_totalPolls = 0; // Key is being held down, don't let total polls get too far ahead.
       }
       startTimer(btn->m_buttonPollTimer, btn->m_pollIntervalUS, &readButton, btn, "W4R_invalidPoll"); // Keep sampling pin state until released
     }
     [[fallthrough]]; // Intended spill through here (no break) to "Releasing" once keyUp confirmed.
-
+  }
   case Releasing:
     killTimer(btn->m_buttonLPandRepeatTimer);
     btn->action(btn, Event_KeyUp); // Add the keyUp action to the relevant queue

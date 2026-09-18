@@ -7,8 +7,9 @@
 #include <UpdateManager_event.hpp>
 #include <WiFiManager.hpp>
 #include <cmath>
-#include <driver/adc.h>
-#include <esp_adc_cal.h>
+#include <esp_adc/adc_cali.h>
+#include <esp_adc/adc_cali_scheme.h>
+#include <esp_adc/adc_oneshot.h>
 #include <esp_heap_caps.h>
 #include <esp_log.h>
 #include <esp_mac.h>
@@ -18,7 +19,6 @@
 // If we are compiling for custom NSPanel PCB, include sources to work with those components.
 #if defined(BOARD_CUSTOM)
 #include <bmx280.h>
-#include <driver/i2c.h>
 #include <driver/i2c_master.h>
 #endif
 
@@ -50,7 +50,11 @@ void StatusUpdateManager::init() {
 #endif
 
   // Create status update timer
-  esp_err_t err = esp_timer_create(&StatusUpdateManager::_status_update_timer_args, &StatusUpdateManager::_status_update_timer);
+
+  esp_timer_create_args_t status_update_timer_args = {};
+  status_update_timer_args.callback = StatusUpdateManager::_send_status_update;
+  status_update_timer_args.name = "status_update_timer";
+  esp_err_t err = esp_timer_create(&status_update_timer_args, &StatusUpdateManager::_status_update_timer);
   if (err != ESP_OK) {
     ESP_LOGE("StatusUpdateManager", "Failed to start ESP timer to periodically send status updates! Error: %s", esp_err_to_name(err));
   }
@@ -58,15 +62,13 @@ void StatusUpdateManager::init() {
 #if defined(BOARD_CUSTOM)
   // This is the custom PCB with I2C components. Initialize I2C as Master mode to communicate with sensors.
 
-  i2c_master_bus_config_t i2c_mst_config = {
-      .i2c_port = I2C_NUM_0,
-      .sda_io_num = GPIO_NUM_8,
-      .scl_io_num = GPIO_NUM_18,
-      .clk_source = I2C_CLK_SRC_DEFAULT,
-      .glitch_ignore_cnt = 7,
-      .flags = {
-          .enable_internal_pullup = true,
-      }};
+  i2c_master_bus_config_t i2c_mst_config = {};
+  i2c_mst_config.i2c_port = I2C_NUM_0;
+  i2c_mst_config.sda_io_num = GPIO_NUM_8;
+  i2c_mst_config.scl_io_num = GPIO_NUM_18;
+  i2c_mst_config.clk_source = I2C_CLK_SRC_DEFAULT;
+  i2c_mst_config.glitch_ignore_cnt = 7;
+  i2c_mst_config.flags.enable_internal_pullup = true;
 
   // Create master bus
   ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &StatusUpdateManager::_i2c_master_bus_handle));
@@ -78,18 +80,31 @@ void StatusUpdateManager::init() {
   vTaskDelay(pdMS_TO_TICKS(50)); // Wait for sensors to start
 #endif
 
-  // Create temperature measuring timer
-  err = esp_timer_create(&StatusUpdateManager::_measure_temperature_timer_args, &StatusUpdateManager::_measure_temperature_timer);
-  if (err != ESP_OK) {
-    ESP_LOGE("StatusUpdateManager", "Failed to start ESP timer to periodically measure temperature! Error: %s", esp_err_to_name(err));
-  }
-
 // Setup ADC for reading temperature
 #if not defined(BOARD_CUSTOM)
-  adc1_config_width(ADC_WIDTH_BIT_12);
-  adc1_config_channel_atten(ADC1_CHANNEL_2, ADC_ATTEN_DB_11);
-  StatusUpdateManager::_adc_chars = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
-  esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 0, StatusUpdateManager::_adc_chars);
+  // Init ADC1
+  adc_oneshot_unit_init_cfg_t adc1_init_config = {};
+  adc1_init_config.unit_id = ADC_UNIT_1;
+  if (adc_oneshot_new_unit(&adc1_init_config, &StatusUpdateManager::_temp_adc_handle) == ESP_OK) {
+    adc_oneshot_chan_cfg_t config = {};
+    config.atten = ADC_ATTEN_DB_12;
+    config.bitwidth = ADC_BITWIDTH_12;
+    if (adc_oneshot_config_channel(StatusUpdateManager::_temp_adc_handle, ADC_CHANNEL_2, &config) == ESP_OK) {
+      adc_cali_line_fitting_config_t cali_config = {};
+      cali_config.unit_id = ADC_UNIT_1;
+      cali_config.atten = ADC_ATTEN_DB_12;
+      cali_config.bitwidth = ADC_BITWIDTH_12;
+      if (adc_cali_create_scheme_line_fitting(&cali_config, &StatusUpdateManager::_temp_calibration_data) == ESP_OK) {
+        ESP_LOGI("StatusUpdateManager", "Temperature ADC init successfully!");
+      } else {
+        ESP_LOGE("StatusUpdateManager", "Failed to create line fitting calibration data/scheme for temp reading!");
+      }
+    } else {
+      ESP_LOGE("StatusUpdateManager", "Failed to oneshot config ADC for temperature reading!");
+    }
+  } else {
+    ESP_LOGE("StatusUpdateManager", "Failed to configure ADC for temperature reading!");
+  }
 #endif
 
   err = esp_timer_start_periodic(StatusUpdateManager::_status_update_timer, 30000 * 1000); // Send status update every 30 seconds
@@ -97,9 +112,10 @@ void StatusUpdateManager::init() {
     ESP_LOGE("StatusUpdateManager", "Failed to start periodic timer for sending status updates! Error: %s", esp_err_to_name(err));
   }
 
-  err = esp_timer_start_periodic(StatusUpdateManager::_measure_temperature_timer, 1000 * 1000); // Measure temperature every second
-  if (err != ESP_OK) {
-    ESP_LOGE("StatusUpdateManager", "Failed to start periodic timer for measuring temperature! Error: %s", esp_err_to_name(err));
+  // Start the task that is responsible for reading new temperature data
+  // We use a task for this instead of a periodic timer as a periodic timer does not wake CPU from light sleep
+  if (xTaskCreatePinnedToCore(StatusUpdateManager::_measure_temperature, "measure_temp", 2048, NULL, 1, NULL, 1) != pdTRUE) {
+    ESP_LOGE("StatusUpdateManager", "Failed to create task to read temperature.");
   }
 }
 
@@ -163,10 +179,21 @@ void StatusUpdateManager::_send_status_update(void *arg) {
 
 #if defined(BOARD_SONOFF)
 void StatusUpdateManager::_measure_temperature(void *arg) {
-  uint32_t read_voltage_mv;
-  if (esp_adc_cal_get_voltage(adc_channel_t::ADC_CHANNEL_2, StatusUpdateManager::_adc_chars, &read_voltage_mv) == ESP_OK) {
+  for (;;) {
+    int read_voltage_mv_raw;
+    if (adc_oneshot_read(StatusUpdateManager::_temp_adc_handle, ADC_CHANNEL_2, &read_voltage_mv_raw) != ESP_OK) {
+      ESP_LOGE("StatusUpdateManager", "Failed to read raw voltage data from temp sensor.");
+      return;
+    }
+
+    int read_voltage_mv;
+    if (adc_cali_raw_to_voltage(StatusUpdateManager::_temp_calibration_data, read_voltage_mv_raw, &read_voltage_mv) != ESP_OK) {
+      ESP_LOGE("StatusUpdateManager", "Failed to convert read raw voltage with calibration data.");
+      return;
+    }
+
     // We now have temperature as a voltage. Convert voltage into celsius:
-    double read_voltage_v = (double)read_voltage_mv / 1000.0; // Convert mV to V.
+    double read_voltage_v = (double)read_voltage_mv_raw / 1000.0; // Convert mV to V.
 
     // Calculate temperature from NTC using the Steinhart–Hart equation
     // See https://robertvicol.com/tech/arduino-measuring-temperature-with-ntc-steinhart-hart-formula/ for example
@@ -202,191 +229,164 @@ void StatusUpdateManager::_measure_temperature(void *arg) {
       StatusUpdateManager::_measured_average_temperature.set(current_average_temperature);
       esp_event_post(STATUSUPDATEMANAGER_EVENT, statusupdatemanagerevent_t::AVERAGE_TEMP_UPDATE, &current_average_temperature, sizeof(current_average_temperature), pdMS_TO_TICKS(250));
     }
-  } else {
-    ESP_LOGW("StatusUpdateManager", "Failed to read voltage while measuring temperature from NTC.");
+
+    vTaskDelay(pdMS_TO_TICKS(1000)); // Read temp again in 1 second
   }
 }
 #elif defined(BOARD_CUSTOM)
 void StatusUpdateManager::_measure_temperature(void *arg) {
-  // uint8_t reset_send_data[] = {0xE0, 0xB6};
-  // if (i2c_master_transmit(StatusUpdateManager::_bme280_dev_handle, reset_send_data, 2, 500) != ESP_OK) {
-  //   ESP_LOGE("StatusUpdateManager", "Failed to write reset register on BME280.");
-  //   return;
-  // }
-  // vTaskDelay(pdMS_TO_TICKS(10));
-
-  // Write to BME280 to enable measurement of pressure, humidity and temperature and perform 1 measurement
-  // uint8_t send_data[] = {0xF4, 0b00100101};
-  // if (i2c_master_transmit(StatusUpdateManager::_bme280_dev_handle, send_data, 2, 500) != ESP_OK) {
-  //   ESP_LOGE("StatusUpdateManager", "Failed to write ctrl_meas register on BME280.");
-  //   return;
-  // }
-  // vTaskDelay(pdMS_TO_TICKS(10));
-
-  // uint8_t send_data_humidity[] = {0xF2, 0x01};
-  // if (i2c_master_transmit(StatusUpdateManager::_bme280_dev_handle, send_data_humidity, 2, 500) != ESP_OK) {
-  //   ESP_LOGE("StatusUpdateManager", "Failed to write ctrl_meas register on BME280.");
-  //   return;
-  // }
-  // vTaskDelay(pdMS_TO_TICKS(10));
-
-  // uint8_t start_reg = 0xF7;
-  // uint64_t result = 0;
-  // ESP_LOGD("StatusUpdateManager", "Trying to read from BME280 sensor to verify it's working.");
-  // if (i2c_master_transmit_receive(StatusUpdateManager::_bme280_dev_handle, &start_reg, 1, (uint8_t *)&result, 8, 500) == ESP_OK) {
-  //   ESP_LOGD("StatusUpdateManager", "Read %" PRIu64 " from BME280", result);
-  // } else {
-  //   ESP_LOGE("StatusUpdateManager", "Failed to read data from BME280 sensor!");
-  // }
-
-  if (StatusUpdateManager::_bme280_initialized) [[likely]] {
-    float temperature = 0;
-    float pressure = 0;
-    float humidity = 0;
-    // While for sensor to finish sampling.
-    while (bmx280_isSampling(StatusUpdateManager::_bme280_dev_handle)) {
-      vTaskDelay(pdMS_TO_TICKS(1));
-    }
-
-    ESP_ERROR_CHECK(bmx280_readoutFloat(StatusUpdateManager::_bme280_dev_handle, &temperature, &pressure, &humidity));
-
-    // Update temperature
-    temperature += StatusUpdateManager::_temperature_offset_calibration;
-    if (StatusUpdateManager::_measure_temperature_in_fahrenheit) {
-      temperature = (temperature * 1.8) + 32;
-    }
-
-    StatusUpdateManager::_measured_temperatures[StatusUpdateManager::_measured_temperature_next_index++] = temperature;
-    // We only have space for 30 samples.
-    if (StatusUpdateManager::_measured_temperature_total_samples < 30) {
-      StatusUpdateManager::_measured_temperature_total_samples++;
-    }
-
-    if (StatusUpdateManager::_measured_temperature_next_index >= 30) {
-      StatusUpdateManager::_measured_temperature_next_index = 0;
-      // Only calculate and send event ever 30 seconds to skip unnecessary events
-
-      double current_average_temperature = 0;
-      for (int i = 0; i < StatusUpdateManager::_measured_temperature_total_samples; i++) {
-        current_average_temperature += StatusUpdateManager::_measured_temperatures[i] / StatusUpdateManager::_measured_temperature_total_samples;
+  for (;;) {
+    if (StatusUpdateManager::_bme280_initialized) [[likely]] {
+      float temperature = 0;
+      float pressure = 0;
+      float humidity = 0;
+      // While for sensor to finish sampling.
+      while (bmx280_isSampling(StatusUpdateManager::_bme280_dev_handle)) {
+        vTaskDelay(pdMS_TO_TICKS(1));
       }
-      StatusUpdateManager::_measured_average_temperature.set(current_average_temperature);
-      esp_event_post(STATUSUPDATEMANAGER_EVENT, statusupdatemanagerevent_t::AVERAGE_TEMP_UPDATE, &current_average_temperature, sizeof(current_average_temperature), pdMS_TO_TICKS(250));
-    }
 
-    // Update humidity
-    StatusUpdateManager::_measured_humidity[StatusUpdateManager::_measured_humidity_next_index++] = humidity;
-    // We only have space for 30 samples.
-    if (StatusUpdateManager::_measured_humidity_total_samples < 30) {
-      StatusUpdateManager::_measured_humidity_total_samples++;
-    }
+      ESP_ERROR_CHECK(bmx280_readoutFloat(StatusUpdateManager::_bme280_dev_handle, &temperature, &pressure, &humidity));
 
-    if (StatusUpdateManager::_measured_humidity_next_index >= 30) {
-      StatusUpdateManager::_measured_humidity_next_index = 0;
-      // Only calculate and send event ever 30 seconds to skip unnecessary events
-
-      double current_average_humidity = 0;
-      for (int i = 0; i < StatusUpdateManager::_measured_humidity_total_samples; i++) {
-        current_average_humidity += StatusUpdateManager::_measured_humidity[i] / StatusUpdateManager::_measured_humidity_total_samples;
+      // Update temperature
+      temperature += StatusUpdateManager::_temperature_offset_calibration;
+      if (StatusUpdateManager::_measure_temperature_in_fahrenheit) {
+        temperature = (temperature * 1.8) + 32;
       }
-      StatusUpdateManager::_measured_average_humidity.set(current_average_humidity);
-      esp_event_post(STATUSUPDATEMANAGER_EVENT, statusupdatemanagerevent_t::AVERAGE_HUMIDITY_UPDATE, &current_average_humidity, sizeof(current_average_humidity), pdMS_TO_TICKS(250));
-    }
 
-    // Update pressure
-    StatusUpdateManager::_measured_pressure[StatusUpdateManager::_measured_pressure_next_index++] = pressure;
-    // We only have space for 30 samples.
-    if (StatusUpdateManager::_measured_pressure_total_samples < 30) {
-      StatusUpdateManager::_measured_pressure_total_samples++;
-    }
-
-    if (StatusUpdateManager::_measured_pressure_next_index >= 30) {
-      StatusUpdateManager::_measured_pressure_next_index = 0;
-      // Only calculate and send event ever 30 seconds to skip unnecessary events
-
-      double current_average_pressure = 0;
-      for (int i = 0; i < StatusUpdateManager::_measured_pressure_total_samples; i++) {
-        current_average_pressure += StatusUpdateManager::_measured_pressure[i] / StatusUpdateManager::_measured_pressure_total_samples;
+      StatusUpdateManager::_measured_temperatures[StatusUpdateManager::_measured_temperature_next_index++] = temperature;
+      // We only have space for 30 samples.
+      if (StatusUpdateManager::_measured_temperature_total_samples < 30) {
+        StatusUpdateManager::_measured_temperature_total_samples++;
       }
-      StatusUpdateManager::_measured_average_pressure.set(current_average_pressure);
-      esp_event_post(STATUSUPDATEMANAGER_EVENT, statusupdatemanagerevent_t::AVERAGE_PRESSURE_UPDATE, &current_average_pressure, sizeof(current_average_pressure), pdMS_TO_TICKS(250));
-    }
-  } else {
-    ESP_LOGW("StatusUpdateManager", "Skipping temperature, humidity and pressure reading as BME280 sensor was not initialized correctly.");
 
-    if ((esp_timer_get_time() / 1000) - StatusUpdateManager::_last_bme280_init_try >= 10000) { // More than >= 10 seconds since last init try.
-      StatusUpdateManager::_initialize_bme280();
+      if (StatusUpdateManager::_measured_temperature_next_index >= 30) {
+        StatusUpdateManager::_measured_temperature_next_index = 0;
+        // Only calculate and send event ever 30 seconds to skip unnecessary events
+
+        double current_average_temperature = 0;
+        for (int i = 0; i < StatusUpdateManager::_measured_temperature_total_samples; i++) {
+          current_average_temperature += StatusUpdateManager::_measured_temperatures[i] / StatusUpdateManager::_measured_temperature_total_samples;
+        }
+        StatusUpdateManager::_measured_average_temperature.set(current_average_temperature);
+        esp_event_post(STATUSUPDATEMANAGER_EVENT, statusupdatemanagerevent_t::AVERAGE_TEMP_UPDATE, &current_average_temperature, sizeof(current_average_temperature), pdMS_TO_TICKS(250));
+      }
+
+      // Update humidity
+      StatusUpdateManager::_measured_humidity[StatusUpdateManager::_measured_humidity_next_index++] = humidity;
+      // We only have space for 30 samples.
+      if (StatusUpdateManager::_measured_humidity_total_samples < 30) {
+        StatusUpdateManager::_measured_humidity_total_samples++;
+      }
+
+      if (StatusUpdateManager::_measured_humidity_next_index >= 30) {
+        StatusUpdateManager::_measured_humidity_next_index = 0;
+        // Only calculate and send event ever 30 seconds to skip unnecessary events
+
+        double current_average_humidity = 0;
+        for (int i = 0; i < StatusUpdateManager::_measured_humidity_total_samples; i++) {
+          current_average_humidity += StatusUpdateManager::_measured_humidity[i] / StatusUpdateManager::_measured_humidity_total_samples;
+        }
+        StatusUpdateManager::_measured_average_humidity.set(current_average_humidity);
+        esp_event_post(STATUSUPDATEMANAGER_EVENT, statusupdatemanagerevent_t::AVERAGE_HUMIDITY_UPDATE, &current_average_humidity, sizeof(current_average_humidity), pdMS_TO_TICKS(250));
+      }
+
+      // Update pressure
+      StatusUpdateManager::_measured_pressure[StatusUpdateManager::_measured_pressure_next_index++] = pressure;
+      // We only have space for 30 samples.
+      if (StatusUpdateManager::_measured_pressure_total_samples < 30) {
+        StatusUpdateManager::_measured_pressure_total_samples++;
+      }
+
+      if (StatusUpdateManager::_measured_pressure_next_index >= 30) {
+        StatusUpdateManager::_measured_pressure_next_index = 0;
+        // Only calculate and send event ever 30 seconds to skip unnecessary events
+
+        double current_average_pressure = 0;
+        for (int i = 0; i < StatusUpdateManager::_measured_pressure_total_samples; i++) {
+          current_average_pressure += StatusUpdateManager::_measured_pressure[i] / StatusUpdateManager::_measured_pressure_total_samples;
+        }
+        StatusUpdateManager::_measured_average_pressure.set(current_average_pressure);
+        esp_event_post(STATUSUPDATEMANAGER_EVENT, statusupdatemanagerevent_t::AVERAGE_PRESSURE_UPDATE, &current_average_pressure, sizeof(current_average_pressure), pdMS_TO_TICKS(250));
+      }
+    } else {
+      ESP_LOGW("StatusUpdateManager", "Skipping temperature, humidity and pressure reading as BME280 sensor was not initialized correctly.");
+
+      if ((esp_timer_get_time() / 1000) - StatusUpdateManager::_last_bme280_init_try >= 10000) { // More than >= 10 seconds since last init try.
+        StatusUpdateManager::_initialize_bme280();
+      }
     }
+
+    // if (StatusUpdateManager::_ltr303_initialized) [[likely]] {
+    //   // for (int i = 0; i < 10; i++) {
+    //   //   uint8_t status;
+
+    //   //   if (ltr303_als_status_get(StatusUpdateManager::_ltr303_dev_handle, &status, 10) == ESP_OK) {
+    //   //     if (als_status_data_valid(status) != ALS_STATUS_DATA_INVALID) {
+    //   //       break; // Successfully got status. Exit loop.
+    //   //     }
+    //   //   }
+    //   //   vTaskDelay(pdMS_TO_TICKS(10));
+    //   // }
+
+    //   uint16_t ch0;
+    //   uint16_t ch1;
+    //   if (StatusUpdateManager::_ltr303_dev_handle->readBothChannels(ch0, ch1) == ESP_OK) {
+    //     // float lux = ltr303_als_to_lux(ALS_CONTR_GAIN_1X, ALS_INT_TIME_100, 1.0, ch0, ch1);
+    //     uint16_t lux = StatusUpdateManager::_ltr303_dev_handle->computeLux(ch0, ch1);
+    //     ESP_LOGI("StatusUpdateManager", "Got CH0: %d, CH1: %d, lux: %.2f", ch0, ch1, lux);
+    //   } else {
+    //     ESP_LOGE("StatusUpdateManager", "Failed to get LTR303 data.");
+    //   }
+    // } else {
+    //   ESP_LOGW("StatusUpdateManager", "Skipping lux reading as LTR303 sensor was not initialized correctly.");
+
+    //   if ((esp_timer_get_time() / 1000) - StatusUpdateManager::_last_ltr303_init_try >= 10000) { // More than >= 10 seconds since last init try.
+    //     StatusUpdateManager::_initialize_ltr303();
+    //   }
+    // }
+
+    // Read lux
+    // uint8_t tries = 0;
+    // while (tries < 10) {
+    //   uint8_t status;
+    //   if (ltr303_als_status_get(StatusUpdateManager::_ltr303_dev_handle, &status, 10) == ESP_OK) {
+    //     if (als_status_data_valid(status) == ALS_STATUS_DATA_INVALID) {
+    //       vTaskDelay(pdMS_TO_TICKS(10));
+    //       continue;
+    //     }
+
+    //     uint16_t ch0;
+    //     uint16_t ch1;
+    //     if (ltr303_als_data_get(StatusUpdateManager::_ltr303_dev_handle, &ch0, &ch1, 10) == ESP_OK) {
+    //       float lux = ltr303_als_to_lux(ALS_CONTR_GAIN_1X, ALS_INT_TIME_100, 1.0, ch0, ch1);
+    //       ESP_LOGI("StatusUpdateManager", "Got CH0: %d, CH1: %d, lux: %.2f", ch0, ch1, lux);
+    //     } else {
+    //       ESP_LOGE("StatusUpdateManager", "Failed to get LTR303 data.");
+    //     }
+    //   } else {
+    //     ESP_LOGE("StatusUpdateManager", "Failed to get LTR303 status. Will retry in 100ms.");
+    //     vTaskDelay(pdMS_TO_TICKS(100));
+    //   }
+    //   tries++;
+    // }
+    // uint8_t start_reg = 0x88;
+    // uint16_t result = 0;
+    // if (i2c_master_transmit_receive(StatusUpdateManager::_ltr303_dev_handle, &start_reg, 1, (uint8_t *)&result, 2, 500) == ESP_OK) {
+    //   ESP_LOGD("StatusUpdateManager", "Read %" PRIu16 " from LTR303 CH0", result);
+    // } else {
+    //   ESP_LOGE("StatusUpdateManager", "Failed to read data from LTR303 CH1 sensor!");
+    // }
+
+    // start_reg = 0x8A;
+    // result = 0;
+    // if (i2c_master_transmit_receive(StatusUpdateManager::_ltr303_dev_handle, &start_reg, 1, (uint8_t *)&result, 2, 500) == ESP_OK) {
+    //   ESP_LOGD("StatusUpdateManager", "Read %" PRIu16 " from LTR303 CH1", result);
+    // } else {
+    //   ESP_LOGE("StatusUpdateManager", "Failed to read data from LTR303 CH0 sensor!");
+    // }
+
+    vTaskDelay(pdMS_TO_TICKS(1000)); // Read temp again in 1 second
   }
-
-  // if (StatusUpdateManager::_ltr303_initialized) [[likely]] {
-  //   // for (int i = 0; i < 10; i++) {
-  //   //   uint8_t status;
-
-  //   //   if (ltr303_als_status_get(StatusUpdateManager::_ltr303_dev_handle, &status, 10) == ESP_OK) {
-  //   //     if (als_status_data_valid(status) != ALS_STATUS_DATA_INVALID) {
-  //   //       break; // Successfully got status. Exit loop.
-  //   //     }
-  //   //   }
-  //   //   vTaskDelay(pdMS_TO_TICKS(10));
-  //   // }
-
-  //   uint16_t ch0;
-  //   uint16_t ch1;
-  //   if (StatusUpdateManager::_ltr303_dev_handle->readBothChannels(ch0, ch1) == ESP_OK) {
-  //     // float lux = ltr303_als_to_lux(ALS_CONTR_GAIN_1X, ALS_INT_TIME_100, 1.0, ch0, ch1);
-  //     uint16_t lux = StatusUpdateManager::_ltr303_dev_handle->computeLux(ch0, ch1);
-  //     ESP_LOGI("StatusUpdateManager", "Got CH0: %d, CH1: %d, lux: %.2f", ch0, ch1, lux);
-  //   } else {
-  //     ESP_LOGE("StatusUpdateManager", "Failed to get LTR303 data.");
-  //   }
-  // } else {
-  //   ESP_LOGW("StatusUpdateManager", "Skipping lux reading as LTR303 sensor was not initialized correctly.");
-
-  //   if ((esp_timer_get_time() / 1000) - StatusUpdateManager::_last_ltr303_init_try >= 10000) { // More than >= 10 seconds since last init try.
-  //     StatusUpdateManager::_initialize_ltr303();
-  //   }
-  // }
-
-  // Read lux
-  // uint8_t tries = 0;
-  // while (tries < 10) {
-  //   uint8_t status;
-  //   if (ltr303_als_status_get(StatusUpdateManager::_ltr303_dev_handle, &status, 10) == ESP_OK) {
-  //     if (als_status_data_valid(status) == ALS_STATUS_DATA_INVALID) {
-  //       vTaskDelay(pdMS_TO_TICKS(10));
-  //       continue;
-  //     }
-
-  //     uint16_t ch0;
-  //     uint16_t ch1;
-  //     if (ltr303_als_data_get(StatusUpdateManager::_ltr303_dev_handle, &ch0, &ch1, 10) == ESP_OK) {
-  //       float lux = ltr303_als_to_lux(ALS_CONTR_GAIN_1X, ALS_INT_TIME_100, 1.0, ch0, ch1);
-  //       ESP_LOGI("StatusUpdateManager", "Got CH0: %d, CH1: %d, lux: %.2f", ch0, ch1, lux);
-  //     } else {
-  //       ESP_LOGE("StatusUpdateManager", "Failed to get LTR303 data.");
-  //     }
-  //   } else {
-  //     ESP_LOGE("StatusUpdateManager", "Failed to get LTR303 status. Will retry in 100ms.");
-  //     vTaskDelay(pdMS_TO_TICKS(100));
-  //   }
-  //   tries++;
-  // }
-  // uint8_t start_reg = 0x88;
-  // uint16_t result = 0;
-  // if (i2c_master_transmit_receive(StatusUpdateManager::_ltr303_dev_handle, &start_reg, 1, (uint8_t *)&result, 2, 500) == ESP_OK) {
-  //   ESP_LOGD("StatusUpdateManager", "Read %" PRIu16 " from LTR303 CH0", result);
-  // } else {
-  //   ESP_LOGE("StatusUpdateManager", "Failed to read data from LTR303 CH1 sensor!");
-  // }
-
-  // start_reg = 0x8A;
-  // result = 0;
-  // if (i2c_master_transmit_receive(StatusUpdateManager::_ltr303_dev_handle, &start_reg, 1, (uint8_t *)&result, 2, 500) == ESP_OK) {
-  //   ESP_LOGD("StatusUpdateManager", "Read %" PRIu16 " from LTR303 CH1", result);
-  // } else {
-  //   ESP_LOGE("StatusUpdateManager", "Failed to read data from LTR303 CH0 sensor!");
-  // }
 }
 #endif
 

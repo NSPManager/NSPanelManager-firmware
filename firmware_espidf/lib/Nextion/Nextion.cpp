@@ -5,6 +5,7 @@
 #include <esp_event.h>
 #include <esp_log.h>
 #include <memory.h>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -12,6 +13,7 @@ ESP_EVENT_DEFINE_BASE(NEXTION_EVENT);
 
 esp_err_t Nextion::init() {
   esp_log_level_set("Nextion", ConfigManager::log_level);
+  esp_log_level_set("uart", esp_log_level_t::ESP_LOG_DEBUG);
   ESP_LOGI("Nextion", "Initializing Nextion display.");
 
   // Setup initial values and create mutexes:
@@ -39,23 +41,54 @@ esp_err_t Nextion::init() {
   }
 
   // Configure UART
-  Nextion::_uart_config = {
-      .baud_rate = (int)ConfigManager::communication_baud_rate,
-      .data_bits = UART_DATA_8_BITS,
-      .parity = UART_PARITY_DISABLE,
-      .stop_bits = UART_STOP_BITS_1,
-      .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-      .source_clk = UART_SCLK_DEFAULT};
+  Nextion::_uart_config = {};
+  Nextion::_uart_config.baud_rate = (int)ConfigManager::communication_baud_rate;
+  Nextion::_uart_config.data_bits = UART_DATA_8_BITS;
+  Nextion::_uart_config.parity = UART_PARITY_DISABLE;
+  Nextion::_uart_config.stop_bits = UART_STOP_BITS_1;
+  Nextion::_uart_config.flow_ctrl = UART_HW_FLOWCTRL_DISABLE;
+  Nextion::_uart_config.source_clk = UART_SCLK_DEFAULT;
 
-  uart_driver_install(UART_NUM_2, NEXTION_UART_BUFFER_SIZE * 2, 6000, 8, &Nextion::_uart_event_queue, 0); // Setup UART driver
-  uart_param_config(UART_NUM_2, &Nextion::_uart_config);
+  esp_err_t cmd_err = uart_param_config(UART_NUM_2, &Nextion::_uart_config);
+  if (cmd_err != ESP_OK) {
+    ESP_LOGE("Nextion", "Failed to set UART parameters! Error: %s", esp_err_to_name(cmd_err));
+  }
+
+  cmd_err = uart_driver_install(UART_NUM_2, NEXTION_UART_BUFFER_SIZE * 2, 6000, 8, &Nextion::_uart_event_queue, 0); // Setup UART driver
+  if (cmd_err != ESP_OK) {
+    ESP_LOGE("Nextion", "Failed to install UART driver! Error: %s", esp_err_to_name(cmd_err));
+  }
+
+  // Set RX pin to input mode
+  gpio_config_t io_conf = {};
+  io_conf.mode = GPIO_MODE_INPUT;
+  io_conf.pin_bit_mask = 1ULL << GPIO_NUM_17;
+  io_conf.intr_type = GPIO_INTR_DISABLE;
+  io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+  io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+  cmd_err = gpio_config(&io_conf);
+  if (cmd_err != ESP_OK) {
+    ESP_LOGE("Nextion", "Failed to clear existing IO config for UART RX pin! Error: %s", esp_err_to_name(cmd_err));
+  }
+
 #if defined(BOARD_SONOFF)
-  uart_set_pin(UART_NUM_2, GPIO_NUM_16, GPIO_NUM_17, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+  cmd_err = uart_set_pin(UART_NUM_2, GPIO_NUM_16, GPIO_NUM_17, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 #elif defined(BOARD_CUSTOM)
-  uart_set_pin(UART_NUM_2, GPIO_NUM_3, GPIO_NUM_46, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+  cmd_err = uart_set_pin(UART_NUM_2, GPIO_NUM_3, GPIO_NUM_46, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 #endif
-  uart_enable_pattern_det_baud_intr(UART_NUM_2, 0xFF, 3, 9, 0, 0); // Setup pattern detection to trigger interrupt when 3 consecutive 0xFF has been received.
-  uart_pattern_queue_reset(UART_NUM_2, 8);
+  if (cmd_err != ESP_OK) {
+    ESP_LOGE("Nextion", "Failed to set UART pins! Error: %s", esp_err_to_name(cmd_err));
+  }
+
+  cmd_err = uart_enable_pattern_det_baud_intr(UART_NUM_2, 0xFF, 3, 9, 0, 0); // Setup pattern detection to trigger interrupt when 3 consecutive 0xFF has been received.
+  if (cmd_err != ESP_OK) {
+    ESP_LOGE("Nextion", "Failed to enable pattern detection on UART! Error: %s", esp_err_to_name(cmd_err));
+  }
+
+  cmd_err = uart_pattern_queue_reset(UART_NUM_2, 8);
+  if (cmd_err != ESP_OK) {
+    ESP_LOGE("Nextion", "Failed to reset UART pattern queue! Error: %s", esp_err_to_name(cmd_err));
+  }
 
   // Register event handler for when uart data is fully read and processed into an Nextion event
   esp_err_t reg_handler_result = esp_event_handler_register_with(Nextion::_handle_uart_data_event_loop, NEXTION_EVENT, nextion_event_t::RECEIVED_DATA, &Nextion::_uart_data_handler, NULL);
@@ -63,7 +96,7 @@ esp_err_t Nextion::init() {
     ESP_LOGE("Nextion", "Failed to register Nextion UART data processing handler. Got result %s", esp_err_to_name(reg_handler_result));
   }
 
-  // Start the task tat is responsible for handling Nextion display data
+  // Start the task that is responsible for handling Nextion display data
   xTaskCreatePinnedToCore(Nextion::_task_uart_event, "uart_event_task", 4096, NULL, 12, NULL, 1);
 
   ESP_LOGD("Nextion", "Turning Nextion display off and on again.");
@@ -118,6 +151,9 @@ void Nextion::_task_uart_event(void *param) {
     // Wait for UART data, while waiting pause task
     if (xQueueReceive(Nextion::_uart_event_queue, (void *)&event, portMAX_DELAY)) {
       switch (event.type) {
+      case UART_BREAK:
+        break; // Ignore UART BREAK
+
       case UART_DATA: {
         if (event.size <= NEXTION_UART_BUFFER_SIZE) {
           if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
@@ -230,6 +266,7 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
   if (data->size() <= 0) [[unlikely]] {
     return;
   }
+
   // ESP_LOGD("Nextion", "Read Nextion data: %.*s, size: %d", data->size(), data->data(), data->size());
 
   if (data->data()[0] == NEX_RET_NUMBER_HEAD) {
@@ -352,7 +389,7 @@ void Nextion::_wait_for_event_event_handler(void *arg, esp_event_base_t event_ba
   }
 }
 
-esp_err_t Nextion::write_command(char *data) {
+esp_err_t Nextion::write_command(const char *data) {
   if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(32)) == pdTRUE) {
     int len = Nextion::nextion_write(data, strlen(data));
     Nextion::nextion_write_end();
@@ -364,7 +401,7 @@ esp_err_t Nextion::write_command(char *data) {
   return ESP_ERR_NOT_FINISHED;
 }
 
-esp_err_t Nextion::_write_command(char *data) {
+esp_err_t Nextion::_write_command(const char *data) {
   if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(32)) == pdTRUE) {
     int len = uart_write_bytes(UART_NUM_2, data, strlen(data));
     // Send command finished sequence
