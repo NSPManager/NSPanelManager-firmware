@@ -256,6 +256,8 @@ void UpdateManager::update_gui(void *param) {
     ESP_LOGE("UpdateManager", "Failed to get NSPanelConfig when trying to update GUI.");
   }
 
+  UpdateManager::_current_update_task = NULL;
+
   vTaskDelete(NULL);
 }
 
