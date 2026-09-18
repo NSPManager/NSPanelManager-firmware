@@ -9,6 +9,7 @@
 #include <memory>
 #include <protobuf_nspanel.pb-c.h>
 #include <string>
+#include <vector>
 
 /**
  * NSPM_ConfigManager does not handle the config stored on the panel. NSPM_ConfigManager is responsible for loading and keeping the stored config from
@@ -148,4 +149,7 @@ private:
 
   // The protobuf NSPanelConfig object decoded from MQTT.
   static inline std::shared_ptr<NSPanelConfig> _config = NULL;
+
+  // Raw bytes of the last config received from MQTT, used to ignore duplicate deliveries. Guarded by _config_mutex.
+  static inline std::vector<uint8_t> _last_config_data;
 };
