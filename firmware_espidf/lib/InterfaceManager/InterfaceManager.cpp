@@ -16,7 +16,6 @@
 #include <WiFiManager.hpp>
 #include <cmath>
 #include <esp_log.h>
-#include <format>
 #include <protobuf_nspanel.pb-c.h>
 
 void InterfaceManager::init() {

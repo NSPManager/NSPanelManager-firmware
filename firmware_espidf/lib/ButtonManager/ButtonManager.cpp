@@ -9,11 +9,17 @@
 #include <driver/gpio.h>
 #include <esp_log.h>
 #include <esp_timer.h>
-#include <format>
 #include <vector>
 
 void ButtonManager::init() {
   esp_log_level_set("ButtonManager", ConfigManager::log_level);
+
+  std::string topic_base = std::string("nspanel/") + WiFiManager::mac_string();
+  ButtonManager::_relay1_cmd_topic = topic_base + "/relay1_cmd";
+  ButtonManager::_relay2_cmd_topic = topic_base + "/relay2_cmd";
+  ButtonManager::_relay1_state_topic = topic_base + "/relay1_state";
+  ButtonManager::_relay2_state_topic = topic_base + "/relay2_state";
+
   ButtonManager::_interrupt_queue = xQueueCreate(4, sizeof(uint32_t));
 
   ButtonManager::_reverse_relays = ConfigManager::reverse_relays;
@@ -66,10 +72,8 @@ void ButtonManager::init_mqtt() {
   // Setup and subscribe to MQTT
   MqttManager::register_handler(MQTT_EVENT_ANY, &ButtonManager::_mqtt_event_handler, NULL);
 
-  std::string relay1_topic = std::format("nspanel/{}/relay1_cmd", WiFiManager::mac_string());
-  std::string relay2_topic = std::format("nspanel/{}/relay2_cmd", WiFiManager::mac_string());
-  MqttManager::subscribe(relay1_topic);
-  MqttManager::subscribe(relay2_topic);
+  MqttManager::subscribe(ButtonManager::_relay1_cmd_topic);
+  MqttManager::subscribe(ButtonManager::_relay2_cmd_topic);
 }
 
 void ButtonManager::_button1_key_down(void) {
@@ -199,7 +203,7 @@ void ButtonManager::_set_relay_state(uint8_t relay, bool state, bool send_mqtt_u
     }
 
     if (send_mqtt_update) {
-      MqttManager::publish(std::format("nspanel/{}/relay1_state", WiFiManager::mac_string()), state ? "1" : "0", strlen(state ? "1" : "0"), true);
+      MqttManager::publish(ButtonManager::_relay1_state_topic, state ? "1" : "0", strlen(state ? "1" : "0"), true);
 
       std::shared_ptr<NSPanelConfig> config;
       if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
@@ -234,7 +238,7 @@ void ButtonManager::_set_relay_state(uint8_t relay, bool state, bool send_mqtt_u
     }
 
     if (send_mqtt_update) {
-      MqttManager::publish(std::format("nspanel/{}/relay2_state", WiFiManager::mac_string()), state ? "1" : "0", strlen(state ? "1" : "0"), true);
+      MqttManager::publish(ButtonManager::_relay2_state_topic, state ? "1" : "0", strlen(state ? "1" : "0"), true);
 
       std::shared_ptr<NSPanelConfig> config;
       if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
@@ -535,10 +539,7 @@ void ButtonManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
     std::string topic_string = std::string(event->topic, event->topic_len);
     std::string data = std::string(event->data, event->data_len);
 
-    std::string relay1_topic = std::format("nspanel/{}/relay1_cmd", WiFiManager::mac_string());
-    std::string relay2_topic = std::format("nspanel/{}/relay2_cmd", WiFiManager::mac_string());
-
-    if (topic_string.compare(relay1_topic) == 0) {
+    if (topic_string.compare(ButtonManager::_relay1_cmd_topic) == 0) {
       if (data.compare("0") == 0) {
         if (ButtonManager::_get_relay_state(1) == true) {
           ButtonManager::_set_relay_state(1, false, true);
@@ -552,7 +553,7 @@ void ButtonManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
       } else {
         ESP_LOGE("ButtonManager", "Got command to set relay1 state but command data was not recognized.");
       }
-    } else if (topic_string.compare(relay2_topic) == 0) {
+    } else if (topic_string.compare(ButtonManager::_relay2_cmd_topic) == 0) {
       if (data.compare("0") == 0) {
         if (ButtonManager::_get_relay_state(2) == true) {
           ButtonManager::_set_relay_state(2, false, true);
@@ -640,9 +641,9 @@ void ButtonManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
 
     // Publish current state to relay state topics
     bool state = ButtonManager::_get_relay_state(1);
-    MqttManager::publish(std::format("nspanel/{}/relay1_state", WiFiManager::mac_string()), state ? "1" : "0", strlen(state ? "1" : "0"), true);
+    MqttManager::publish(ButtonManager::_relay1_state_topic, state ? "1" : "0", strlen(state ? "1" : "0"), true);
 
     state = ButtonManager::_get_relay_state(2);
-    MqttManager::publish(std::format("nspanel/{}/relay2_state", WiFiManager::mac_string()), state ? "1" : "0", strlen(state ? "1" : "0"), true);
+    MqttManager::publish(ButtonManager::_relay2_state_topic, state ? "1" : "0", strlen(state ? "1" : "0"), true);
   }
 }

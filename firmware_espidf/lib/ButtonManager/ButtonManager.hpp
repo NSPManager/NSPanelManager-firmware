@@ -10,6 +10,7 @@
 #include <freertos/task.h>
 #include <memory>
 #include <protobuf_nspanel.pb-c.h>
+#include <string>
 
 class ButtonManager {
 public:
@@ -117,6 +118,12 @@ private:
 
   static inline uint64_t _last_relay1_change = 0;
   static inline uint64_t _last_relay2_change = 0;
+
+  // MQTT topics for relay commands and state. Built once in init().
+  static inline std::string _relay1_cmd_topic;
+  static inline std::string _relay2_cmd_topic;
+  static inline std::string _relay1_state_topic;
+  static inline std::string _relay2_state_topic;
 
   // The current/previous config. Used to compare and check for changes.
   static inline std::shared_ptr<NSPanelConfig> _current_config = nullptr;
