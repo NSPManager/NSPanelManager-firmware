@@ -135,6 +135,11 @@ esp_err_t ConfigManager::load_config() {
     ConfigManager::has_updated = cJSON_IsTrue(item);
   }
 
+  item = cJSON_GetObjectItem(json, "md5_firmware_pending");
+  if (cJSON_IsString(item) && (item->valuestring != NULL)) {
+    ConfigManager::md5_firmware_pending = item->valuestring;
+  }
+
   item = cJSON_GetObjectItem(json, "upload_baud");
   if (cJSON_IsNumber(item)) {
     ConfigManager::nextion_upload_baudrate = item->valueint;
@@ -215,6 +220,7 @@ void ConfigManager::create_default() {
   ConfigManager::mqtt_password = "";
 
   ConfigManager::has_updated = false;
+  ConfigManager::md5_firmware_pending = "";
   ConfigManager::md5_firmware = "";
   ConfigManager::md5_data_file = "";
   ConfigManager::md5_gui = "";
@@ -267,6 +273,7 @@ esp_err_t ConfigManager::save_config() {
   } else {
     cJSON_AddFalseToObject(json, "has_updated");
   }
+  cJSON_AddStringToObject(json, "md5_firmware_pending", ConfigManager::md5_firmware_pending.c_str());
 
   cJSON_AddNumberToObject(json, "upload_baud", ConfigManager::nextion_upload_baudrate);
   cJSON_AddNumberToObject(json, "comms_baud", ConfigManager::communication_baud_rate);

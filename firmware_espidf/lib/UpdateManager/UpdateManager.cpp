@@ -272,7 +272,8 @@ void UpdateManager::update_firmware(void *param) {
 #endif
 
   std::vector<uint8_t> data;
-  if (UpdateManager::_force_update || UpdateManager::_download_data(&data, firmware_md5_string.c_str(), -1, -1) == ESP_OK) {
+  // Always fetch the checksum, also for forced updates, so that it can be stored as the pending checksum for the firmware about to be flashed.
+  if (UpdateManager::_download_data(&data, firmware_md5_string.c_str(), -1, -1) == ESP_OK) {
     std::string md5_string = std::string((char *)data.data(), data.size());
     ESP_LOGD("UpdateManager", "Got new MD5 sum from manager: %s", md5_string.c_str());
 
@@ -286,6 +287,7 @@ void UpdateManager::update_firmware(void *param) {
       ESP_LOGI("UpdateManager", "New firmware available. Will update OTA.");
       if (UpdateManager::_update_firmware_ota() == ESP_OK) {
         ConfigManager::has_updated = true;
+        ConfigManager::md5_firmware_pending = md5_string;
         ConfigManager::save_config();
 
         ESP_LOGI("UpdateManager", "Firmware update complete. Stored firmware checksum will be updated on next successful boot.");
@@ -354,7 +356,14 @@ void UpdateManager::mark_boot_successful() {
 }
 
 void UpdateManager::update_internal_firmware_checksum() {
-  if (ConfigManager::has_updated) {
+  if (!ConfigManager::has_updated) {
+    return;
+  }
+
+  // Use the checksum recorded when the firmware was flashed. The manager may be serving a different firmware by now.
+  std::string md5_string = ConfigManager::md5_firmware_pending;
+  if (md5_string.empty()) {
+    // Update was installed by a firmware that did not record a pending checksum, fall back to asking the manager.
     std::string firmware_md5_string = "http://";
     firmware_md5_string.append(NSPM_ConfigManager::get_manager_address());
     firmware_md5_string.append(":");
@@ -367,28 +376,26 @@ void UpdateManager::update_internal_firmware_checksum() {
 #endif
 
     std::vector<uint8_t> data;
-    if (UpdateManager::_download_data(&data, firmware_md5_string.c_str(), -1, -1) == ESP_OK) {
-      std::string md5_string = std::string((char *)data.data(), data.size());
-
-      if (md5_string.compare(ConfigManager::md5_firmware) != 0) {
-        ConfigManager::md5_firmware = md5_string;
-        ConfigManager::has_updated = false;
-        // Save the existing config loaded into memory into the new LittleFS partition.
-        if (ConfigManager::save_config() == ESP_OK) {
-          ESP_LOGI("UpdateManager", "Updated stored firmware checksum to %s. Will reboot.", md5_string.c_str());
-        } else {
-          ESP_LOGE("UpdateManager", "Failed to save config!");
-        }
-
-        vTaskDelay(pdTICKS_TO_MS(10));
-        StatusUpdateManager::reboot();
-      } else {
-        ESP_LOGI("UpdateManager", "Stored firmware checksum is correct, will not update!");
-      }
-    } else {
+    if (UpdateManager::_download_data(&data, firmware_md5_string.c_str(), -1, -1) != ESP_OK) {
       ESP_LOGE("UpdateManager", "Failed to get firmware checksum from manager.");
+      return;
     }
+    md5_string = std::string((char *)data.data(), data.size());
   }
+
+  ConfigManager::md5_firmware = md5_string;
+  ConfigManager::md5_firmware_pending = "";
+  ConfigManager::has_updated = false;
+  // Save the existing config loaded into memory into the new LittleFS partition.
+  if (ConfigManager::save_config() == ESP_OK) {
+    ESP_LOGI("UpdateManager", "Updated stored firmware checksum to %s. Will reboot.", md5_string.c_str());
+  } else {
+    ESP_LOGE("UpdateManager", "Failed to save config!");
+  }
+
+  // Always reboot: InterfaceManager stays on the "Updated checksums, rebooting." page while has_updated was set.
+  vTaskDelay(pdTICKS_TO_MS(10));
+  StatusUpdateManager::reboot();
 }
 
 esp_err_t UpdateManager::_setup_http_client(esp_http_client_handle_t *client, std::vector<uint8_t> *return_data, const char *download_url, int64_t offset, int64_t length) {
