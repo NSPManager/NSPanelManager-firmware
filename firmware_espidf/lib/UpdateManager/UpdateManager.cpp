@@ -539,6 +539,7 @@ void UpdateManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
           ESP_LOGI("UpgradeManager", "Received command to reboot. Will reboot NSPanel.");
           StatusUpdateManager::reboot();
         } else if (command_string.compare("firmware_update") == 0 && UpdateManager::_current_update_task == NULL) {
+          UpdateManager::_force_update = false;
           xTaskCreatePinnedToCore(UpdateManager::update_firmware, "update_firmware", 8192, NULL, 2, &UpdateManager::_current_update_task, 1);
         } else if (command_string.compare("firmware_update_force") == 0 && UpdateManager::_current_update_task == NULL) {
           UpdateManager::_force_update = true;
