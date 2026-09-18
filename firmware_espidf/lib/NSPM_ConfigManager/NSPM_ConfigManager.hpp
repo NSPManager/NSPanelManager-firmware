@@ -79,6 +79,20 @@ private:
   static void _task_send_register_request(void *arg);
 
   /**
+   * @brief Spawn the register-request task if it isn't already running, and
+   * arm _send_register_requests so any live instance keeps publishing. Safe
+   * to call from an MQTT event handler; does not block.
+   */
+  static void _start_register_request_task();
+
+  /**
+   * @brief Short-lived task that re-subscribes to _mqtt_config_topic after an
+   * MQTT reconnect. Runs in its own task so its retry loop does not stall the
+   * MQTT event loop.
+   */
+  static void _task_resubscribe_config_topic(void *arg);
+
+  /**
    * @brief Handle a "register_accept" request from MQTT
    * @param data: Received data from MQTT
    * @param data_length: Number of bytes that were received
@@ -99,7 +113,11 @@ private:
 
   // Vars:
   // Task handle for the task responsible for sending all register requests to the manager. This is used to stop the task once a register_accept has been received.
-  static inline TaskHandle_t _task_send_register_request_handle;
+  static inline TaskHandle_t _task_send_register_request_handle = NULL;
+
+  // Guards _task_send_register_request_handle and the interaction between the
+  // task's self-teardown and _start_register_request_task's spawn check.
+  static inline SemaphoreHandle_t _register_request_task_mutex = NULL;
 
   // Topic that the MQTT Manager container send commands to panel on:
   static inline std::string _mqtt_command_topic;
