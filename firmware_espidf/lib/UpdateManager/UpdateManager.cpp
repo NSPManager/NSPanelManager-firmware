@@ -69,6 +69,7 @@ void UpdateManager::update_gui(void *param) {
       if (http_client == NULL) {
         ESP_LOGE("UpdateManager", "Failed to init http_client. Got NULL! Will try again in 2 seconds.");
         vTaskDelay(pdMS_TO_TICKS(2000));
+        continue;
       }
 
       std::string range_header = "bytes=";
@@ -86,6 +87,7 @@ void UpdateManager::update_gui(void *param) {
         ESP_LOGE("UpdateManager", "Failed to set range header will trying to download chunk of data! Error: %s. Will try again in 2 seconds", esp_err_to_name(err));
         esp_http_client_cleanup(http_client);
         vTaskDelay(pdMS_TO_TICKS(2000));
+        continue;
       }
 
       err = esp_http_client_open(http_client, 0);
@@ -93,6 +95,7 @@ void UpdateManager::update_gui(void *param) {
         ESP_LOGE("UpdateManager", "Failed to call esp_http_client_open! Error: %s. Will try again in 2 seconds", esp_err_to_name(err));
         esp_http_client_cleanup(http_client);
         vTaskDelay(pdMS_TO_TICKS(2000));
+        continue;
       }
 
       int64_t err_code = esp_http_client_fetch_headers(http_client);
@@ -153,6 +156,7 @@ void UpdateManager::update_gui(void *param) {
               if (http_client == NULL) {
                 ESP_LOGE("UpdateManager", "Failed to init http_client. Got NULL! Will try again in 2 seconds.");
                 vTaskDelay(pdMS_TO_TICKS(2000));
+                continue;
               }
 
               std::string range_header = "bytes=";
@@ -165,6 +169,7 @@ void UpdateManager::update_gui(void *param) {
                 ESP_LOGE("UpdateManager", "Failed to set range header will trying to download chunk of data! Error: %s. Will try again in 2 seconds", esp_err_to_name(err));
                 esp_http_client_cleanup(http_client);
                 vTaskDelay(pdMS_TO_TICKS(2000));
+                continue;
               }
 
               err = esp_http_client_open(http_client, 0);
@@ -172,6 +177,7 @@ void UpdateManager::update_gui(void *param) {
                 ESP_LOGE("UpdateManager", "Failed to call esp_http_client_open! Error: %s. Will try again in 2 seconds", esp_err_to_name(err));
                 esp_http_client_cleanup(http_client);
                 vTaskDelay(pdMS_TO_TICKS(2000));
+                continue;
               }
 
               int64_t err_code = esp_http_client_fetch_headers(http_client);
