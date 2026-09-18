@@ -20,10 +20,11 @@ esp_err_t ConfigManager::load_config() {
   fseek(f, 0, SEEK_SET);
 
   char *read_buffer = NULL;
-  if (file_size != 0) {
-    read_buffer = (char *)malloc(file_size);
+  if (file_size > 0) {
+    // One extra byte for the null terminator, cJSON_Parse expects a null-terminated string.
+    read_buffer = (char *)malloc(file_size + 1);
     if (read_buffer == NULL) {
-      ESP_LOGE("ConfigManager", "Failed to allocate %ld bytes for read buffer while reading config from LittleFS.", file_size);
+      ESP_LOGE("ConfigManager", "Failed to allocate %ld bytes for read buffer while reading config from LittleFS.", file_size + 1);
       fclose(f);
       return ESP_ERR_NOT_FINISHED;
     }
@@ -33,8 +34,14 @@ esp_err_t ConfigManager::load_config() {
     return ESP_ERR_NOT_FINISHED;
   }
 
-  fread(read_buffer, 1, file_size, f);
+  size_t bytes_read = fread(read_buffer, 1, file_size, f);
   fclose(f);
+  if (bytes_read != (size_t)file_size) {
+    ESP_LOGE("ConfigManager", "Read %zu of %ld bytes from config file.", bytes_read, file_size);
+    free(read_buffer);
+    return ESP_ERR_NOT_FINISHED;
+  }
+  read_buffer[bytes_read] = '\0';
 
   cJSON *json = cJSON_Parse(read_buffer);
   if (json == NULL) {
