@@ -409,6 +409,10 @@ esp_err_t UpdateManager::_setup_http_client(esp_http_client_handle_t *client, st
   };
 
   *client = esp_http_client_init(&config);
+  if (*client == NULL) {
+    ESP_LOGE("UpdateManager", "Failed to init HTTP client for %s.", download_url);
+    return ESP_ERR_NOT_FINISHED;
+  }
 
   if (offset >= 0 && length > 0) {
     std::string range_header = "bytes=";
@@ -446,6 +450,9 @@ esp_err_t UpdateManager::_download_data(std::vector<uint8_t> *return_data, const
         xSemaphoreGive(UpdateManager::_download_data_store_mutex);
         return ESP_ERR_NOT_FINISHED;
       }
+    } else {
+      UpdateManager::_download_data_store = nullptr;
+      xSemaphoreGive(UpdateManager::_download_data_store_mutex);
     }
   }
   return ESP_ERR_NOT_FINISHED;
