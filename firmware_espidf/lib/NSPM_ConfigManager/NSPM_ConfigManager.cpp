@@ -8,6 +8,7 @@
 #include <esp_log.h>
 #include <esp_mac.h>
 #include <esp_wifi.h>
+#include <string.h>
 
 ESP_EVENT_DEFINE_BASE(NSPM_CONFIGMANAGER_EVENT);
 
@@ -69,10 +70,12 @@ void NSPM_ConfigManager::_mqtt_event_handler(void *arg, esp_event_base_t event_b
     NSPM_ConfigManager::_mqtt_command_topic.append(ConfigManager::wifi_hostname);
     NSPM_ConfigManager::_mqtt_command_topic.append("/command");
 
-    // Wait until subscribe is successful
-    while (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_command_topic.c_str()) != ESP_OK) {
-      ESP_LOGE("NSPM_ConfigManager", "Tried to subscribe to NSPanel command topic but subscribe call was unsuccessful! Will try again.");
-      vTaskDelay(pdMS_TO_TICKS(100));
+    // This runs on the MQTT client task. Do not retry in a loop here: while
+    // this handler runs, MQTT_EVENT_DISCONNECTED cannot be dispatched, so a
+    // retry loop would spin forever if the link drops. A failed subscribe is
+    // recovered by the next MQTT_EVENT_CONNECTED.
+    if (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_command_topic.c_str()) != ESP_OK) {
+      ESP_LOGE("NSPM_ConfigManager", "Failed to subscribe to NSPanel command topic after MQTT connect.");
     }
 
     // Resubscribe to manager status topic
@@ -80,9 +83,8 @@ void NSPM_ConfigManager::_mqtt_event_handler(void *arg, esp_event_base_t event_b
     NSPM_ConfigManager::_mqtt_manager_status_topic.append(NSPM_ConfigManager::get_manager_address());
     NSPM_ConfigManager::_mqtt_manager_status_topic.append("/status/status");
 
-    while (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_manager_status_topic.c_str()) != ESP_OK) {
-      ESP_LOGE("NSPM_ConfigManager", "Tried to subscribe to manager status topic but subscribe call was unsuccessful! Will try again.");
-      vTaskDelay(pdMS_TO_TICKS(100));
+    if (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_manager_status_topic.c_str()) != ESP_OK) {
+      ESP_LOGE("NSPM_ConfigManager", "Failed to subscribe to manager status topic after MQTT connect.");
     }
 
     // Broker sessions are clean by default, so all prior subscriptions were
@@ -150,10 +152,12 @@ void NSPM_ConfigManager::_handle_register_accept(const char *data, size_t data_l
     NSPM_ConfigManager::_mqtt_manager_command_topic = "nspanel/mqttmanager_";
     NSPM_ConfigManager::_mqtt_manager_command_topic.append(NSPM_ConfigManager::_manager_address);
     NSPM_ConfigManager::_mqtt_manager_command_topic.append("/command");
-    // Subscribe to where the NSPanel Manager container will send the config for this panel
-    while (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_config_topic) != ESP_OK) {
-      ESP_LOGE("NSPM_ConfigManager", "Failed to subscribe to NSPanel config topic '%s'.", NSPM_ConfigManager::_mqtt_config_topic.c_str());
-      vTaskDelay(pdMS_TO_TICKS(500));
+    // Subscribe to where the NSPanel Manager container will send the config for this panel.
+    // We are on the MQTT client task, so hand retries off to a separate task.
+    if (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_config_topic) != ESP_OK) {
+      ESP_LOGE("NSPM_ConfigManager", "Failed to subscribe to NSPanel config topic '%s'. Will retry from a separate task.", NSPM_ConfigManager::_mqtt_config_topic.c_str());
+      xTaskCreatePinnedToCore(NSPM_ConfigManager::_task_resubscribe_config_topic, "resub_cfg_topic", 4096, NULL, 2, NULL, 1);
+      return;
     }
 
     ESP_LOGI("NSPM_ConfigManager", "Register accept fully processed. Subscribed to panel config topic: %s", NSPM_ConfigManager::_mqtt_config_topic.c_str());
@@ -163,26 +167,39 @@ void NSPM_ConfigManager::_handle_register_accept(const char *data, size_t data_l
 void NSPM_ConfigManager::_handle_new_config_data(const char *data, size_t data_length) {
   ESP_LOGD("NSPM_ConfigManager", "Received new config data, start processing.");
   if (xSemaphoreTake(NSPM_ConfigManager::_config_mutex, pdMS_TO_TICKS(5000))) {
+    // The same retained config is typically delivered several times in a row
+    // after an MQTT reconnect (config topic re-subscribe, register_accept
+    // re-subscribe and the manager's own re-send). Every CONFIG_LOADED makes
+    // several components re-subscribe and redraw, so skip exact duplicates.
+    if (NSPM_ConfigManager::_config != NULL && NSPM_ConfigManager::_last_config_data.size() == data_length && memcmp(NSPM_ConfigManager::_last_config_data.data(), data, data_length) == 0) {
+      xSemaphoreGive(NSPM_ConfigManager::_config_mutex);
+      ESP_LOGD("NSPM_ConfigManager", "Received config identical to current config, ignoring.");
+      return;
+    }
+
     bool trigger_new_config_event = false;
     NSPanelConfig *new_config = nspanel_config__unpack(NULL, data_length, (const uint8_t *)data);
     if (new_config != NULL) [[likely]] {
       NSPM_ConfigManager::_config = std::shared_ptr<NSPanelConfig>(new_config, &NSPM_ConfigManager::_delete_nspanelconfig_object_from_shared_ptr);
+      NSPM_ConfigManager::_last_config_data.assign(data, data + data_length);
       trigger_new_config_event = true;
     } else {
       ESP_LOGE("NSPM_ConfigManager", "Received new config but failed to parse into protobuf object.");
     }
     xSemaphoreGive(NSPM_ConfigManager::_config_mutex);
 
-    // Unsubscribe from old topic
-    MqttManager::unsubscribe(NSPM_ConfigManager::_mqtt_manager_status_topic);
-    // Resubscribe to manager status topic
-    NSPM_ConfigManager::_mqtt_manager_status_topic = "nspanel/mqttmanager_";
-    NSPM_ConfigManager::_mqtt_manager_status_topic.append(NSPM_ConfigManager::get_manager_address());
-    NSPM_ConfigManager::_mqtt_manager_status_topic.append("/status/status");
-
-    while (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_manager_status_topic.c_str()) != ESP_OK) {
-      ESP_LOGE("NSPM_ConfigManager", "Tried to subscribe to manager status topic but subscribe call was unsuccessful! Will try again.");
-      vTaskDelay(pdMS_TO_TICKS(100));
+    // Move the manager status subscription if the manager address has changed.
+    // We are on the MQTT client task: no retry loop here, a failed subscribe
+    // is recovered by the next MQTT_EVENT_CONNECTED.
+    std::string new_manager_status_topic = "nspanel/mqttmanager_";
+    new_manager_status_topic.append(NSPM_ConfigManager::get_manager_address());
+    new_manager_status_topic.append("/status/status");
+    if (new_manager_status_topic != NSPM_ConfigManager::_mqtt_manager_status_topic) {
+      MqttManager::unsubscribe(NSPM_ConfigManager::_mqtt_manager_status_topic);
+      NSPM_ConfigManager::_mqtt_manager_status_topic = new_manager_status_topic;
+      if (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_manager_status_topic.c_str()) != ESP_OK) {
+        ESP_LOGE("NSPM_ConfigManager", "Failed to subscribe to manager status topic.");
+      }
     }
 
     if (trigger_new_config_event) {
@@ -239,6 +256,9 @@ esp_err_t NSPM_ConfigManager::replace_config(std::shared_ptr<NSPanelConfig> *con
   if (NSPM_ConfigManager::_config != NULL) {
     if (xSemaphoreTake(NSPM_ConfigManager::_config_mutex, pdMS_TO_TICKS(5000))) {
       NSPM_ConfigManager::_config = *config;
+      // Config now differs from what the manager last sent; make sure the
+      // next config from the manager is applied even if it is byte-identical.
+      NSPM_ConfigManager::_last_config_data.clear();
       xSemaphoreGive(NSPM_ConfigManager::_config_mutex);
       esp_event_post(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, NULL, 0, pdMS_TO_TICKS(250));
       return ESP_OK;
