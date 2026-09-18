@@ -260,6 +260,13 @@ void InterfaceManager::_update_manager_event_handler(void *arg, esp_event_base_t
     break;
   }
 
+  case updatemanager_event_t::FIRMWARE_UPDATE_FAILED: {
+    // The running firmware is untouched, go back to normal operation.
+    InterfaceManager::_screensaver_blocked = false;
+    InterfaceManager::show_default_page();
+    break;
+  }
+
   case updatemanager_event_t::LITTLEFS_UPDATE_FINISHED: {
     LoadingPage::set_loading_text("LittleFS update complete.");
     LoadingPage::set_secondary_text("100%");
