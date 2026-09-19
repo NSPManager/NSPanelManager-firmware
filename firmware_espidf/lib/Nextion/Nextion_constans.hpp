@@ -27,6 +27,10 @@
 #define NEX_RET_INVALID_VARIABLE (0x1A)
 #define NEX_RET_INVALID_OPERATION (0x1B)
 
+// OTA update protocol responses
+#define NEX_RET_UPDATE_READY_FOR_NEXT_CHUNK (0x05)
+#define NEX_RET_UPDATE_JUMP_TO_OFFSET (0x08)
+
 // Data received without command execution
 #define NEX_OUT_STARTUP (0x00)
 #define NEX_OUT_BUFFER_OVERFLOW (0x24)
