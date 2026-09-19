@@ -1,3 +1,4 @@
+#include <BuzzerManager.hpp>
 #include <ButtonManager.hpp>
 #include <ConfigManager.hpp>
 #include <InterfaceManager.hpp>
@@ -156,6 +157,9 @@ extern "C" void app_main() {
 
   // Setup ButtonManager to handle physical buttons and relays
   ButtonManager::init();
+
+  // Setup BuzzerManager to drive the buzzer and track panel events that can have sounds
+  BuzzerManager::init();
 
   // Only start managers for actual functionality if MQTT is configured.
   if (!ConfigManager::mqtt_server.empty()) {
