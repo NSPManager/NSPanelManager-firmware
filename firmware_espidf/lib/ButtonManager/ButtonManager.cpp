@@ -635,10 +635,7 @@ void ButtonManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
       ESP_LOGW("ButtonManager", "No config currently loaded/set. Unable to determine if received message was from a relay group. Will not change any relay state.");
     }
   } else if (event_id == MQTT_EVENT_CONNECTED) {
-    ESP_LOGD("ButtonManager", "MQTT connected, resubscribing to topics.");
-    ButtonManager::init_mqtt();
-    ButtonManager::_handle_mqtt_relay_group_topics();
-
+    // MqttManager re-subscribes the relay and relay group topics after a reconnect.
     // Publish current state to relay state topics
     bool state = ButtonManager::_get_relay_state(1);
     MqttManager::publish(ButtonManager::_relay1_state_topic, state ? "1" : "0", strlen(state ? "1" : "0"), true);

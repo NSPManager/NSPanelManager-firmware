@@ -79,7 +79,7 @@ private:
   static void _shared_ptr_weather_update_cleanup(NSPanelWeatherUpdate *data);
 
   /**
-   * Subscribe to relevant MQTT topics
+   * Subscribe to relevant MQTT topics, moving existing subscriptions if the manager address or inside temperature topic changed.
    */
   static void _subscribe_to_mqtt_topics();
 
@@ -105,6 +105,9 @@ private:
 
   // MQTT state topic for any configured inside temperature sensor. In case of empty, use internal NTC thermistor.
   static inline MutexWrapped<std::string> _inside_temperature_sensor_state_topic;
+
+  // Manager address the status topics were last subscribed for.
+  static inline MutexWrapped<std::string> _subscribed_manager_address;
 
   // What brightness show the screensaver show. Default to 50%
   static inline std::atomic<uint8_t> _screensaver_brightness;

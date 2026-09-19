@@ -4,6 +4,7 @@
 #include <freertos/task.h>
 #include <mqtt_client.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 class MqttManager {
@@ -24,16 +25,22 @@ public:
   static bool connected();
 
   /**
-   * @brief Subscribe to given MQTT topic.
+   * @brief Add the given MQTT topic to the set of topics the panel stays subscribed to.
+   * Never blocks on the network, so it is safe to call from any event handler. The
+   * subscription task sends the SUBSCRIBE, retries it until the broker acknowledges it,
+   * and subscribes again after every reconnect. Subscribing to a topic that is already
+   * in the set does nothing.
    * @param mqtt_topic: The MQTT topic to subscribe to.
-   * @return ESP_OK in case it was successful or ESP_ERR_NOT_FINISHED in case subscription failed.
+   * @return ESP_OK once the topic is in the set, or ESP_ERR_INVALID_STATE if the MQTT client was never started.
    */
   static esp_err_t subscribe(std::string mqtt_topic);
 
   /**
-   * @brief Unsubscribe to given MQTT topic.
+   * @brief Remove the given MQTT topic from the set of subscribed topics and queue an UNSUBSCRIBE.
+   * Never blocks on the network. Unsubscribes and subscribes reach the broker in the order they were made,
+   * so unsubscribing and then subscribing to the same topic makes the broker send its retained message again.
    * @param mqtt_topic: The MQTT topic to unsubscribe from.
-   * @return ESP_OK in case it was successful or ESP_ERR_NOT_FINISHED in case unsubscription failed.
+   * @return ESP_OK once the unsubscribe is queued, or ESP_ERR_INVALID_STATE if the MQTT client was never started.
    */
   static esp_err_t unsubscribe(std::string mqtt_topic);
 
@@ -74,6 +81,61 @@ private:
    * MQTT_EVENT_DISCONNECTED or when a new CONNECTED event supersedes it.
    */
   static void _task_send_online_update(void *param);
+
+  /**
+   * Task that owns all SUBSCRIBE/UNSUBSCRIBE traffic. Sending either can block for
+   * seconds on a weak link, so it never happens on the MQTT client task or the default
+   * event loop. Woken by subscribe()/unsubscribe()/connect and otherwise every second
+   * to retry failed or unacknowledged subscribes.
+   */
+  static void _task_manage_subscriptions(void *param);
+
+  /**
+   * Handle a SUBACK (MQTT_EVENT_SUBSCRIBED) for the given message id. Must be called with _subscriptions_mutex held.
+   */
+  static void _handle_suback(int msg_id, bool failed);
+
+  enum class SubscriptionState {
+    PENDING,   // Needs a SUBSCRIBE sent (new, after reconnect, or after a failure).
+    IN_FLIGHT, // SUBSCRIBE sent (or being sent), waiting for SUBACK.
+    SUBSCRIBED // Broker acknowledged the subscription.
+  };
+
+  struct Subscription {
+    std::string topic;
+    SubscriptionState state = SubscriptionState::PENDING;
+    int msg_id = -1;              // Message id of the in-flight SUBSCRIBE, -1 while the send call is running.
+    int64_t sent_ms = 0;          // When the in-flight SUBSCRIBE was sent.
+    int64_t next_attempt_ms = 0;  // Earliest time to send the next SUBSCRIBE (backoff after failures).
+    uint8_t failures = 0;         // Consecutive failed attempts, used for backoff.
+  };
+
+  /**
+   * Topics the panel wants to be subscribed to. Guarded by _subscriptions_mutex.
+   */
+  static inline std::vector<Subscription> _subscriptions;
+
+  /**
+   * Topics waiting for an UNSUBSCRIBE, in call order. Guarded by _subscriptions_mutex.
+   */
+  static inline std::vector<std::string> _pending_unsubscribes;
+
+  /**
+   * SUBACKs that arrived before the subscription task recorded the message id of the
+   * SUBSCRIBE (esp-mqtt can process the SUBACK as soon as the send call releases its lock).
+   * Pairs of (msg_id, failed). Guarded by _subscriptions_mutex, kept short.
+   */
+  static inline std::vector<std::pair<int, bool>> _early_subacks;
+
+  /**
+   * Guards _subscriptions, _pending_unsubscribes and _early_subacks. Never held across a network call.
+   */
+  static inline SemaphoreHandle_t _subscriptions_mutex = NULL;
+
+  /**
+   * Handle of the subscription task, notified whenever there is work to do.
+   */
+  static inline TaskHandle_t _manage_subscriptions_task_handle = NULL;
 
   /**
    * The configuration used to init and setup the MQTT client.
