@@ -27,7 +27,7 @@ void ScreensaverPage::init() {
   esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, ESP_EVENT_ANY_ID, ScreensaverPage::_nspm_config_event_handler, NULL);
   esp_event_handler_register(STATUSUPDATEMANAGER_EVENT, statusupdatemanagerevent_t::AVERAGE_TEMP_UPDATE, ScreensaverPage::_new_temperature_event, NULL);
 
-  ScreensaverPage::_subscribe_to_mqtt_topics(true);
+  ScreensaverPage::_subscribe_to_mqtt_topics();
 }
 
 std::vector<uint8_t> _download_data_store;
@@ -214,8 +214,6 @@ void ScreensaverPage::_mqtt_event_handler(void *arg, esp_event_base_t event_base
         ESP_LOGW("ScreensaverPage", "Weather update data mutex is NULL. Will wait for next forecast.");
       }
     }
-  } else if (event_id == MQTT_EVENT_CONNECTED) {
-    ScreensaverPage::_subscribe_to_mqtt_topics(true);
   }
 }
 
@@ -223,7 +221,7 @@ void ScreensaverPage::_nspm_config_event_handler(void *arg, esp_event_base_t eve
   switch (event_id) {
   case nspm_configmanager_event::CONFIG_LOADED: { // New config loaded while showing screensaver. Update screen
     // Only touches MQTT if the manager address or inside temperature topic changed.
-    ScreensaverPage::_subscribe_to_mqtt_topics(false);
+    ScreensaverPage::_subscribe_to_mqtt_topics();
     if (ScreensaverPage::_currently_shown) {
       std::shared_ptr<NSPanelConfig> new_config;
       if (NSPM_ConfigManager::get_config(&new_config) == ESP_OK) [[likely]] {
@@ -278,12 +276,9 @@ void ScreensaverPage::_shared_ptr_weather_update_cleanup(NSPanelWeatherUpdate *d
   nspanel_weather_update__free_unpacked(data, NULL);
 }
 
-void ScreensaverPage::_subscribe_to_mqtt_topics(bool force) {
-  // Called from the MQTT client task (on connect) and the default event loop
-  // (on config load). Neither may block waiting for MQTT: the default event
-  // loop also delivers WIFI_EVENT_STA_DISCONNECTED, whose handler reconnects
-  // Wi-Fi, so waiting there for MQTT to come back deadlocks the panel. Each
-  // subscribe is tried once; failures are recovered on the next MQTT_EVENT_CONNECTED.
+void ScreensaverPage::_subscribe_to_mqtt_topics() {
+  // MqttManager keeps these subscribed across reconnects, so this only needs to
+  // run when the manager address or inside temperature topic changes.
   std::string manager_address = NSPM_ConfigManager::get_manager_address();
   if (manager_address.empty()) {
     ESP_LOGE("ScreensaverPage", "Failed to subscribe to relevant MQTT topics as no manager address is set.");
@@ -296,23 +291,26 @@ void ScreensaverPage::_subscribe_to_mqtt_topics(bool force) {
     inside_temperature_sensor_mqtt_topic = std::string(config->inside_temperature_sensor_mqtt_topic);
   }
 
-  if (!force && manager_address == ScreensaverPage::_subscribed_manager_address.get() && inside_temperature_sensor_mqtt_topic == ScreensaverPage::_inside_temperature_sensor_state_topic.get()) {
-    return; // Already subscribed to these topics.
-  }
-  ScreensaverPage::_subscribed_manager_address.set(manager_address);
-  ScreensaverPage::_inside_temperature_sensor_state_topic.set(inside_temperature_sensor_mqtt_topic);
-
-  std::string mqtt_base_topic = "nspanel/mqttmanager_";
-  mqtt_base_topic.append(manager_address);
-
-  for (const char *suffix : {"/status/time", "/status/date", "/status/ampm", "/status/weather"}) {
-    std::string topic = mqtt_base_topic;
-    topic.append(suffix);
-    if (MqttManager::subscribe(topic) != ESP_OK) {
-      ESP_LOGE("ScreensaverPage", "Failed to subscribe to %s for screensaver page.", topic.c_str());
+  std::string old_manager_address = ScreensaverPage::_subscribed_manager_address.get();
+  std::string old_inside_temperature_sensor_mqtt_topic = ScreensaverPage::_inside_temperature_sensor_state_topic.get();
+  if (manager_address != old_manager_address) {
+    for (const char *suffix : {"/status/time", "/status/date", "/status/ampm", "/status/weather"}) {
+      if (!old_manager_address.empty()) {
+        MqttManager::unsubscribe("nspanel/mqttmanager_" + old_manager_address + suffix);
+      }
+      std::string topic = "nspanel/mqttmanager_" + manager_address + suffix;
+      if (MqttManager::subscribe(topic) != ESP_OK) {
+        ESP_LOGE("ScreensaverPage", "Failed to subscribe to %s for screensaver page.", topic.c_str());
+      }
     }
+    ScreensaverPage::_subscribed_manager_address.set(manager_address);
   }
 
+  // subscribe() does nothing if the topic is already subscribed, so always call it.
+  if (inside_temperature_sensor_mqtt_topic != old_inside_temperature_sensor_mqtt_topic && !old_inside_temperature_sensor_mqtt_topic.empty()) {
+    MqttManager::unsubscribe(old_inside_temperature_sensor_mqtt_topic);
+  }
+  ScreensaverPage::_inside_temperature_sensor_state_topic.set(inside_temperature_sensor_mqtt_topic);
   if (!inside_temperature_sensor_mqtt_topic.empty()) {
     ESP_LOGD("ScreensaverPage", "Subscribing to inside temperature sensor state topic: %s", inside_temperature_sensor_mqtt_topic.c_str());
     if (MqttManager::subscribe(inside_temperature_sensor_mqtt_topic) != ESP_OK) {

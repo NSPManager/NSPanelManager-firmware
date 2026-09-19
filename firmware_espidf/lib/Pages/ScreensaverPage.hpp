@@ -79,10 +79,9 @@ private:
   static void _shared_ptr_weather_update_cleanup(NSPanelWeatherUpdate *data);
 
   /**
-   * Subscribe to relevant MQTT topics. Never blocks waiting for MQTT.
-   * @param force: Subscribe even if the manager address and inside temperature topic are unchanged since the last call.
+   * Subscribe to relevant MQTT topics, moving existing subscriptions if the manager address or inside temperature topic changed.
    */
-  static void _subscribe_to_mqtt_topics(bool force);
+  static void _subscribe_to_mqtt_topics();
 
   // Vars:
   // The most current weather data for forecast and current weather

@@ -87,13 +87,6 @@ private:
   static void _start_register_request_task();
 
   /**
-   * @brief Short-lived task that re-subscribes to _mqtt_config_topic after an
-   * MQTT reconnect. Runs in its own task so its retry loop does not stall the
-   * MQTT event loop.
-   */
-  static void _task_resubscribe_config_topic(void *arg);
-
-  /**
    * @brief Handle a "register_accept" request from MQTT
    * @param data: Received data from MQTT
    * @param data_length: Number of bytes that were received
