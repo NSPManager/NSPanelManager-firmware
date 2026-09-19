@@ -289,9 +289,11 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
   } else if (data->size() >= 5 && strncmp(data->data(), "comok", strlen("comok")) == 0) {
     ESP_LOGD("Nextion", "Connected to Nextion display, comok data: %s", data->data());
     esp_event_post(NEXTION_EVENT, nextion_event_t::CONNECTED, NULL, 0, pdMS_TO_TICKS(16));
-  } else if (data->data()[0] == 0x05) {
+  } else if (data->data()[0] == NEX_RET_INVALID_PICTURE_ID) {
+    ESP_LOGW("Nextion", "NEX_RET_INVALID_PICTURE_ID (0x04): a command or HMI component references a picture ID that does not exist in the resource list");
+  } else if (data->data()[0] == NEX_RET_UPDATE_READY_FOR_NEXT_CHUNK) {
     esp_event_post(NEXTION_EVENT, nextion_event_t::UPDATE_READY_FOR_NEXT_CHUNK, NULL, 0, pdMS_TO_TICKS(1000));
-  } else if (data->data()[0] == 0x08) {
+  } else if (data->data()[0] == NEX_RET_UPDATE_JUMP_TO_OFFSET) {
     if (data->size() >= 5) [[likely]] {
       size_t byte_offset;
       byte_offset = data->data()[1];
@@ -301,7 +303,7 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
 
       esp_event_post(NEXTION_EVENT, nextion_event_t::UPDATE_JUMP_TO_OFFSET, &byte_offset, sizeof(byte_offset), pdMS_TO_TICKS(1000));
     } else {
-      ESP_LOGE("Nextion", "Not enough bytes sent for 0x08 update byte offset! Only read %zu bytes.", data->size());
+      ESP_LOGE("Nextion", "Not enough bytes sent for NEX_RET_UPDATE_JUMP_TO_OFFSET (0x08)! Only read %zu bytes.", data->size());
     }
   } else {
     ESP_LOGW("Nextion", "Unknown event data from Nextion: %.*s", data->size(), data->data());
