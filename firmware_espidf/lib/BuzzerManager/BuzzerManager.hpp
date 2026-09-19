@@ -7,6 +7,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <memory>
+#include <string>
 #include <vector>
 
 struct buzzer_tone_step_t {
@@ -33,6 +34,13 @@ public:
   static void init();
 
   /**
+   * @brief Subscribe to the raw buzzer command topic, nspanel/<mac>/buzzer_raw_command. Publishing an RTTTL
+   * string to it plays that sound, an empty message stops playback. Retained messages are ignored so a
+   * sound is not replayed on every reconnect. Call after MqttManager::start().
+   */
+  static void init_mqtt();
+
+  /**
    * @brief Play a sequence of tones and pauses. Does not block, each step is advanced from an
    * esp_timer callback. Calling this while a sequence is playing restarts with the new one.
    * @param steps: The sequence to play. Playback keeps its own reference until it finishes.
@@ -45,6 +53,11 @@ public:
   static void stop();
 
 private:
+  /**
+   * @brief Handle RTTTL strings published to the raw buzzer command topic.
+   */
+  static void _mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
   /**
    * @brief Handle touch events from the Nextion display. Raise a TOUCH event on press, or on release
    * for components that only send release events. A release following a press of the same component
@@ -88,6 +101,8 @@ private:
   static inline uint8_t _pressed_page = 0;
   static inline uint8_t _pressed_component = 0;
 
+  static inline std::string _raw_command_topic;
+
   static constexpr const ledc_mode_t _ledc_mode = LEDC_LOW_SPEED_MODE;
   static constexpr const ledc_timer_t _ledc_timer = LEDC_TIMER_1;
   static constexpr const ledc_channel_t _ledc_channel = LEDC_CHANNEL_1;
@@ -99,5 +114,6 @@ private:
   static constexpr const gpio_num_t _buzzer_pin = gpio_num_t::GPIO_NUM_21;
 #endif
   // TODO: Open question: does the custom PCB (BOARD_CUSTOM) have a buzzer, and on which pin? Until that is known
-  // the buzzer is only enabled for BOARD_SONOFF. On other boards init() leaves it disabled, so play() does nothing.
+  // the buzzer is only enabled for BOARD_SONOFF. On other boards init() leaves it disabled, so play() does nothing
+  // and init_mqtt() does not subscribe to the raw command topic.
 };

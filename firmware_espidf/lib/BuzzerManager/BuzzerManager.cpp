@@ -1,6 +1,9 @@
 #include <BuzzerManager.hpp>
 #include <ConfigManager.hpp>
+#include <MqttManager.hpp>
 #include <Nextion_event.hpp>
+#include <RtttlParser.hpp>
+#include <WiFiManager.hpp>
 #include <esp_log.h>
 
 void BuzzerManager::init() {
@@ -56,6 +59,16 @@ void BuzzerManager::init() {
   // TODO: Enable once it is known whether the custom PCB has a buzzer, see _buzzer_pin in BuzzerManager.hpp
   ESP_LOGI("BuzzerManager", "No buzzer defined for this board, buzzer is disabled.");
 #endif
+}
+
+void BuzzerManager::init_mqtt() {
+  if (!BuzzerManager::_initialized) {
+    return;
+  }
+
+  BuzzerManager::_raw_command_topic = std::string("nspanel/") + WiFiManager::mac_string() + "/buzzer_raw_command";
+  MqttManager::register_handler(MQTT_EVENT_DATA, &BuzzerManager::_mqtt_event_handler, NULL);
+  MqttManager::subscribe(BuzzerManager::_raw_command_topic);
 }
 
 void BuzzerManager::play(std::shared_ptr<const std::vector<buzzer_tone_step_t>> steps) {
@@ -142,4 +155,40 @@ void BuzzerManager::_handle_event(buzzer_event_t event) {
 
   // TODO: Play the sound NSPanelManager configured for this event, once NSPanelConfig carries event to RTTTL
   // mappings. Parse the RTTTL when the config is loaded, not here, and play() the result.
+}
+
+void BuzzerManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
+  esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
+  if (event->topic_len <= 0 || BuzzerManager::_raw_command_topic.compare(0, std::string::npos, event->topic, event->topic_len) != 0) {
+    return;
+  }
+
+  if (event->retain) {
+    ESP_LOGW("BuzzerManager", "Ignoring retained message on %s. Publish sounds without the retain flag.", BuzzerManager::_raw_command_topic.c_str());
+    return;
+  }
+
+  if (event->total_data_len != event->data_len) {
+    ESP_LOGE("BuzzerManager", "RTTTL string of %d bytes is too long to receive in one MQTT message, ignoring it.", event->total_data_len);
+    return;
+  }
+
+  if (event->data_len == 0) {
+    ESP_LOGD("BuzzerManager", "Got empty raw buzzer command, stopping playback.");
+    BuzzerManager::stop();
+    return;
+  }
+
+  // Parsing is quick and play() does not block on playback, so this is safe in the MQTT event handler
+  std::string rtttl(event->data, event->data_len);
+  auto steps = std::make_shared<std::vector<buzzer_tone_step_t>>();
+  esp_err_t result = RtttlParser::parse(rtttl, steps.get());
+  if (result == ESP_OK) {
+    ESP_LOGD("BuzzerManager", "Playing %zu steps from raw buzzer command.", steps->size());
+    BuzzerManager::play(std::move(steps));
+  } else if (result == ESP_ERR_INVALID_SIZE) {
+    ESP_LOGE("BuzzerManager", "RTTTL string is longer than %zu steps or %lu ms, ignoring it: %s", RtttlParser::max_steps, RtttlParser::max_total_duration_ms, rtttl.c_str());
+  } else {
+    ESP_LOGE("BuzzerManager", "Failed to parse RTTTL string, ignoring it: %s", rtttl.c_str());
+  }
 }
