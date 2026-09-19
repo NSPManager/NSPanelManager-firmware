@@ -11,7 +11,7 @@
 #include <RoomManager.hpp>
 #include <RoomManager_event.hpp>
 #include <esp_log.h>
-#include <format>
+#include <string>
 
 void EntitiesPage::show(display_type_t display_type) {
   esp_log_level_set("EntitiesPage", ConfigManager::log_level);
@@ -137,7 +137,7 @@ void EntitiesPage::_update_displayed_items() {
 
 void EntitiesPage::_update_displayed_item_in_slot(NSPanelRoomEntitiesPage__EntitySlot *slot_data, const GUI_ITEMS_PAGE_ITEM_DATA page_slot) {
   if (slot_data != nullptr) {
-    Nextion::set_component_text(page_slot.label_name, std::format("   {}", slot_data->name).c_str(), 250);
+    Nextion::set_component_text(page_slot.label_name, (std::string("   ") + slot_data->name).c_str(), 250);
     Nextion::set_component_text(page_slot.button_name, slot_data->icon, 250);
     Nextion::set_component_foreground(page_slot.button_name, slot_data->pco, 250);
     Nextion::set_component_pco2(page_slot.button_name, slot_data->pco2, 250);

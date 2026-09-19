@@ -68,6 +68,7 @@ void UpdateManager::update_gui(void *param) {
       if (http_client == NULL) {
         ESP_LOGE("UpdateManager", "Failed to init http_client. Got NULL! Will try again in 2 seconds.");
         vTaskDelay(pdMS_TO_TICKS(2000));
+        continue;
       }
 
       std::string range_header = "bytes=";
@@ -85,6 +86,7 @@ void UpdateManager::update_gui(void *param) {
         ESP_LOGE("UpdateManager", "Failed to set range header will trying to download chunk of data! Error: %s. Will try again in 2 seconds", esp_err_to_name(err));
         esp_http_client_cleanup(http_client);
         vTaskDelay(pdMS_TO_TICKS(2000));
+        continue;
       }
 
       err = esp_http_client_open(http_client, 0);
@@ -92,6 +94,7 @@ void UpdateManager::update_gui(void *param) {
         ESP_LOGE("UpdateManager", "Failed to call esp_http_client_open! Error: %s. Will try again in 2 seconds", esp_err_to_name(err));
         esp_http_client_cleanup(http_client);
         vTaskDelay(pdMS_TO_TICKS(2000));
+        continue;
       }
 
       int64_t err_code = esp_http_client_fetch_headers(http_client);
@@ -150,6 +153,7 @@ void UpdateManager::update_gui(void *param) {
               if (http_client == NULL) {
                 ESP_LOGE("UpdateManager", "Failed to init http_client. Got NULL! Will try again in 2 seconds.");
                 vTaskDelay(pdMS_TO_TICKS(2000));
+                continue;
               }
 
               std::string range_header = "bytes=";
@@ -162,6 +166,7 @@ void UpdateManager::update_gui(void *param) {
                 ESP_LOGE("UpdateManager", "Failed to set range header will trying to download chunk of data! Error: %s. Will try again in 2 seconds", esp_err_to_name(err));
                 esp_http_client_cleanup(http_client);
                 vTaskDelay(pdMS_TO_TICKS(2000));
+                continue;
               }
 
               err = esp_http_client_open(http_client, 0);
@@ -169,6 +174,7 @@ void UpdateManager::update_gui(void *param) {
                 ESP_LOGE("UpdateManager", "Failed to call esp_http_client_open! Error: %s. Will try again in 2 seconds", esp_err_to_name(err));
                 esp_http_client_cleanup(http_client);
                 vTaskDelay(pdMS_TO_TICKS(2000));
+                continue;
               }
 
               int64_t err_code = esp_http_client_fetch_headers(http_client);
@@ -247,6 +253,8 @@ void UpdateManager::update_gui(void *param) {
     ESP_LOGE("UpdateManager", "Failed to get NSPanelConfig when trying to update GUI.");
   }
 
+  UpdateManager::_current_update_task = NULL;
+
   vTaskDelete(NULL);
 }
 
@@ -263,7 +271,8 @@ void UpdateManager::update_firmware(void *param) {
 #endif
 
   std::vector<uint8_t> data;
-  if (UpdateManager::_force_update || UpdateManager::_download_data(&data, firmware_md5_string.c_str(), -1, -1) == ESP_OK) {
+  // Always fetch the checksum, also for forced updates, so that it can be stored as the pending checksum for the firmware about to be flashed.
+  if (UpdateManager::_download_data(&data, firmware_md5_string.c_str(), -1, -1) == ESP_OK) {
     std::string md5_string = std::string((char *)data.data(), data.size());
     ESP_LOGD("UpdateManager", "Got new MD5 sum from manager: %s", md5_string.c_str());
 
@@ -277,6 +286,7 @@ void UpdateManager::update_firmware(void *param) {
       ESP_LOGI("UpdateManager", "New firmware available. Will update OTA.");
       if (UpdateManager::_update_firmware_ota() == ESP_OK) {
         ConfigManager::has_updated = true;
+        ConfigManager::md5_firmware_pending = md5_string;
         ConfigManager::save_config();
 
         ESP_LOGI("UpdateManager", "Firmware update complete. Stored firmware checksum will be updated on next successful boot.");
@@ -345,7 +355,14 @@ void UpdateManager::mark_boot_successful() {
 }
 
 void UpdateManager::update_internal_firmware_checksum() {
-  if (ConfigManager::has_updated) {
+  if (!ConfigManager::has_updated) {
+    return;
+  }
+
+  // Use the checksum recorded when the firmware was flashed. The manager may be serving a different firmware by now.
+  std::string md5_string = ConfigManager::md5_firmware_pending;
+  if (md5_string.empty()) {
+    // Update was installed by a firmware that did not record a pending checksum, fall back to asking the manager.
     std::string firmware_md5_string = "http://";
     firmware_md5_string.append(NSPM_ConfigManager::get_manager_address());
     firmware_md5_string.append(":");
@@ -358,28 +375,26 @@ void UpdateManager::update_internal_firmware_checksum() {
 #endif
 
     std::vector<uint8_t> data;
-    if (UpdateManager::_download_data(&data, firmware_md5_string.c_str(), -1, -1) == ESP_OK) {
-      std::string md5_string = std::string((char *)data.data(), data.size());
-
-      if (md5_string.compare(ConfigManager::md5_firmware) != 0) {
-        ConfigManager::md5_firmware = md5_string;
-        ConfigManager::has_updated = false;
-        // Save the existing config loaded into memory into the new LittleFS partition.
-        if (ConfigManager::save_config() == ESP_OK) {
-          ESP_LOGI("UpdateManager", "Updated stored firmware checksum to %s. Will reboot.", md5_string.c_str());
-        } else {
-          ESP_LOGE("UpdateManager", "Failed to save config!");
-        }
-
-        vTaskDelay(pdTICKS_TO_MS(10));
-        StatusUpdateManager::reboot();
-      } else {
-        ESP_LOGI("UpdateManager", "Stored firmware checksum is correct, will not update!");
-      }
-    } else {
+    if (UpdateManager::_download_data(&data, firmware_md5_string.c_str(), -1, -1) != ESP_OK) {
       ESP_LOGE("UpdateManager", "Failed to get firmware checksum from manager.");
+      return;
     }
+    md5_string = std::string((char *)data.data(), data.size());
   }
+
+  ConfigManager::md5_firmware = md5_string;
+  ConfigManager::md5_firmware_pending = "";
+  ConfigManager::has_updated = false;
+  // Save the existing config loaded into memory into the new LittleFS partition.
+  if (ConfigManager::save_config() == ESP_OK) {
+    ESP_LOGI("UpdateManager", "Updated stored firmware checksum to %s. Will reboot.", md5_string.c_str());
+  } else {
+    ESP_LOGE("UpdateManager", "Failed to save config!");
+  }
+
+  // Always reboot: InterfaceManager stays on the "Updated checksums, rebooting." page while has_updated was set.
+  vTaskDelay(pdTICKS_TO_MS(10));
+  StatusUpdateManager::reboot();
 }
 
 esp_err_t UpdateManager::_setup_http_client(esp_http_client_handle_t *client, std::vector<uint8_t> *return_data, const char *download_url, int64_t offset, int64_t length) {
@@ -390,6 +405,10 @@ esp_err_t UpdateManager::_setup_http_client(esp_http_client_handle_t *client, st
   config.event_handler = UpdateManager::_http_event_handler;
 
   *client = esp_http_client_init(&config);
+  if (*client == NULL) {
+    ESP_LOGE("UpdateManager", "Failed to init HTTP client for %s.", download_url);
+    return ESP_ERR_NOT_FINISHED;
+  }
 
   if (offset >= 0 && length > 0) {
     std::string range_header = "bytes=";
@@ -427,6 +446,9 @@ esp_err_t UpdateManager::_download_data(std::vector<uint8_t> *return_data, const
         xSemaphoreGive(UpdateManager::_download_data_store_mutex);
         return ESP_ERR_NOT_FINISHED;
       }
+    } else {
+      UpdateManager::_download_data_store = nullptr;
+      xSemaphoreGive(UpdateManager::_download_data_store_mutex);
     }
   }
   return ESP_ERR_NOT_FINISHED;
@@ -511,6 +533,7 @@ void UpdateManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
           ESP_LOGI("UpdateManager", "Received command to reboot. Will reboot NSPanel.");
           StatusUpdateManager::reboot();
         } else if (command_string.compare("firmware_update") == 0 && UpdateManager::_current_update_task == NULL) {
+          UpdateManager::_force_update = false;
           xTaskCreatePinnedToCore(UpdateManager::update_firmware, "update_firmware", 8192, NULL, 2, &UpdateManager::_current_update_task, 1);
         } else if (command_string.compare("firmware_update_force") == 0 && UpdateManager::_current_update_task == NULL) {
           UpdateManager::_force_update = true;
@@ -590,6 +613,7 @@ esp_err_t UpdateManager::_update_firmware_ota() {
   ret = esp_https_ota_begin(&config, &https_ota_handle);
   if (ret != ESP_OK) {
     ESP_LOGE("UpdateManager", "esp_https_ota_begin failed: %s", esp_err_to_name(ret));
+    esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::FIRMWARE_UPDATE_FAILED, NULL, 0, pdMS_TO_TICKS(500));
     return ESP_ERR_NOT_FINISHED;
   }
 
@@ -597,6 +621,8 @@ esp_err_t UpdateManager::_update_firmware_ota() {
   ret = esp_https_ota_get_img_desc(https_ota_handle, &app_desc);
   if (ret != ESP_OK) {
     ESP_LOGE("UpdateManager", "esp_https_ota_get_img_desc failed");
+    esp_https_ota_abort(https_ota_handle);
+    esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::FIRMWARE_UPDATE_FAILED, NULL, 0, pdMS_TO_TICKS(500));
     return ESP_ERR_NOT_FINISHED;
   }
 
@@ -636,17 +662,20 @@ esp_err_t UpdateManager::_update_firmware_ota() {
   // Finish the OTA update
   if (ret == ESP_OK) {
     ret = esp_https_ota_finish(https_ota_handle);
-    esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::FIRMWARE_UPDATE_FINISHED, NULL, 0, pdMS_TO_TICKS(500));
     if (ret == ESP_OK) {
+      esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::FIRMWARE_UPDATE_FINISHED, NULL, 0, pdMS_TO_TICKS(500));
       ESP_LOGI("UpdateManager", "Firmware OTA update successful.");
       return ESP_OK;
     } else {
-      ESP_LOGI("UpdateManager", "Firmware OTA update failed: %s", esp_err_to_name(ret));
+      esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::FIRMWARE_UPDATE_FAILED, NULL, 0, pdMS_TO_TICKS(500));
+      ESP_LOGE("UpdateManager", "Firmware OTA update failed: %s", esp_err_to_name(ret));
       return ESP_ERR_NOT_FINISHED;
     }
   } else {
-    esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::FIRMWARE_UPDATE_FINISHED, NULL, 0, pdMS_TO_TICKS(500));
-    ESP_LOGI("UpdateManager", "Firmware OTA update failed: %s", esp_err_to_name(ret));
+    // esp_https_ota_finish frees the handle on its own; on this path it must be released explicitly.
+    esp_https_ota_abort(https_ota_handle);
+    esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::FIRMWARE_UPDATE_FAILED, NULL, 0, pdMS_TO_TICKS(500));
+    ESP_LOGE("UpdateManager", "Firmware OTA update failed: %s", esp_err_to_name(ret));
     return ESP_ERR_NOT_FINISHED;
   }
 }

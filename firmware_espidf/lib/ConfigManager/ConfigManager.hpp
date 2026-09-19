@@ -103,6 +103,9 @@ public:
   // Used to indicate that the stored checksum for the firmware should be updated on next reboot.
   static inline bool has_updated;
 
+  // MD5 checksum of the firmware that was flashed, promoted to md5_firmware on next boot when has_updated is set.
+  static inline std::string md5_firmware_pending;
+
   // Global log level to set for all components
   static inline esp_log_level_t log_level = esp_log_level_t::ESP_LOG_DEBUG;
 };

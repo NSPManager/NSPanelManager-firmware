@@ -12,7 +12,6 @@
 #include <WebManager.hpp>
 #include <WiFiManager.hpp>
 #include <esp_log.h>
-#include <format>
 #include <nvs_flash.h>
 #include <string>
 
@@ -49,7 +48,7 @@ void task_print_mem_usage(void *param) {
   }
 }
 
-void task_publish_log_messages(void *param) {
+void task_publish_mqtt_log_message(void *param) {
   char *log_message;
   uint16_t message_len = 0;
 
@@ -155,8 +154,8 @@ extern "C" void app_main() {
 
     // MQTT is now setup, enable custom logging through MQTT
     publish_mqtt_log_messages_queue = xQueueCreate(16, sizeof(char *));
-    xTaskCreatePinnedToCore(task_publish_log_messages, "pub_log", 4096, NULL, 3, &task_publish_mqtt_log_message_handle, 1);
-    mqtt_log_topic = std::format("nspanel/{}/log", WiFiManager::mac_string());
+    xTaskCreatePinnedToCore(task_publish_mqtt_log_message, "pub_mqtt_log", 4096, NULL, 3, &task_publish_mqtt_log_message_handle, 1);
+    mqtt_log_topic = std::string("nspanel/") + WiFiManager::mac_string() + "/log";
     esp_log_set_vprintf(custom_log_vprintf);
 
     // Start RoomManager

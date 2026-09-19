@@ -19,10 +19,11 @@ esp_err_t ConfigManager::load_config() {
   fseek(f, 0, SEEK_SET);
 
   char *read_buffer = NULL;
-  if (file_size != 0) {
-    read_buffer = (char *)malloc(file_size);
+  if (file_size > 0) {
+    // One extra byte for the null terminator, cJSON_Parse expects a null-terminated string.
+    read_buffer = (char *)malloc(file_size + 1);
     if (read_buffer == NULL) {
-      ESP_LOGE("ConfigManager", "Failed to allocate %ld bytes for read buffer while reading config from LittleFS.", file_size);
+      ESP_LOGE("ConfigManager", "Failed to allocate %ld bytes for read buffer while reading config from LittleFS.", file_size + 1);
       fclose(f);
       return ESP_ERR_NOT_FINISHED;
     }
@@ -32,8 +33,14 @@ esp_err_t ConfigManager::load_config() {
     return ESP_ERR_NOT_FINISHED;
   }
 
-  fread(read_buffer, 1, file_size, f);
+  size_t bytes_read = fread(read_buffer, 1, file_size, f);
   fclose(f);
+  if (bytes_read != (size_t)file_size) {
+    ESP_LOGE("ConfigManager", "Read %zu of %ld bytes from config file.", bytes_read, file_size);
+    free(read_buffer);
+    return ESP_ERR_NOT_FINISHED;
+  }
+  read_buffer[bytes_read] = '\0';
 
   nlohmann::json config_data = nlohmann::json::parse(read_buffer, read_buffer + file_size, nullptr, false);
   free(read_buffer); // Data parsed, free read buffer.
@@ -124,6 +131,10 @@ esp_err_t ConfigManager::load_config() {
     ConfigManager::nextion_upload_baudrate = config_data["upload_baud"].get<int32_t>();
   }
 
+  if (config_data.contains("md5_firmware_pending") && config_data["md5_firmware_pending"].is_string()) {
+    ConfigManager::md5_firmware_pending = config_data["md5_firmware_pending"].get<std::string>();
+  }
+
   if (config_data.contains("comms_baud") && config_data["comms_baud"].is_number_integer()) {
     ConfigManager::communication_baud_rate = config_data["comms_baud"].get<int32_t>();
   }
@@ -184,6 +195,7 @@ void ConfigManager::create_default() {
   ConfigManager::mqtt_password = "";
 
   ConfigManager::has_updated = false;
+  ConfigManager::md5_firmware_pending = "";
   ConfigManager::md5_firmware = "";
   ConfigManager::md5_data_file = "";
   ConfigManager::md5_gui = "";
@@ -211,6 +223,7 @@ esp_err_t ConfigManager::save_config() {
   json["mqtt_username"] = ConfigManager::mqtt_username;
   json["mqtt_password"] = ConfigManager::mqtt_password;
   json["md5_firmware"] = ConfigManager::md5_firmware;
+  json["md5_firmware_pending"] = ConfigManager::md5_firmware_pending;
   json["md5_data_file"] = ConfigManager::md5_data_file;
   json["md5_gui"] = ConfigManager::md5_gui;
   json["reverse_relays"] = ConfigManager::reverse_relays;

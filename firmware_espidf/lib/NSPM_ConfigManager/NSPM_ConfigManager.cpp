@@ -15,6 +15,7 @@ void NSPM_ConfigManager::init() {
   esp_log_level_set("NSPM_ConfigManager", ConfigManager::log_level);
   ESP_LOGI("NSPM_ConfigManager", "Initializing NSPM_ConfigManager.");
   NSPM_ConfigManager::_config_mutex = xSemaphoreCreateMutex();
+  NSPM_ConfigManager::_register_request_task_mutex = xSemaphoreCreateMutex();
   MqttManager::register_handler(MQTT_EVENT_ANY, &NSPM_ConfigManager::_mqtt_event_handler, NULL);
 
   // Subscribe to MQTT command topic
@@ -38,8 +39,7 @@ void NSPM_ConfigManager::init() {
   }
 
   // We have now subscribed to MQTT command topic, start the task to send MQTT register_requests for managers to answer to
-  NSPM_ConfigManager::_send_register_requests = true;
-  xTaskCreatePinnedToCore(NSPM_ConfigManager::_task_send_register_request, "register_request_task", 4096, NULL, 2, &NSPM_ConfigManager::_task_send_register_request_handle, 1);
+  NSPM_ConfigManager::_start_register_request_task();
 }
 
 void NSPM_ConfigManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -83,6 +83,22 @@ void NSPM_ConfigManager::_mqtt_event_handler(void *arg, esp_event_base_t event_b
     while (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_manager_status_topic.c_str()) != ESP_OK) {
       ESP_LOGE("NSPM_ConfigManager", "Tried to subscribe to manager status topic but subscribe call was unsuccessful! Will try again.");
       vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
+    // Broker sessions are clean by default, so all prior subscriptions were
+    // dropped on the disconnect. Re-subscribe to the panel's config topic if
+    // we have one — otherwise the manager can push config updates that we
+    // never receive, leaving the panel silently out of sync.
+    if (!NSPM_ConfigManager::_mqtt_config_topic.empty()) {
+      xTaskCreatePinnedToCore(NSPM_ConfigManager::_task_resubscribe_config_topic, "resub_cfg_topic", 4096, NULL, 2, NULL, 1);
+    }
+
+    // Re-announce ourselves to any manager listening. Covers the case where
+    // the manager container restarted and lost its in-memory panel state:
+    // without a fresh register_request the manager would never send us
+    // config, and we would sit forever on "Lost connection to manager".
+    if (!NSPM_ConfigManager::_manager_address.empty()) {
+      NSPM_ConfigManager::_start_register_request_task();
     }
   } else if (event_id == MQTT_EVENT_DISCONNECTED) {
     NSPM_ConfigManager::_manager_online = false;
@@ -280,10 +296,43 @@ void NSPM_ConfigManager::_task_send_register_request(void *arg) {
 #endif
   std::string json_string = json.dump();
 
-  while (NSPM_ConfigManager::_send_register_requests) {
-    MqttManager::publish("nspanel/mqttmanager/command", json_string.c_str(), json_string.length(), false);
-    vTaskDelay(pdMS_TO_TICKS(5000));
+  // Publish register_request every 5s until _send_register_requests goes false
+  // (register_accept received). After the loop we re-check the flag under the
+  // mutex: if _start_register_request_task re-armed it between our last check
+  // and the mutex acquire, we loop again instead of exiting, which closes the
+  // race that would otherwise leave the flag set with no live task.
+  for (;;) {
+    while (NSPM_ConfigManager::_send_register_requests) {
+      MqttManager::publish("nspanel/mqttmanager/command", json_string.c_str(), json_string.length(), false);
+      vTaskDelay(pdMS_TO_TICKS(5000));
+    }
+
+    xSemaphoreTake(NSPM_ConfigManager::_register_request_task_mutex, portMAX_DELAY);
+    if (!NSPM_ConfigManager::_send_register_requests) {
+      NSPM_ConfigManager::_task_send_register_request_handle = NULL;
+      xSemaphoreGive(NSPM_ConfigManager::_register_request_task_mutex);
+      break;
+    }
+    xSemaphoreGive(NSPM_ConfigManager::_register_request_task_mutex);
   }
 
   vTaskDelete(NULL); // Delete own task.
+}
+
+void NSPM_ConfigManager::_start_register_request_task() {
+  xSemaphoreTake(NSPM_ConfigManager::_register_request_task_mutex, portMAX_DELAY);
+  NSPM_ConfigManager::_send_register_requests = true;
+  if (NSPM_ConfigManager::_task_send_register_request_handle == NULL) {
+    xTaskCreatePinnedToCore(NSPM_ConfigManager::_task_send_register_request, "register_request_task", 4096, NULL, 2, &NSPM_ConfigManager::_task_send_register_request_handle, 1);
+  }
+  xSemaphoreGive(NSPM_ConfigManager::_register_request_task_mutex);
+}
+
+void NSPM_ConfigManager::_task_resubscribe_config_topic(void *arg) {
+  while (!NSPM_ConfigManager::_mqtt_config_topic.empty() && MqttManager::subscribe(NSPM_ConfigManager::_mqtt_config_topic) != ESP_OK) {
+    ESP_LOGE("NSPM_ConfigManager", "Failed to re-subscribe to config topic '%s' after MQTT reconnect. Retrying in 500ms.", NSPM_ConfigManager::_mqtt_config_topic.c_str());
+    vTaskDelay(pdMS_TO_TICKS(500));
+  }
+  ESP_LOGI("NSPM_ConfigManager", "Re-subscribed to config topic after MQTT reconnect.");
+  vTaskDelete(NULL);
 }

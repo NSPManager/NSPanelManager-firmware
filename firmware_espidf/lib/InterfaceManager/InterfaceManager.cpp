@@ -16,7 +16,6 @@
 #include <WiFiManager.hpp>
 #include <cmath>
 #include <esp_log.h>
-#include <format>
 #include <protobuf_nspanel.pb-c.h>
 
 void InterfaceManager::init() {
@@ -257,6 +256,13 @@ void InterfaceManager::_update_manager_event_handler(void *arg, esp_event_base_t
   case updatemanager_event_t::FIRMWARE_UPDATE_FINISHED: {
     LoadingPage::set_loading_text("Firmware update complete.");
     LoadingPage::set_secondary_text("100%");
+    break;
+  }
+
+  case updatemanager_event_t::FIRMWARE_UPDATE_FAILED: {
+    // The running firmware is untouched, go back to normal operation.
+    InterfaceManager::_screensaver_blocked = false;
+    InterfaceManager::show_default_page();
     break;
   }
 

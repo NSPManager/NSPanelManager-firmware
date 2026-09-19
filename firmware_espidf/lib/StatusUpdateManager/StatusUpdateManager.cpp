@@ -492,6 +492,19 @@ void StatusUpdateManager::_update_manager_event_handler(void *arg, esp_event_bas
     break;
   }
 
+  case updatemanager_event_t::FIRMWARE_UPDATE_FAILED: {
+    if (xSemaphoreTake(StatusUpdateManager::_status_report_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+      StatusUpdateManager::_status_report.update_progress = 0;
+      StatusUpdateManager::_status_report.nspanel_state = NSPanelStatusReport__State::NSPANEL_STATUS_REPORT__STATE__ONLINE;
+      xSemaphoreGive(StatusUpdateManager::_status_report_mutex);
+    }
+
+    // Restore the default 30 second status update interval
+    esp_timer_stop(StatusUpdateManager::_status_update_timer);
+    esp_timer_start_periodic(StatusUpdateManager::_status_update_timer, 30000 * 1000);
+    break;
+  }
+
   case updatemanager_event_t::LITTLEFS_UPDATE_FINISHED: {
     if (xSemaphoreTake(StatusUpdateManager::_status_report_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
       StatusUpdateManager::_status_report.update_progress = 100;

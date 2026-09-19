@@ -9,8 +9,8 @@
 #include <RoomManager.hpp>
 #include <ScreensaverPage.hpp>
 #include <StatusUpdateManager_events.hpp>
-#include <format>
 // #include <cJSON.h>
+#include <cstdio>
 #include <esp_http_client.h>
 #include <esp_log.h>
 
@@ -257,7 +257,9 @@ void ScreensaverPage::_new_temperature_event(void *arg, esp_event_base_t event_b
     if (!ScreensaverPage::_inside_temperature_sensor_state_topic.get().empty()) {
       return;
     }
-    ScreensaverPage::_current_temperature.set(std::format("{:.1f}", *((double *)event_data)));
+    char temperature_str[16];
+    snprintf(temperature_str, sizeof(temperature_str), "%.1f", *((double *)event_data));
+    ScreensaverPage::_current_temperature.set(temperature_str);
     ScreensaverPage::_update_displayed_temperature();
 
     break;
