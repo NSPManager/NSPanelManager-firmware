@@ -633,6 +633,7 @@ esp_err_t UpdateManager::_update_firmware_ota() {
   ret = esp_https_ota_get_img_desc(https_ota_handle, &app_desc);
   if (ret != ESP_OK) {
     ESP_LOGE("UpdateManager", "esp_https_ota_get_img_desc failed");
+    esp_https_ota_abort(https_ota_handle);
     esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::FIRMWARE_UPDATE_FAILED, NULL, 0, pdMS_TO_TICKS(500));
     return ESP_ERR_NOT_FINISHED;
   }
@@ -683,6 +684,8 @@ esp_err_t UpdateManager::_update_firmware_ota() {
       return ESP_ERR_NOT_FINISHED;
     }
   } else {
+    // esp_https_ota_finish frees the handle on its own; on this path it must be released explicitly.
+    esp_https_ota_abort(https_ota_handle);
     esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::FIRMWARE_UPDATE_FAILED, NULL, 0, pdMS_TO_TICKS(500));
     ESP_LOGE("UpdateManager", "Firmware OTA update failed: %s", esp_err_to_name(ret));
     return ESP_ERR_NOT_FINISHED;
