@@ -499,8 +499,6 @@ void InterfaceManager::_mqtt_event_handler(void *arg, esp_event_base_t event_bas
     default:
       break;
     }
-  } else if (event_id == MQTT_EVENT_CONNECTED) {
-    InterfaceManager::_subscribe_to_relevant_mqtt_topics();
   }
 }
 
