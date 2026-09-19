@@ -168,6 +168,7 @@ extern "C" void app_main() {
 
     // Now that we have created the MQTT client we can register callbacks from it, register ButtonManager
     ButtonManager::init_mqtt();
+    BuzzerManager::init_mqtt();
 
     // MQTT is now setup, enable custom logging through MQTT
     publish_mqtt_log_messages_queue = xQueueCreate(16, sizeof(char *));
