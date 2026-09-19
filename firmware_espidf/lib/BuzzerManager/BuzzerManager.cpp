@@ -130,20 +130,44 @@ void BuzzerManager::_set_output(uint32_t frequency_hz) {
   ledc_update_duty(BuzzerManager::_ledc_mode, BuzzerManager::_ledc_channel);
 }
 
+void BuzzerManager::raise_event(buzzer_event_t event) {
+  if (!BuzzerManager::_initialized) [[unlikely]] {
+    return;
+  }
+
+  BuzzerManager::_handle_event(event);
+}
+
+void BuzzerManager::raise_event_for_touch(buzzer_event_t event) {
+  if (!BuzzerManager::_initialized) [[unlikely]] {
+    return; // The TOUCH_EVENT handler that clears _touch_event_replaced is not registered
+  }
+
+  BuzzerManager::_touch_event_replaced = true;
+  BuzzerManager::_handle_event(event);
+}
+
 void BuzzerManager::_nextion_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
   nextion_event_touch_t *data = (nextion_event_touch_t *)event_data;
+  bool raise_touch_event = false;
   if (data->pressed) {
     BuzzerManager::_awaiting_release = true;
     BuzzerManager::_pressed_page = data->page_number;
     BuzzerManager::_pressed_component = data->component_id;
-    BuzzerManager::_handle_event(buzzer_event_t::TOUCH);
+    raise_touch_event = true;
   } else if (BuzzerManager::_awaiting_release && BuzzerManager::_pressed_page == data->page_number && BuzzerManager::_pressed_component == data->component_id) {
     BuzzerManager::_awaiting_release = false; // Already raised when this component was pressed
   } else {
     // Most components in the NSPanel Manager TFT only send release events
     BuzzerManager::_awaiting_release = false;
+    raise_touch_event = true;
+  }
+
+  // A page handler already raised a more specific event for this touch, see raise_event_for_touch()
+  if (raise_touch_event && !BuzzerManager::_touch_event_replaced) {
     BuzzerManager::_handle_event(buzzer_event_t::TOUCH);
   }
+  BuzzerManager::_touch_event_replaced = false;
 }
 
 void BuzzerManager::_handle_event(buzzer_event_t event) {
@@ -151,10 +175,17 @@ void BuzzerManager::_handle_event(buzzer_event_t event) {
   case buzzer_event_t::TOUCH:
     ESP_LOGD("BuzzerManager", "Got TOUCH event.");
     break;
+  case buzzer_event_t::SCENE_ACTIVATED:
+    ESP_LOGD("BuzzerManager", "Got SCENE_ACTIVATED event.");
+    break;
+  case buzzer_event_t::SCENE_SAVED:
+    ESP_LOGD("BuzzerManager", "Got SCENE_SAVED event.");
+    break;
   }
 
   // TODO: Play the sound NSPanelManager configured for this event, once NSPanelConfig carries event to RTTTL
-  // mappings. Parse the RTTTL when the config is loaded, not here, and play() the result.
+  // mappings. Parse the RTTTL when the config is loaded, not here, and play() the result. Events are raised from
+  // several tasks, so guard the event to sound lookup against a config reload replacing it.
 }
 
 void BuzzerManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
