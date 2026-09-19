@@ -1,3 +1,4 @@
+#include <BuzzerManager.hpp>
 #include <ConfigManager.hpp>
 #include <EntitiesPage.hpp>
 #include <EntityPage.hpp>
@@ -208,6 +209,7 @@ void EntitiesPage::_handle_items4_touch_event(nextion_event_touch_t *touch_data)
     for (int i = 0; i < 4; i++) {
       if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].label_id) {
         if (touch_data->pressed) {
+          BuzzerManager::raise_event_for_touch(buzzer_event_t::SCENE_ACTIVATED);
           EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
         }
         return; // Found match, no need to continue.
@@ -310,6 +312,7 @@ void EntitiesPage::_handle_items8_touch_event(nextion_event_touch_t *touch_data)
     for (int i = 0; i < 8; i++) {
       if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].label_id) {
         if (touch_data->pressed) {
+          BuzzerManager::raise_event_for_touch(buzzer_event_t::SCENE_ACTIVATED);
           EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
         }
         return; // Found match, no need to continue.
@@ -414,6 +417,7 @@ void EntitiesPage::_handle_items12_touch_event(nextion_event_touch_t *touch_data
     for (int i = 0; i < 12; i++) {
       if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].label_id) {
         if (touch_data->pressed) {
+          BuzzerManager::raise_event_for_touch(buzzer_event_t::SCENE_ACTIVATED);
           EntitiesPage::_send_entity_toggle_command_to_manager(EntitiesPage::_current_entities_page->id, i);
         }
         return; // Found match, no need to continue.
@@ -563,6 +567,8 @@ void EntitiesPage::_task_save_scene_progress(void *scene_slot) {
     size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
     if (packed_data_size == packed_length) {
       if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) {
+        BuzzerManager::raise_event(buzzer_event_t::SCENE_SAVED);
+
         // Display text to user to say scene was saved.
         Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, "Scene saved", 250);
         EntitiesPage::_currently_showing_header_text.set("Scene saved");

@@ -19,10 +19,11 @@ struct buzzer_tone_step_t {
 };
 
 // Panel events that can have a sound attached to them
-// TODO: Add more events, ie. SCENE_ACTIVATED when a scene is triggered from the panel, once NSPanelManager can
-// configure sounds for them.
+// TODO: Add more events as NSPanelManager gains sounds for them.
 enum class buzzer_event_t {
-  TOUCH, // The screen was touched
+  TOUCH,           // The screen was touched
+  SCENE_ACTIVATED, // A scene was triggered from the panel
+  SCENE_SAVED,     // A scene was saved from the panel
 };
 
 class BuzzerManager {
@@ -52,6 +53,21 @@ public:
    */
   static void stop();
 
+  /**
+   * @brief Raise an event that is not tied to a screen touch, ie. a scene being saved after a long press.
+   * Safe to call from any task.
+   */
+  static void raise_event(buzzer_event_t event);
+
+  /**
+   * @brief Raise an event for the screen touch being handled, in place of the TOUCH event it would otherwise
+   * raise, so a touch that does something specific can get its own sound instead of the generic touch sound.
+   * Call from a NEXTION_EVENT handler registered with ESP_EVENT_ANY_ID, ie. a page's touch handler. ESP-IDF runs
+   * those before handlers registered for a specific event id, like BuzzerManager's TOUCH_EVENT handler, which
+   * then skips the TOUCH event for this touch.
+   */
+  static void raise_event_for_touch(buzzer_event_t event);
+
 private:
   /**
    * @brief Handle RTTTL strings published to the raw buzzer command topic.
@@ -66,7 +82,7 @@ private:
   static void _nextion_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
   /**
-   * @brief Handle a panel event that may have a sound attached to it.
+   * @brief Handle a panel event that may have a sound attached to it. Called from any task, see raise_event().
    */
   static void _handle_event(buzzer_event_t event);
 
@@ -100,6 +116,10 @@ private:
   static inline bool _awaiting_release = false;
   static inline uint8_t _pressed_page = 0;
   static inline uint8_t _pressed_component = 0;
+
+  // Set by raise_event_for_touch() when the touch being handled already raised its own event. Only accessed
+  // from the default event loop task.
+  static inline bool _touch_event_replaced = false;
 
   static inline std::string _raw_command_topic;
 
