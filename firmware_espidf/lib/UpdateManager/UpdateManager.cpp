@@ -549,11 +549,6 @@ void UpdateManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
         }
       }
     }
-  } else if (event_id == MQTT_EVENT_CONNECTED) {
-    std::string command_topic = "nspanel/";
-    command_topic.append(WiFiManager::mac_string());
-    command_topic.append("/command");
-    MqttManager::subscribe(command_topic);
   }
 }
 

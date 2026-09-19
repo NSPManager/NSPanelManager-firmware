@@ -4,12 +4,27 @@
 #include <WiFiManager.hpp>
 #include <esp_log.h>
 #include <nlohmann/json.hpp>
+#include <algorithm>
+#include <esp_timer.h>
+
+// Resend a SUBSCRIBE that has not been acknowledged after this long.
+#define SUBACK_TIMEOUT_MS 10000
+// Backoff after a failed SUBSCRIBE doubles from 1s up to this limit.
+#define SUBSCRIBE_MAX_BACKOFF_MS 30000
+// Number of unmatched SUBACKs to remember, see _early_subacks.
+#define EARLY_SUBACKS_MAX 8
+
+static int64_t millis() {
+  return esp_timer_get_time() / 1000;
+}
 
 void MqttManager::start(std::string *server, uint16_t *port, std::string *username, std::string *password) {
   esp_log_level_set("MqttManager", ConfigManager::log_level);
   ESP_LOGI("MqttManager", "Starting MQTTManager, will connect to %s:%d", server->c_str(), *port);
   MqttManager::_connected = false;
   MqttManager::_send_online_update_task_mutex = xSemaphoreCreateMutex();
+  MqttManager::_subscriptions_mutex = xSemaphoreCreateMutex();
+  xTaskCreatePinnedToCore(MqttManager::_task_manage_subscriptions, "mqtt_subs", 4096, NULL, 4, &MqttManager::_manage_subscriptions_task_handle, 1);
   MqttManager::_mqtt_config.broker.address.hostname = server->c_str();
   MqttManager::_mqtt_config.broker.address.port = *port;
   MqttManager::_mqtt_config.broker.address.transport = esp_mqtt_transport_t::MQTT_TRANSPORT_OVER_TCP;
@@ -131,6 +146,26 @@ void MqttManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
     xTaskCreatePinnedToCore(MqttManager::_task_send_online_update, "mqtt_online_upd",
                             2048, NULL, 2, &MqttManager::_send_online_update_task_handle, 1);
     xSemaphoreGive(MqttManager::_send_online_update_task_mutex);
+
+    // Sessions are clean (disable_clean_session is not set), so the broker has dropped all
+    // our subscriptions: subscribe to everything again, and there is nothing left to unsubscribe from.
+    xSemaphoreTake(MqttManager::_subscriptions_mutex, portMAX_DELAY);
+    for (Subscription &subscription : MqttManager::_subscriptions) {
+      subscription.state = SubscriptionState::PENDING;
+      subscription.msg_id = -1;
+      subscription.failures = 0;
+      subscription.next_attempt_ms = 0;
+    }
+    MqttManager::_pending_unsubscribes.clear();
+    MqttManager::_early_subacks.clear();
+    xSemaphoreGive(MqttManager::_subscriptions_mutex);
+    xTaskNotifyGive(MqttManager::_manage_subscriptions_task_handle);
+    break;
+
+  case MQTT_EVENT_SUBSCRIBED:
+    xSemaphoreTake(MqttManager::_subscriptions_mutex, portMAX_DELAY);
+    MqttManager::_handle_suback(event->msg_id, event->error_handle->error_type == MQTT_ERROR_TYPE_SUBSCRIBE_FAILED);
+    xSemaphoreGive(MqttManager::_subscriptions_mutex);
     break;
 
   case MQTT_EVENT_DISCONNECTED:
@@ -183,32 +218,173 @@ bool MqttManager::connected() {
 }
 
 esp_err_t MqttManager::subscribe(std::string topic) {
-  ESP_LOGD("MqttManager", "Subscribing to '%s'", topic.c_str());
-  if (MqttManager::connected()) {
-    int result_code = esp_mqtt_client_subscribe_single(MqttManager::_mqtt_client, topic.c_str(), 2);
-    if (result_code >= 0) {
-      return ESP_OK;
-    } else {
-      ESP_LOGE("MqttManager", "Failed to subscribe to '%s'. Got return code: %d", topic.c_str(), result_code);
-    }
-  } else {
-    ESP_LOGE("MqttManager", "Failed to subscribe to MQTT topic '%s'. Not connected to MQTT server.", topic.c_str());
+  if (MqttManager::_subscriptions_mutex == NULL) {
+    ESP_LOGE("MqttManager", "Failed to subscribe to MQTT topic '%s'. MQTT client is not started.", topic.c_str());
+    return ESP_ERR_INVALID_STATE;
   }
-  return ESP_ERR_NOT_FINISHED;
+
+  xSemaphoreTake(MqttManager::_subscriptions_mutex, portMAX_DELAY);
+  for (const Subscription &subscription : MqttManager::_subscriptions) {
+    if (subscription.topic == topic) {
+      xSemaphoreGive(MqttManager::_subscriptions_mutex);
+      return ESP_OK; // Already subscribed or in progress.
+    }
+  }
+  ESP_LOGD("MqttManager", "Subscribing to '%s'", topic.c_str());
+  Subscription subscription;
+  subscription.topic = topic;
+  MqttManager::_subscriptions.push_back(subscription);
+  xSemaphoreGive(MqttManager::_subscriptions_mutex);
+
+  xTaskNotifyGive(MqttManager::_manage_subscriptions_task_handle);
+  return ESP_OK;
 }
 
 esp_err_t MqttManager::unsubscribe(std::string topic) {
-  if (MqttManager::connected()) {
-    int result_code = esp_mqtt_client_unsubscribe(MqttManager::_mqtt_client, topic.c_str());
-    if (result_code >= 0) {
-      return ESP_OK;
-    } else {
-      ESP_LOGE("MqttManager", "Failed to unsubscribe from '%s'. Got return code: %d", topic.c_str(), result_code);
-    }
-  } else {
-    ESP_LOGE("MqttManager", "Failed to unsubscribe from MQTT topic. Not connected to MQTT server.");
+  if (MqttManager::_subscriptions_mutex == NULL) {
+    ESP_LOGE("MqttManager", "Failed to unsubscribe from MQTT topic '%s'. MQTT client is not started.", topic.c_str());
+    return ESP_ERR_INVALID_STATE;
   }
-  return ESP_ERR_NOT_FINISHED;
+
+  xSemaphoreTake(MqttManager::_subscriptions_mutex, portMAX_DELAY);
+  for (auto it = MqttManager::_subscriptions.begin(); it != MqttManager::_subscriptions.end(); ++it) {
+    if (it->topic == topic) {
+      MqttManager::_subscriptions.erase(it);
+      break;
+    }
+  }
+  // Queue the UNSUBSCRIBE even if the topic was not in the set: a SUBSCRIBE for it may
+  // already be on its way to the broker.
+  MqttManager::_pending_unsubscribes.push_back(topic);
+  xSemaphoreGive(MqttManager::_subscriptions_mutex);
+
+  xTaskNotifyGive(MqttManager::_manage_subscriptions_task_handle);
+  return ESP_OK;
+}
+
+void MqttManager::_handle_suback(int msg_id, bool failed) {
+  for (Subscription &subscription : MqttManager::_subscriptions) {
+    if (subscription.state == SubscriptionState::IN_FLIGHT && subscription.msg_id == msg_id) {
+      if (failed) {
+        // For example denied by a broker ACL. Keep retrying with backoff in case it is fixed.
+        subscription.state = SubscriptionState::PENDING;
+        subscription.msg_id = -1;
+        uint32_t backoff_ms = std::min(1000 << std::min<uint8_t>(subscription.failures, 5), SUBSCRIBE_MAX_BACKOFF_MS);
+        subscription.next_attempt_ms = millis() + backoff_ms;
+        subscription.failures++;
+        ESP_LOGE("MqttManager", "Broker rejected subscription to '%s'. Will retry in %lums.", subscription.topic.c_str(), backoff_ms);
+      } else {
+        subscription.state = SubscriptionState::SUBSCRIBED;
+        subscription.failures = 0;
+        ESP_LOGD("MqttManager", "Subscribed to '%s'.", subscription.topic.c_str());
+      }
+      return;
+    }
+  }
+
+  // No match: either the subscription task has not recorded this message id yet, or the
+  // subscription was removed or reset in the meantime. Remember it briefly for the first case.
+  if (MqttManager::_early_subacks.size() >= EARLY_SUBACKS_MAX) {
+    MqttManager::_early_subacks.erase(MqttManager::_early_subacks.begin());
+  }
+  MqttManager::_early_subacks.push_back({msg_id, failed});
+}
+
+void MqttManager::_task_manage_subscriptions(void *param) {
+  for (;;) {
+    ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1000));
+    if (!MqttManager::connected()) {
+      continue; // Everything is subscribed again on MQTT_EVENT_CONNECTED.
+    }
+
+    // Send queued UNSUBSCRIBEs first, in order, so that unsubscribe(topic) followed by
+    // subscribe(topic) reaches the broker in that order. If one fails, send nothing else
+    // this round to keep that ordering.
+    bool unsubscribes_done = true;
+    for (;;) {
+      xSemaphoreTake(MqttManager::_subscriptions_mutex, portMAX_DELAY);
+      if (MqttManager::_pending_unsubscribes.empty()) {
+        xSemaphoreGive(MqttManager::_subscriptions_mutex);
+        break;
+      }
+      std::string topic = MqttManager::_pending_unsubscribes.front();
+      xSemaphoreGive(MqttManager::_subscriptions_mutex);
+
+      int result_code = esp_mqtt_client_unsubscribe(MqttManager::_mqtt_client, topic.c_str());
+
+      xSemaphoreTake(MqttManager::_subscriptions_mutex, portMAX_DELAY);
+      if (result_code >= 0) {
+        // The queue may have been cleared by a reconnect while we were sending.
+        if (!MqttManager::_pending_unsubscribes.empty() && MqttManager::_pending_unsubscribes.front() == topic) {
+          MqttManager::_pending_unsubscribes.erase(MqttManager::_pending_unsubscribes.begin());
+        }
+        xSemaphoreGive(MqttManager::_subscriptions_mutex);
+      } else {
+        xSemaphoreGive(MqttManager::_subscriptions_mutex);
+        ESP_LOGE("MqttManager", "Failed to unsubscribe from '%s'. Got return code: %d. Will retry.", topic.c_str(), result_code);
+        unsubscribes_done = false;
+        break;
+      }
+    }
+    if (!unsubscribes_done) {
+      continue;
+    }
+
+    // Pick the subscriptions that need a SUBSCRIBE and mark them in flight so the next
+    // round does not send them again while we are still sending.
+    std::vector<std::string> topics_to_subscribe;
+    int64_t now = millis();
+    xSemaphoreTake(MqttManager::_subscriptions_mutex, portMAX_DELAY);
+    for (Subscription &subscription : MqttManager::_subscriptions) {
+      bool send = false;
+      if (subscription.state == SubscriptionState::PENDING && now >= subscription.next_attempt_ms) {
+        send = true;
+      } else if (subscription.state == SubscriptionState::IN_FLIGHT && subscription.msg_id >= 0 && now - subscription.sent_ms > SUBACK_TIMEOUT_MS) {
+        ESP_LOGW("MqttManager", "No SUBACK for '%s' after %dms. Sending SUBSCRIBE again.", subscription.topic.c_str(), SUBACK_TIMEOUT_MS);
+        send = true;
+      }
+      if (send) {
+        subscription.state = SubscriptionState::IN_FLIGHT;
+        subscription.msg_id = -1;
+        subscription.sent_ms = now;
+        topics_to_subscribe.push_back(subscription.topic);
+      }
+    }
+    xSemaphoreGive(MqttManager::_subscriptions_mutex);
+
+    for (const std::string &topic : topics_to_subscribe) {
+      // Can block for up to the network timeout on a weak link. That is fine here: no one waits on this task.
+      int result_code = esp_mqtt_client_subscribe_single(MqttManager::_mqtt_client, topic.c_str(), 2);
+
+      xSemaphoreTake(MqttManager::_subscriptions_mutex, portMAX_DELAY);
+      for (Subscription &subscription : MqttManager::_subscriptions) {
+        // Skip if the subscription was removed, re-added or reset by a reconnect while sending.
+        if (subscription.topic != topic || subscription.state != SubscriptionState::IN_FLIGHT || subscription.msg_id != -1) {
+          continue;
+        }
+        if (result_code >= 0) {
+          subscription.msg_id = result_code;
+          subscription.sent_ms = millis();
+          for (auto it = MqttManager::_early_subacks.begin(); it != MqttManager::_early_subacks.end(); ++it) {
+            if (it->first == result_code) {
+              bool failed = it->second;
+              MqttManager::_early_subacks.erase(it);
+              MqttManager::_handle_suback(result_code, failed);
+              break;
+            }
+          }
+        } else {
+          subscription.state = SubscriptionState::PENDING;
+          uint32_t backoff_ms = std::min(1000 << std::min<uint8_t>(subscription.failures, 5), SUBSCRIBE_MAX_BACKOFF_MS);
+          subscription.next_attempt_ms = millis() + backoff_ms;
+          subscription.failures++;
+          ESP_LOGE("MqttManager", "Failed to subscribe to '%s'. Got return code: %d. Will retry in %lums.", topic.c_str(), result_code, backoff_ms);
+        }
+        break;
+      }
+      xSemaphoreGive(MqttManager::_subscriptions_mutex);
+    }
+  }
 }
 
 esp_err_t MqttManager::publish(std::string topic, const char *data, size_t length, bool retain) {
