@@ -3236,7 +3236,17 @@ CONFIG_WS_BUFFER_SIZE=1024
 #
 # Ultra Low Power (ULP) Co-processor
 #
-# CONFIG_ULP_COPROC_ENABLED is not set
+CONFIG_ULP_COPROC_ENABLED=y
+
+#
+# ULP Coprocessor types
+#
+# default:
+CONFIG_ULP_COPROC_TYPE_FSM=y
+# end of ULP Coprocessor types
+
+# default:
+CONFIG_ULP_COPROC_RESERVE_MEM=512
 
 #
 # ULP Debugging Options
@@ -3395,6 +3405,15 @@ CONFIG_BMX280_DEFAULT_HUMIDITY_OVERSAMPLING_X1=y
 # end of BME280 Specific Options
 # end of Default Configuration
 # end of BMX280 Options
+
+#
+# ESPP Logger
+#
+# default:
+CONFIG_ESPP_LOGGER_LOG_LEVEL=4
+# default:
+CONFIG_ESPP_LOGGER_ENABLE_CURSOR_COMMANDS=y
+# end of ESPP Logger
 
 #
 # ESP-MQTT Configurations

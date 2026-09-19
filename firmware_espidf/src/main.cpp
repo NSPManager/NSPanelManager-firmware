@@ -53,9 +53,6 @@ void task_publish_log_messages(void *param) {
   char *log_message;
   uint16_t message_len = 0;
 
-  // Create a local var of the complete log message as Log V2 calls vprintf multiple times but always ends with a single \n char as the last argument
-  std::string complete_log;
-  complete_log.reserve(256); // No log message is likely longer than this
   for (;;) {
     if (xQueueReceive(publish_mqtt_log_messages_queue, &log_message, portMAX_DELAY) == pdTRUE) {
       message_len = strlen(log_message);
@@ -63,13 +60,8 @@ void task_publish_log_messages(void *param) {
         continue;
       }
 
-      complete_log.append(log_message);
-      if ((*log_message == 0x1b && log_message[message_len - 1] == 0x0a) || (message_len == 1 && log_message[0] == '\n')) { // First char in last byte of message is escape to cancel out current color and last char is a newline, ie. end of log message
-        printf(complete_log.c_str());
-        if (publish_mqtt_log_messages_queue != NULL && task_publish_mqtt_log_message_handle != NULL && MqttManager::connected()) {
-          MqttManager::publish(mqtt_log_topic, complete_log.c_str(), complete_log.length(), false);
-        }
-        complete_log.clear();
+      if (publish_mqtt_log_messages_queue != NULL && task_publish_mqtt_log_message_handle != NULL && MqttManager::connected()) {
+        MqttManager::publish(mqtt_log_topic, log_message, message_len, false);
       }
       free(log_message);
     }
@@ -82,6 +74,7 @@ int custom_log_vprintf(const char *fmt, va_list args) {
   char *buffer = NULL;
   int len = vasprintf(&buffer, fmt, args);
   if (len != -1) {
+    printf(buffer);
     if (xQueueSend(publish_mqtt_log_messages_queue, &buffer, pdMS_TO_TICKS(100)) != pdTRUE) {
       free(buffer);
     }
