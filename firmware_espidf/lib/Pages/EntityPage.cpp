@@ -82,10 +82,6 @@ void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int3
         ESP_LOGE("EntityPage", "Received new state but failed to parse into protobuf object.");
       }
     }
-  } else if (event_id == MQTT_EVENT_CONNECTED) {
-    if (!EntityPage::_current_entity_mqtt_topic.empty()) [[likely]] {
-      MqttManager::subscribe(EntityPage::_current_entity_mqtt_topic);
-    }
   }
 }
 

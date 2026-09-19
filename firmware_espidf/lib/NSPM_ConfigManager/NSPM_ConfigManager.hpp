@@ -9,6 +9,7 @@
 #include <memory>
 #include <protobuf_nspanel.pb-c.h>
 #include <string>
+#include <vector>
 
 /**
  * NSPM_ConfigManager does not handle the config stored on the panel. NSPM_ConfigManager is responsible for loading and keeping the stored config from
@@ -86,13 +87,6 @@ private:
   static void _start_register_request_task();
 
   /**
-   * @brief Short-lived task that re-subscribes to _mqtt_config_topic after an
-   * MQTT reconnect. Runs in its own task so its retry loop does not stall the
-   * MQTT event loop.
-   */
-  static void _task_resubscribe_config_topic(void *arg);
-
-  /**
    * @brief Handle a "register_accept" request from MQTT
    * @param data: Received data from MQTT
    * @param data_length: Number of bytes that were received
@@ -148,4 +142,7 @@ private:
 
   // The protobuf NSPanelConfig object decoded from MQTT.
   static inline std::shared_ptr<NSPanelConfig> _config = NULL;
+
+  // Raw bytes of the last config received from MQTT, used to ignore duplicate deliveries. Guarded by _config_mutex.
+  static inline std::vector<uint8_t> _last_config_data;
 };
