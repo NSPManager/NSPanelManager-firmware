@@ -1,5 +1,6 @@
 #include <ConfigManager.hpp>
 #include <LittleFS.hpp>
+#include <LoadingPage.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
 #include <Nextion.hpp>
@@ -531,6 +532,9 @@ void UpdateManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
 
         if (command_string.compare("reboot") == 0) { // TODO: Move to some place more fitting.
           ESP_LOGI("UpdateManager", "Received command to reboot. Will reboot NSPanel.");
+          LoadingPage::show();
+          LoadingPage::set_loading_text("Rebooting");
+          LoadingPage::set_secondary_text("");
           StatusUpdateManager::reboot();
         } else if (command_string.compare("firmware_update") == 0 && UpdateManager::_current_update_task == NULL) {
           UpdateManager::_force_update = false;
