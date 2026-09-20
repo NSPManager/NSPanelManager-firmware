@@ -120,12 +120,21 @@ private:
    */
   static inline std::vector<std::string> _pending_unsubscribes;
 
+  struct EarlySuback {
+    int msg_id;
+    bool failed;
+    int64_t received_ms; // Used to discard SUBACKs too old to belong to a live SUBSCRIBE.
+  };
+
   /**
    * SUBACKs that arrived before the subscription task recorded the message id of the
    * SUBSCRIBE (esp-mqtt can process the SUBACK as soon as the send call releases its lock).
-   * Pairs of (msg_id, failed). Guarded by _subscriptions_mutex, kept short.
+   * A SUBACK carries no topic, so entries can only be matched on message id, and message
+   * ids are reused once they wrap at 65535. Entries are therefore dropped once they are
+   * older than a SUBSCRIBE could still be waiting on them. Guarded by _subscriptions_mutex,
+   * kept short.
    */
-  static inline std::vector<std::pair<int, bool>> _early_subacks;
+  static inline std::vector<EarlySuback> _early_subacks;
 
   /**
    * Guards _subscriptions, _pending_unsubscribes and _early_subacks. Never held across a network call.
