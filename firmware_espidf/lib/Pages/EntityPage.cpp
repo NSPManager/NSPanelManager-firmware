@@ -609,11 +609,17 @@ void EntityPage::_handle_string_event_thermostat(char *data) {
           strncpy(new_icon, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->options[current_index]->icon, new_icon_len);
           new_value[new_value_len] = '\0';
           new_icon[new_icon_len] = '\0';
+
           taskENTER_CRITICAL(&EntityPage::_entity_page_spinlock);
-          free(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value);
-          free(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_icon);
-          state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value = new_value;
-          state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_icon = new_icon;
+          if (new_value_len != 0) {
+            free(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value);
+            state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value = new_value;
+          }
+
+          if (new_icon_len != 0) {
+            free(state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_icon);
+            state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_icon = new_icon;
+          }
           taskEXIT_CRITICAL(&EntityPage::_entity_page_spinlock);
         }
 
