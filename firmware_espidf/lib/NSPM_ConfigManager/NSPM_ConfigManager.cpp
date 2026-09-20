@@ -119,15 +119,17 @@ void NSPM_ConfigManager::_handle_register_accept(const char *data, size_t data_l
   }
 
   ESP_LOGI("NSPM_ConfigManager", "Received register_accept from manager. Registered to manager at %s:%d", NSPM_ConfigManager::_manager_address.c_str(), NSPM_ConfigManager::_manager_port);
-  NSPM_ConfigManager::_send_register_requests = false;
   NSPM_ConfigManager::_mqtt_manager_command_topic = "nspanel/mqttmanager_";
   NSPM_ConfigManager::_mqtt_manager_command_topic.append(NSPM_ConfigManager::_manager_address);
   NSPM_ConfigManager::_mqtt_manager_command_topic.append("/command");
   // Subscribe to where the NSPanel Manager container will send the config for this panel.
+  // Only stop sending register_requests once that has succeeded, otherwise the panel is
+  // registered with no way to receive a config and nothing left to retry.
   if (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_config_topic) != ESP_OK) {
-    ESP_LOGE("NSPM_ConfigManager", "Failed to subscribe to NSPanel config topic '%s'.", NSPM_ConfigManager::_mqtt_config_topic.c_str());
+    ESP_LOGE("NSPM_ConfigManager", "Failed to subscribe to NSPanel config topic '%s'. Will keep sending register_requests.", NSPM_ConfigManager::_mqtt_config_topic.c_str());
     return;
   }
+  NSPM_ConfigManager::_send_register_requests = false;
 
   ESP_LOGI("NSPM_ConfigManager", "Register accept fully processed. Subscribed to panel config topic: %s", NSPM_ConfigManager::_mqtt_config_topic.c_str());
 }
