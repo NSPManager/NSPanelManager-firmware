@@ -29,15 +29,11 @@ void NSPM_ConfigManager::init() {
     vTaskDelay(pdMS_TO_TICKS(100));
   }
 
-  // Resubscribe to manager status topic
-  NSPM_ConfigManager::_mqtt_manager_status_topic = "nspanel/mqttmanager_";
-  NSPM_ConfigManager::_mqtt_manager_status_topic.append(NSPM_ConfigManager::get_manager_address());
-  NSPM_ConfigManager::_mqtt_manager_status_topic.append("/status/status");
-
-  while (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_manager_status_topic.c_str()) != ESP_OK) {
-    ESP_LOGE("NSPM_ConfigManager", "Tried to subscribe to manager status topic but subscribe call was unsuccessful! Will try again.");
-    vTaskDelay(pdMS_TO_TICKS(100));
-  }
+  // The manager status topic is deliberately not subscribed here. _manager_address is only
+  // set once a register_accept arrives, so at this point the topic would be
+  // "nspanel/mqttmanager_/status/status", which nothing ever publishes to.
+  // _handle_new_config_data() subscribes to the real topic as soon as the address is known,
+  // and moves it if the manager ever changes address.
 
   // We have now subscribed to MQTT command topic, start the task to send MQTT register_requests for managers to answer to
   NSPM_ConfigManager::_start_register_request_task();
@@ -161,7 +157,10 @@ void NSPM_ConfigManager::_handle_new_config_data(const char *data, size_t data_l
     new_manager_status_topic.append(NSPM_ConfigManager::get_manager_address());
     new_manager_status_topic.append("/status/status");
     if (new_manager_status_topic != NSPM_ConfigManager::_mqtt_manager_status_topic) {
-      MqttManager::unsubscribe(NSPM_ConfigManager::_mqtt_manager_status_topic);
+      // Empty on the first config of this boot: there is nothing subscribed yet to move away from.
+      if (!NSPM_ConfigManager::_mqtt_manager_status_topic.empty()) {
+        MqttManager::unsubscribe(NSPM_ConfigManager::_mqtt_manager_status_topic);
+      }
       NSPM_ConfigManager::_mqtt_manager_status_topic = new_manager_status_topic;
       if (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_manager_status_topic.c_str()) != ESP_OK) {
         ESP_LOGE("NSPM_ConfigManager", "Failed to subscribe to manager status topic.");
