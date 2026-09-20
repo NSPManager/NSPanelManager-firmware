@@ -723,30 +723,58 @@ void RoomManager::_mqtt_event_handler_connected(void *arg, esp_event_base_t even
   // ESP_LOGI("RoomManager", "MQTT connected. Subscribing to room status topics.");
 }
 
+bool RoomManager::_move_topic(std::string *current_topic, std::string new_topic) {
+  if (new_topic.compare(*current_topic) == 0) {
+    return false;
+  }
+  if (!current_topic->empty()) {
+    MqttManager::unsubscribe(*current_topic);
+  }
+  *current_topic = new_topic;
+  if (MqttManager::subscribe(new_topic) != ESP_OK) {
+    ESP_LOGE("RoomManager", "Failed to subscribe to state topic %s.", new_topic.c_str());
+  }
+  return true;
+}
+
 void RoomManager::_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-  if (event_base == NSPM_CONFIGMANAGER_EVENT) {
-    if (event_id == nspm_configmanager_event::CONFIG_LOADED) {
-      // We have just loaded a new config, is this the first config we load? If so, go to default room.
-      if (RoomManager::_current_home_page_status_topic.get().empty()) {
-        // We have not subscribed to a room yet ie not config has been loaded yet. Go to default room.
-        std::shared_ptr<NSPanelConfig> config;
-        if (NSPM_ConfigManager::get_config(&config) != ESP_OK) {
-          ESP_LOGE("RoomManager", "Failed to get current config while handling CONFIG_LOADED.");
-          return;
-        }
+  if (event_base != NSPM_CONFIGMANAGER_EVENT || event_id != nspm_configmanager_event::CONFIG_LOADED) {
+    return;
+  }
 
-        // Config loaded, go to default room
-        RoomManager::go_to_default_room();
+  std::string manager_address = NSPM_ConfigManager::get_manager_address();
+  if (manager_address.empty()) [[unlikely]] {
+    ESP_LOGE("RoomManager", "Handled CONFIG_LOADED with no manager address set.");
+    return;
+  }
+  std::string topic_prefix = "nspanel/mqttmanager_";
+  topic_prefix.append(manager_address);
 
-        // Subscribe to the 'All rooms' status topic.
-        RoomManager::_all_rooms_state_topic = "nspanel/mqttmanager_";
-        RoomManager::_all_rooms_state_topic.append(NSPM_ConfigManager::get_manager_address());
-        RoomManager::_all_rooms_state_topic.append("/all_rooms_status");
-        if (MqttManager::subscribe(RoomManager::_all_rooms_state_topic) != ESP_OK) {
-          ESP_LOGE("RoomManager", "Failed to subscribe to 'All rooms' state topic %s.", RoomManager::_all_rooms_state_topic.c_str());
-        }
-      }
+  // Every topic below embeds the manager address, so a manager that has moved leaves them
+  // all pointing at somewhere that will never publish again. MqttManager keeps resubscribing
+  // whatever it was last told, so nothing else notices; the topics have to be moved here.
+  RoomManager::_move_topic(&RoomManager::_all_rooms_state_topic, topic_prefix + "/all_rooms_status");
+
+  // First config: we have not picked a room yet, so go to the default one. go_to_room_id()
+  // builds the room topic from the current manager address itself.
+  if (RoomManager::_current_home_page_status_topic.get().empty()) {
+    std::shared_ptr<NSPanelConfig> config;
+    if (NSPM_ConfigManager::get_config(&config) != ESP_OK) {
+      ESP_LOGE("RoomManager", "Failed to get current config while handling CONFIG_LOADED.");
+      return;
     }
+    RoomManager::go_to_default_room();
+    return;
+  }
+
+  std::string room_topic = RoomManager::_current_home_page_status_topic.get();
+  if (RoomManager::_move_topic(&room_topic, topic_prefix + "/room/" + std::to_string(RoomManager::_current_room_id) + "/state")) {
+    RoomManager::_current_home_page_status_topic.set(room_topic);
+  }
+
+  std::string entities_topic = RoomManager::_current_entities_page_status_topic.get();
+  if (!entities_topic.empty() && RoomManager::_move_topic(&entities_topic, topic_prefix + "/entity_pages/" + std::to_string(RoomManager::_current_entities_page_id) + "/state")) {
+    RoomManager::_current_entities_page_status_topic.set(entities_topic);
   }
 }
 

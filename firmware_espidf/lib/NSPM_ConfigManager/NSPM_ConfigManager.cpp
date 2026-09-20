@@ -17,6 +17,10 @@ void NSPM_ConfigManager::init() {
   ESP_LOGI("NSPM_ConfigManager", "Initializing NSPM_ConfigManager.");
   NSPM_ConfigManager::_config_mutex = xSemaphoreCreateMutex();
   NSPM_ConfigManager::_register_request_task_mutex = xSemaphoreCreateMutex();
+  if (xTaskCreatePinnedToCore(NSPM_ConfigManager::_task_post_config_loaded, "post_cfg_loaded", 2048, NULL, 2, &NSPM_ConfigManager::_task_post_config_loaded_handle, 1) != pdPASS) {
+    ESP_LOGE("NSPM_ConfigManager", "Failed to create task to post CONFIG_LOADED. Will post inline instead.");
+    NSPM_ConfigManager::_task_post_config_loaded_handle = NULL;
+  }
   MqttManager::register_handler(MQTT_EVENT_ANY, &NSPM_ConfigManager::_mqtt_event_handler, NULL);
 
   // Subscribe to MQTT command topic
@@ -115,15 +119,17 @@ void NSPM_ConfigManager::_handle_register_accept(const char *data, size_t data_l
   }
 
   ESP_LOGI("NSPM_ConfigManager", "Received register_accept from manager. Registered to manager at %s:%d", NSPM_ConfigManager::_manager_address.c_str(), NSPM_ConfigManager::_manager_port);
-  NSPM_ConfigManager::_send_register_requests = false;
   NSPM_ConfigManager::_mqtt_manager_command_topic = "nspanel/mqttmanager_";
   NSPM_ConfigManager::_mqtt_manager_command_topic.append(NSPM_ConfigManager::_manager_address);
   NSPM_ConfigManager::_mqtt_manager_command_topic.append("/command");
   // Subscribe to where the NSPanel Manager container will send the config for this panel.
+  // Only stop sending register_requests once that has succeeded, otherwise the panel is
+  // registered with no way to receive a config and nothing left to retry.
   if (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_config_topic) != ESP_OK) {
-    ESP_LOGE("NSPM_ConfigManager", "Failed to subscribe to NSPanel config topic '%s'.", NSPM_ConfigManager::_mqtt_config_topic.c_str());
+    ESP_LOGE("NSPM_ConfigManager", "Failed to subscribe to NSPanel config topic '%s'. Will keep sending register_requests.", NSPM_ConfigManager::_mqtt_config_topic.c_str());
     return;
   }
+  NSPM_ConfigManager::_send_register_requests = false;
 
   ESP_LOGI("NSPM_ConfigManager", "Register accept fully processed. Subscribed to panel config topic: %s", NSPM_ConfigManager::_mqtt_config_topic.c_str());
 }
@@ -131,21 +137,16 @@ void NSPM_ConfigManager::_handle_register_accept(const char *data, size_t data_l
 void NSPM_ConfigManager::_handle_new_config_data(const char *data, size_t data_length) {
   ESP_LOGD("NSPM_ConfigManager", "Received new config data, start processing.");
   if (xSemaphoreTake(NSPM_ConfigManager::_config_mutex, pdMS_TO_TICKS(5000))) {
-    // The same retained config is typically delivered more than once after an
-    // MQTT reconnect (retained message on re-subscribe and the manager's own
-    // re-send after register_request). Every CONFIG_LOADED makes
-    // several components re-subscribe and redraw, so skip exact duplicates.
-    if (NSPM_ConfigManager::_config != NULL && NSPM_ConfigManager::_last_config_data.size() == data_length && memcmp(NSPM_ConfigManager::_last_config_data.data(), data, data_length) == 0) {
-      xSemaphoreGive(NSPM_ConfigManager::_config_mutex);
-      ESP_LOGD("NSPM_ConfigManager", "Received config identical to current config, ignoring.");
-      return;
-    }
-
+    // Every delivery is applied, including byte-identical repeats after an MQTT reconnect.
+    // Filtering duplicates out here is not worth it: re-applying is cheap (ScreensaverPage
+    // ::init() only re-subscribes when a topic actually changed, and MqttManager::subscribe()
+    // is idempotent), and _notify_config_loaded() already collapses a burst of deliveries
+    // into a single CONFIG_LOADED. A byte comparison that decides not to notify would only
+    // add a way for a config to be received and then never reach anything.
     bool trigger_new_config_event = false;
     NSPanelConfig *new_config = nspanel_config__unpack(NULL, data_length, (const uint8_t *)data);
     if (new_config != NULL) [[likely]] {
       NSPM_ConfigManager::_config = std::shared_ptr<NSPanelConfig>(new_config, &NSPM_ConfigManager::_delete_nspanelconfig_object_from_shared_ptr);
-      NSPM_ConfigManager::_last_config_data.assign(data, data + data_length);
       trigger_new_config_event = true;
     } else {
       ESP_LOGE("NSPM_ConfigManager", "Received new config but failed to parse into protobuf object.");
@@ -169,10 +170,38 @@ void NSPM_ConfigManager::_handle_new_config_data(const char *data, size_t data_l
 
     if (trigger_new_config_event) {
       ESP_LOGI("NSPM_ConfigManager", "Received new config data from MQTT, will trigger event.");
-      esp_event_post(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, NULL, 0, pdMS_TO_TICKS(250));
+      NSPM_ConfigManager::_notify_config_loaded();
     }
   } else {
     ESP_LOGE("NSPM_ConfigManager", "Failed to gain config mutex while processing new config from MQTT!");
+  }
+}
+
+void NSPM_ConfigManager::_task_post_config_loaded(void *arg) {
+  for (;;) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    // Zero timeout: never wait on the default event loop queue, it is shared with the
+    // Wi-Fi events that drive reconnection. Back off here instead.
+    while (esp_event_post(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, NULL, 0, 0) != ESP_OK) {
+      ESP_LOGW("NSPM_ConfigManager", "Default event loop full, could not post CONFIG_LOADED. Will retry in 500ms.");
+      vTaskDelay(pdMS_TO_TICKS(500));
+    }
+    ESP_LOGI("NSPM_ConfigManager", "Posted CONFIG_LOADED.");
+  }
+}
+
+void NSPM_ConfigManager::_notify_config_loaded() {
+  if (NSPM_ConfigManager::_task_post_config_loaded_handle != NULL) [[likely]] {
+    // Notifications that land while a post is in flight are kept by the notification
+    // counter, so the task always posts again after the most recent config.
+    xTaskNotifyGive(NSPM_ConfigManager::_task_post_config_loaded_handle);
+    return;
+  }
+
+  // The task could not be created at init. Post inline as a last resort, accepting that
+  // this blocks the caller on the shared queue.
+  if (esp_event_post(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, NULL, 0, pdMS_TO_TICKS(250)) != ESP_OK) {
+    ESP_LOGE("NSPM_ConfigManager", "Failed to post CONFIG_LOADED inline. Components still hold the previous config.");
   }
 }
 
@@ -221,11 +250,8 @@ esp_err_t NSPM_ConfigManager::replace_config(std::shared_ptr<NSPanelConfig> *con
   if (NSPM_ConfigManager::_config != NULL) {
     if (xSemaphoreTake(NSPM_ConfigManager::_config_mutex, pdMS_TO_TICKS(5000))) {
       NSPM_ConfigManager::_config = *config;
-      // Config now differs from what the manager last sent; make sure the
-      // next config from the manager is applied even if it is byte-identical.
-      NSPM_ConfigManager::_last_config_data.clear();
       xSemaphoreGive(NSPM_ConfigManager::_config_mutex);
-      esp_event_post(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, NULL, 0, pdMS_TO_TICKS(250));
+      NSPM_ConfigManager::_notify_config_loaded();
       return ESP_OK;
     } else {
       ESP_LOGE("NSPM_ConfigManager", "Failed to gain config mutex while replacing config from other task!");

@@ -105,9 +105,35 @@ private:
    */
   static void _delete_nspanelconfig_object_from_shared_ptr(NSPanelConfig *config);
 
+  /**
+   * @brief Task that raises CONFIG_LOADED on the default event loop.
+   *
+   * Posting from the MQTT client task is not safe with a blocking timeout: the default
+   * event loop queue is shared with Wi-Fi, and a waiter on it can starve the post of
+   * WIFI_EVENT_STA_DISCONNECTED, which is what triggers a reconnect. This task posts with
+   * a zero timeout and backs off in its own vTaskDelay instead, so it only ever takes a
+   * slot that is already free.
+   *
+   * CONFIG_LOADED carries no payload and _config always holds the newest config, so
+   * several notifications arriving while a post is in flight collapse into one further
+   * post. That is correct rather than lossy, and it is why duplicate configs do not need
+   * to be filtered out before they get here.
+   */
+  static void _task_post_config_loaded(void *arg);
+
+  /**
+   * @brief Ask for CONFIG_LOADED to be raised. Never blocks, so it is safe to call from
+   * an MQTT event handler. Callers must have published the new config to _config first.
+   */
+  static void _notify_config_loaded();
+
   // Vars:
   // Task handle for the task responsible for sending all register requests to the manager. This is used to stop the task once a register_accept has been received.
   static inline TaskHandle_t _task_send_register_request_handle = NULL;
+
+  // Task handle for the task that raises CONFIG_LOADED. NULL if it could not be created,
+  // in which case _notify_config_loaded() falls back to posting inline.
+  static inline TaskHandle_t _task_post_config_loaded_handle = NULL;
 
   // Guards _task_send_register_request_handle and the interaction between the
   // task's self-teardown and _start_register_request_task's spawn check.
@@ -142,7 +168,4 @@ private:
 
   // The protobuf NSPanelConfig object decoded from MQTT.
   static inline std::shared_ptr<NSPanelConfig> _config = NULL;
-
-  // Raw bytes of the last config received from MQTT, used to ignore duplicate deliveries. Guarded by _config_mutex.
-  static inline std::vector<uint8_t> _last_config_data;
 };

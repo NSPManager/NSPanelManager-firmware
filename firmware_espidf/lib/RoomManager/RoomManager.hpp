@@ -186,6 +186,15 @@ private:
   static void _event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
   /**
+   * @brief Point a stored state topic at @param new_topic, unsubscribing from whatever it
+   * held before. Does nothing if the topic is unchanged.
+   * @param current_topic: The stored topic to update in place.
+   * @param new_topic: The topic to subscribe to instead.
+   * @return True if the topic was moved, false if it was already correct.
+   */
+  static bool _move_topic(std::string *current_topic, std::string new_topic);
+
+  /**
    * Function used when shared_ptr goes out of scope. Used to delete the underlying object
    * using the nspanel_room_status__free_unpacked function
    */
