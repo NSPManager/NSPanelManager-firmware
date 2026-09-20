@@ -172,6 +172,12 @@ void NSPM_ConfigManager::_handle_new_config_data(const char *data, size_t data_l
       ESP_LOGI("NSPM_ConfigManager", "Received new config data from MQTT, will trigger event.");
       NSPM_ConfigManager::_notify_config_loaded();
     }
+
+    if (ConfigManager::wifi_hostname.compare(new_config->name) != 0) {
+      ESP_LOGI("NSPM_ConfigManager", "Updating internal WiFi hostname to match manager provided friendly name.");
+      ConfigManager::wifi_hostname = new_config->name;
+      ConfigManager::save_config();
+    }
   } else {
     ESP_LOGE("NSPM_ConfigManager", "Failed to gain config mutex while processing new config from MQTT!");
   }
@@ -186,7 +192,7 @@ void NSPM_ConfigManager::_task_post_config_loaded(void *arg) {
       ESP_LOGW("NSPM_ConfigManager", "Default event loop full, could not post CONFIG_LOADED. Will retry in 500ms.");
       vTaskDelay(pdMS_TO_TICKS(500));
     }
-    ESP_LOGI("NSPM_ConfigManager", "Posted CONFIG_LOADED.");
+    ESP_LOGD("NSPM_ConfigManager", "Posted CONFIG_LOADED.");
   }
 }
 
