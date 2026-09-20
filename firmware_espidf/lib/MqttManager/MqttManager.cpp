@@ -50,26 +50,16 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
   {
     // Build "offline" last-will payload
     nlohmann::json json;
-    if (json != NULL) {
-      json["mac"] = mac_string.c_str();
-      json["state"] = "offline";
-    } else {
-      ESP_LOGE("MqttManager", "Failed to create cJSON object for last-will message!");
-      return;
-    }
+    json["mac"] = mac_string.c_str();
+    json["state"] = "offline";
     MqttManager::_last_will_message = json.dump();
   }
 
   {
     // Build "online" payload (pre-built so the retry task owns no heap allocation)
     nlohmann::json json;
-    if (json != NULL) {
-      json["mac"] = mac_string.c_str();
-      json["state"] = "online";
-    } else {
-      ESP_LOGE("MqttManager", "Failed to create cJSON object for online status message!");
-      return;
-    }
+    json["mac"] = mac_string.c_str();
+    json["state"] = "online";
     MqttManager::_online_status_message = json.dump();
   }
 
