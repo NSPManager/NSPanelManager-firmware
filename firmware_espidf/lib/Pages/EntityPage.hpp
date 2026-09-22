@@ -75,6 +75,17 @@ private:
   static void _update_display_media_player();
 
   /*
+   * Human readable name for a playback state, used by the display and the log.
+   */
+  static const char *_playback_state_name(NSPanelEntityState__MediaPlayer__PlaybackState state);
+
+  /*
+   * Log a decoded media player state. Temporary, for bringing the feature up against
+   * NSPanelManager PR #385 on a panel whose TFT has no media player page yet.
+   */
+  static void _log_media_player_state(NSPanelEntityState__MediaPlayer *media_player);
+
+  /*
    * Handle touch event for "Media player" page.
    */
   static void _handle_touch_event_media_player(uint16_t component_id, bool pressed);
@@ -138,6 +149,10 @@ private:
 
   static inline SemaphoreHandle_t _current_state_mutex = NULL;
   static inline std::shared_ptr<NSPanelEntityState> _current_state;
+
+  // Album art URL last handed to AlbumArt::render(), so that ordinary state updates (volume,
+  // track position) do not re-render the same image.
+  static inline std::string _last_album_art_url;
 
   static inline portMUX_TYPE _entity_page_spinlock = portMUX_INITIALIZER_UNLOCKED;
 };

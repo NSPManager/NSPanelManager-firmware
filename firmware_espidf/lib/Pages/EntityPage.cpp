@@ -1,3 +1,4 @@
+#include <AlbumArt.hpp>
 #include <ConfigManager.hpp>
 #include <EntitiesPage.hpp>
 #include <EntityPage.hpp>
@@ -35,6 +36,8 @@ void EntityPage::unshow() {
     MqttManager::unsubscribe(EntityPage::_current_entity_mqtt_topic);
   }
   EntityPage::_currently_showing = false;
+  // Forget the art we drew so that reopening the same player renders it again.
+  EntityPage::_last_album_art_url.clear();
 }
 
 void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -71,6 +74,15 @@ void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int3
             EntityPage::_current_mode = _entity_page_modes::THERMOSTAT;
           } else if (state->entity_case == NSPanelEntityState__EntityCase::NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER) {
             EntityPage::_current_mode = _entity_page_modes::MEDIA_PLAYER;
+            EntityPage::_log_media_player_state(state->media_player);
+
+            // Proof of concept: draw the album art over whatever page is displayed. State updates
+            // arrive for every volume nudge, so only a changed URL re-renders. The URL carries
+            // ?v=<hash> of the source image, so it changes exactly when the art itself does.
+            if (state->media_player->album_art_url != NULL && EntityPage::_last_album_art_url.compare(state->media_player->album_art_url) != 0) {
+              EntityPage::_last_album_art_url = state->media_player->album_art_url;
+              AlbumArt::render(EntityPage::_last_album_art_url);
+            }
           } else {
             ESP_LOGE("EntityPage", "Unknown entity state case!");
           }
@@ -717,13 +729,53 @@ void EntityPage::_send_thermostat_setpoint_command() {
   }
 }
 
+const char *EntityPage::_playback_state_name(NSPanelEntityState__MediaPlayer__PlaybackState state) {
+  switch (state) {
+  case NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__OFF:
+    return "Off";
+  case NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__ON:
+    return "On";
+  case NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__IDLE:
+    return "Idle";
+  case NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__PLAYING:
+    return "Playing";
+  case NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__PAUSED:
+    return "Paused";
+  case NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__BUFFERING:
+    return "Buffering";
+  default:
+    return "";
+  }
+}
+
+void EntityPage::_log_media_player_state(NSPanelEntityState__MediaPlayer *media_player) {
+  if (media_player == NULL) [[unlikely]] {
+    ESP_LOGE("EntityPage", "Media player state case set but no media player payload.");
+    return;
+  }
+
+  // Temporary, for bringing the feature up against NSPanelManager PR #385: the whole decode path
+  // runs before anything touches the display, so this verifies the protobuf round trip on a panel
+  // whose TFT has no media player page yet.
+  ESP_LOGI("EntityPage", "Media player %ld '%s': %s", media_player->media_player_id, media_player->name != NULL ? media_player->name : "(no name)", EntityPage::_playback_state_name(media_player->state));
+  ESP_LOGI("EntityPage", "  title '%s' artist '%s'", media_player->media_title != NULL ? media_player->media_title : "", media_player->media_artist != NULL ? media_player->media_artist : "");
+  ESP_LOGI("EntityPage", "  volume %ld, muted %s, source volume %ld (present: %s)", media_player->volume, media_player->is_muted ? "yes" : "no", media_player->source_volume, media_player->has_source_volume ? "yes" : "no");
+  ESP_LOGI("EntityPage", "  can: play %d pause %d next %d prev %d set_volume %d mute %d", media_player->can_play, media_player->can_pause, media_player->can_next_track, media_player->can_previous_track, media_player->can_set_volume, media_player->can_mute);
+  ESP_LOGI("EntityPage", "  album art: %s", media_player->album_art_url != NULL && media_player->album_art_url[0] != '\0' ? media_player->album_art_url : "(none)");
+}
+
 void EntityPage::_update_display_media_player() {
   ESP_LOGI("EntityPage", "Updating EntityPage with media player state.");
   if (!EntityPage::_currently_showing) {
     ESP_LOGD("EntityPage", "Switching page to %s", GUI_MEDIA_PLAYER_CONTROL_PAGE::page_name);
     EntityPage::_currently_showing = true;
     if (Nextion::go_to_page(GUI_MEDIA_PLAYER_CONTROL_PAGE::page_name, 1000) != ESP_OK) [[unlikely]] {
+      // The official HMI has no media player page yet, so on a stock TFT this fails every time
+      // rather than never. Clear the flag before backing out: otherwise the next state update
+      // takes the "already showing" path, skips the page switch, and writes the media player
+      // components onto whatever page is actually displayed.
       ESP_LOGE("EntityPage", "Failed to navigate Nextion to page. Will go back.");
+      EntityPage::_currently_showing = false;
       EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
       return;
     }
@@ -737,33 +789,9 @@ void EntityPage::_update_display_media_player() {
   std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
   NSPanelEntityState__MediaPlayer *media_player = state->media_player;
 
-  const char *state_text;
-  bool is_playing = false;
-  switch (media_player->state) {
-  case NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__OFF:
-    state_text = "Off";
-    break;
-  case NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__ON:
-    state_text = "On";
-    break;
-  case NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__IDLE:
-    state_text = "Idle";
-    break;
-  case NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__PLAYING:
-    state_text = "Playing";
-    is_playing = true;
-    break;
-  case NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__PAUSED:
-    state_text = "Paused";
-    break;
-  case NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__BUFFERING:
-    state_text = "Buffering";
-    is_playing = true;
-    break;
-  default:
-    state_text = "";
-    break;
-  }
+  const char *state_text = EntityPage::_playback_state_name(media_player->state);
+  bool is_playing = media_player->state == NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__PLAYING ||
+                    media_player->state == NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__BUFFERING;
 
   Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::name_label_name, media_player->name, 1000);
   Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::state_label_name, state_text, 1000);
