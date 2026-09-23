@@ -7,12 +7,29 @@
 #include <algorithm>
 #include <esp_timer.h>
 
-// Resend a SUBSCRIBE that has not been acknowledged after this long.
-#define SUBACK_TIMEOUT_MS 10000
+// SUBSCRIBEs allowed to be awaiting a SUBACK at once. esp_mqtt_client_subscribe_single() holds
+// esp-mqtt's internal API lock across its socket write, and the MQTT client task needs that same
+// lock to read from the socket. While we are sending, nothing can be received — including the
+// SUBACKs we are waiting for. Keeping few in flight bounds how long a stalled write can lock the
+// client task out.
+#define SUBSCRIBE_MAX_IN_FLIGHT 4
+// Timeout handed to esp-mqtt for a single network operation. Set explicitly rather than left at 0
+// (which makes esp-mqtt substitute its own MQTT_NETWORK_TIMEOUT_MS) because SUBACK_TIMEOUT_MS is
+// derived from it and that default lives in a header private to the component.
+#define MQTT_WRITE_TIMEOUT_MS 10000
+// Resend a SUBSCRIBE that has not been acknowledged after this long. A stalled write blocks the
+// MQTT client task for a whole MQTT_WRITE_TIMEOUT_MS, so this has to outlast a full set of
+// in-flight writes stalling back to back — otherwise every in-flight SUBSCRIBE expires at once and
+// one slow write becomes a self-sustaining resend storm.
+#define SUBACK_TIMEOUT_MS 60000
+static_assert(SUBACK_TIMEOUT_MS > SUBSCRIBE_MAX_IN_FLIGHT * MQTT_WRITE_TIMEOUT_MS,
+              "SUBACK_TIMEOUT_MS must outlast SUBSCRIBE_MAX_IN_FLIGHT stalled writes, or a single "
+              "slow write expires every in-flight SUBSCRIBE and triggers a resend storm");
 // Backoff after a failed SUBSCRIBE doubles from 1s up to this limit.
 #define SUBSCRIBE_MAX_BACKOFF_MS 30000
-// Number of unmatched SUBACKs to remember, see _early_subacks.
-#define EARLY_SUBACKS_MAX 8
+// Number of unmatched SUBACKs to remember, see _early_subacks. Never needs to hold more than
+// SUBSCRIBE_MAX_IN_FLIGHT of them, with room to spare.
+#define EARLY_SUBACKS_MAX 32
 
 static int64_t millis() {
   return esp_timer_get_time() / 1000;
@@ -22,8 +39,13 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
   esp_log_level_set("MqttManager", ConfigManager::log_level);
   ESP_LOGI("MqttManager", "Starting MQTTManager, will connect to %s:%d", server->c_str(), *port);
   MqttManager::_connected = false;
-  MqttManager::_send_online_update_task_mutex = xSemaphoreCreateMutex();
   MqttManager::_subscriptions_mutex = xSemaphoreCreateMutex();
+  if (xTaskCreatePinnedToCore(MqttManager::_task_send_online_update, "mqtt_online_upd", 2048, NULL, 2, &MqttManager::_send_online_update_task_handle, 1) != pdPASS) {
+    // Without this task the panel never announces itself as online, so the manager only ever
+    // sees the retained last will. Everything else still works.
+    ESP_LOGE("MqttManager", "Failed to create MQTT online status task!");
+    MqttManager::_send_online_update_task_handle = NULL;
+  }
   if (xTaskCreatePinnedToCore(MqttManager::_task_manage_subscriptions, "mqtt_subs", 4096, NULL, 4, &MqttManager::_manage_subscriptions_task_handle, 1) != pdPASS) {
     // Nothing will send SUBSCRIBE or UNSUBSCRIBE without this task. subscribe() and
     // unsubscribe() check the handle and report the failure to their callers.
@@ -46,6 +68,8 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
 
   MqttManager::_mqtt_config.task.priority = 10;
   MqttManager::_mqtt_config.task.stack_size = 8192;
+
+  MqttManager::_mqtt_config.network.timeout_ms = MQTT_WRITE_TIMEOUT_MS;
 
   MqttManager::_state_topic = "nspanel/";
   MqttManager::_state_topic.append(WiFiManager::mac_string());
@@ -131,16 +155,12 @@ void MqttManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
   case MQTT_EVENT_CONNECTED:
     ESP_LOGI("MqttManager", "Connected to MQTT server.");
     MqttManager::_connected = true;
-    // Cancel any pending retry from a previous connection attempt, then
-    // spawn a fresh task to publish the retained "online" status.
-    xSemaphoreTake(MqttManager::_send_online_update_task_mutex, portMAX_DELAY);
-    if (MqttManager::_send_online_update_task_handle != NULL) {
-      vTaskDelete(MqttManager::_send_online_update_task_handle);
-      MqttManager::_send_online_update_task_handle = NULL;
+    // Supersede any retry still running for an earlier connection, then wake the task to
+    // publish the retained "online" status for this one.
+    MqttManager::_online_update_generation++;
+    if (MqttManager::_send_online_update_task_handle != NULL) [[likely]] {
+      xTaskNotifyGive(MqttManager::_send_online_update_task_handle);
     }
-    xTaskCreatePinnedToCore(MqttManager::_task_send_online_update, "mqtt_online_upd",
-                            2048, NULL, 2, &MqttManager::_send_online_update_task_handle, 1);
-    xSemaphoreGive(MqttManager::_send_online_update_task_mutex);
 
     // Sessions are clean (disable_clean_session is not set), so the broker has dropped all
     // our subscriptions: subscribe to everything again, and there is nothing left to unsubscribe from.
@@ -168,13 +188,10 @@ void MqttManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
   case MQTT_EVENT_DISCONNECTED:
     ESP_LOGW("MqttManager", "Lost connection to MQTT server.");
     MqttManager::_connected = false;
-    // Cancel any pending online-status retry — pointless while disconnected.
-    xSemaphoreTake(MqttManager::_send_online_update_task_mutex, portMAX_DELAY);
-    if (MqttManager::_send_online_update_task_handle != NULL) {
-      vTaskDelete(MqttManager::_send_online_update_task_handle);
-      MqttManager::_send_online_update_task_handle = NULL;
-    }
-    xSemaphoreGive(MqttManager::_send_online_update_task_mutex);
+    // Stop any online-status retry still running for the connection that just dropped. This
+    // handler can be running on that very task — esp_mqtt_client_publish() dispatches
+    // MQTT_EVENT_DISCONNECTED inline when its write fails — so it must never delete it.
+    MqttManager::_online_update_generation++;
     break;
 
   case MQTT_EVENT_ERROR:
@@ -197,17 +214,24 @@ void MqttManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
 }
 
 void MqttManager::_task_send_online_update(void *param) {
-  while (MqttManager::publish(MqttManager::_state_topic,
-                              MqttManager::_online_status_message.c_str(),
-                              MqttManager::_online_status_message.size(),
-                              true) != ESP_OK) {
-    ESP_LOGE("MqttManager", "Failed to publish online status to %s. Will retry in 5s.", MqttManager::_state_topic.c_str());
-    vTaskDelay(pdMS_TO_TICKS(5000));
+  for (;;) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    // Keep retrying for as long as this connection lasts. A disconnect and a newer connect both
+    // bump the generation, which drops us back to waiting for the next notification. The publish
+    // below can deliver MQTT_EVENT_DISCONNECTED to _mqtt_event_handler on this task before it
+    // returns, so the generation may already have moved on by the time it does.
+    uint32_t generation = MqttManager::_online_update_generation.load();
+    while (MqttManager::_online_update_generation.load() == generation && MqttManager::connected()) {
+      if (MqttManager::publish(MqttManager::_state_topic,
+                               MqttManager::_online_status_message.c_str(),
+                               MqttManager::_online_status_message.size(),
+                               true) == ESP_OK) {
+        break;
+      }
+      ESP_LOGE("MqttManager", "Failed to publish online status to %s. Will retry in 5s.", MqttManager::_state_topic.c_str());
+      vTaskDelay(pdMS_TO_TICKS(5000));
+    }
   }
-  xSemaphoreTake(MqttManager::_send_online_update_task_mutex, portMAX_DELAY);
-  MqttManager::_send_online_update_task_handle = NULL;
-  xSemaphoreGive(MqttManager::_send_online_update_task_mutex);
-  vTaskDelete(NULL);
 }
 
 bool MqttManager::connected() {
@@ -277,6 +301,11 @@ void MqttManager::_handle_suback(int msg_id, bool failed) {
         subscription.failures = 0;
         ESP_LOGD("MqttManager", "Subscribed to '%s'.", subscription.topic.c_str());
       }
+      // A slot just freed up: let the subscription task send the next batch straight away
+      // instead of waiting for its next poll.
+      if (MqttManager::_manage_subscriptions_task_handle != NULL) [[likely]] {
+        xTaskNotifyGive(MqttManager::_manage_subscriptions_task_handle);
+      }
       return;
     }
   }
@@ -334,10 +363,18 @@ void MqttManager::_task_manage_subscriptions(void *param) {
     }
 
     // Pick the subscriptions that need a SUBSCRIBE and mark them in flight so the next
-    // round does not send them again while we are still sending.
+    // round does not send them again while we are still sending. Stop at SUBSCRIBE_MAX_IN_FLIGHT:
+    // every send locks the MQTT client task out for the duration of its write, and each SUBACK
+    // notifies this task, so the remainder goes out as soon as slots free up.
     std::vector<std::string> topics_to_subscribe;
     int64_t now = millis();
     xSemaphoreTake(MqttManager::_subscriptions_mutex, portMAX_DELAY);
+    size_t in_flight = 0;
+    for (const Subscription &subscription : MqttManager::_subscriptions) {
+      if (subscription.state == SubscriptionState::IN_FLIGHT && now - subscription.sent_ms <= SUBACK_TIMEOUT_MS) {
+        in_flight++;
+      }
+    }
     for (Subscription &subscription : MqttManager::_subscriptions) {
       bool send = false;
       if (subscription.state == SubscriptionState::PENDING && now >= subscription.next_attempt_ms) {
@@ -346,12 +383,17 @@ void MqttManager::_task_manage_subscriptions(void *param) {
         ESP_LOGW("MqttManager", "No SUBACK for '%s' after %dms. Sending SUBSCRIBE again.", subscription.topic.c_str(), SUBACK_TIMEOUT_MS);
         send = true;
       }
-      if (send) {
-        subscription.state = SubscriptionState::IN_FLIGHT;
-        subscription.msg_id = -1;
-        subscription.sent_ms = now;
-        topics_to_subscribe.push_back(subscription.topic);
+      if (!send) {
+        continue;
       }
+      if (in_flight >= SUBSCRIBE_MAX_IN_FLIGHT) {
+        break;
+      }
+      in_flight++;
+      subscription.state = SubscriptionState::IN_FLIGHT;
+      subscription.msg_id = -1;
+      subscription.sent_ms = now;
+      topics_to_subscribe.push_back(subscription.topic);
     }
     xSemaphoreGive(MqttManager::_subscriptions_mutex);
 
