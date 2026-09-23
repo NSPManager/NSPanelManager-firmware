@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <memory>
+#include <protobuf_nspanel.pb-c.h>
 #include <protobuf_nspanel_entity.pb-c.h>
 #include <string>
 
@@ -66,6 +67,40 @@ private:
    */
   static void _handle_string_event_thermostat(char *data);
 
+  /*
+   * Update displayed page and value of "Media player" page.
+   * The GUI does not have a media player page yet, so this stops following the media player instead.
+   * A GUI with a media player page replaces this and _handle_touch_event_media_player.
+   */
+  static void _update_display_media_player();
+
+  /*
+   * Human readable name for a playback state, used by the display and the log.
+   */
+  static const char *_playback_state_name(NSPanelEntityState__MediaPlayer__PlaybackState state);
+
+  /*
+   * Log a decoded media player state. Temporary, for bringing the feature up against
+   * NSPanelManager PR #385 on a panel whose TFT has no media player page yet.
+   */
+  static void _log_media_player_state(NSPanelEntityState__MediaPlayer *media_player);
+
+  /*
+   * Handle touch event for "Media player" page.
+   */
+  static void _handle_touch_event_media_player(uint16_t component_id, bool pressed);
+
+  /*
+   * Commands for the currently displayed media player. Decisions that depend on the
+   * current state (play or pause, mute or unmute) are made from the last state received.
+   */
+  static void _media_player_play_pause();
+  static void _media_player_next_track();
+  static void _media_player_previous_track();
+  static void _media_player_toggle_mute();
+  static void _media_player_set_volume(int32_t volume);
+  static void _media_player_set_source_volume(int32_t volume);
+
   /**
    * properly delete pointer and clear old data when shared_ptr expires
    */
@@ -80,11 +115,15 @@ private:
   // Send new set temp for a thermostat
   static void _send_thermostat_setpoint_command();
 
+  // Send a command for the currently displayed media player to the manager. Fills in the media player ID.
+  static void _send_media_player_command(NSPanelMQTTManagerCommand__MediaPlayerCommand *command);
+
   // What is the page currently showing
   enum _entity_page_modes {
     LIGHT_COLOR_TEMPERATURE,
     LIGHT_RGB,
     THERMOSTAT,
+    MEDIA_PLAYER,
   };
   static inline std::atomic<_entity_page_modes> _current_mode;
 
@@ -110,6 +149,10 @@ private:
 
   static inline SemaphoreHandle_t _current_state_mutex = NULL;
   static inline std::shared_ptr<NSPanelEntityState> _current_state;
+
+  // Album art URL last handed to AlbumArt::render(), so that ordinary state updates (volume,
+  // track position) do not re-render the same image.
+  static inline std::string _last_album_art_url;
 
   static inline portMUX_TYPE _entity_page_spinlock = portMUX_INITIALIZER_UNLOCKED;
 };
