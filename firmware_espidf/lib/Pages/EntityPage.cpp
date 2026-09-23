@@ -1,3 +1,4 @@
+#include <AlbumArt.hpp>
 #include <ConfigManager.hpp>
 #include <EntitiesPage.hpp>
 #include <EntityPage.hpp>
@@ -35,6 +36,9 @@ void EntityPage::unshow() {
     MqttManager::unsubscribe(EntityPage::_current_entity_mqtt_topic);
   }
   EntityPage::_currently_showing = false;
+  // A full render takes seconds and outlives this page, so stop it rather than let it paint
+  // over whatever comes next.
+  AlbumArt::cancel();
 }
 
 void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
