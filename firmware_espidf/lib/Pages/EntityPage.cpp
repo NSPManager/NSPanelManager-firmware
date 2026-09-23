@@ -36,7 +36,9 @@ void EntityPage::unshow() {
     MqttManager::unsubscribe(EntityPage::_current_entity_mqtt_topic);
   }
   EntityPage::_currently_showing = false;
-  // Forget the art we drew so that reopening the same player renders it again.
+  // A full render takes seconds and outlives this page, so stop it rather than let it paint
+  // over whatever comes next. Forget the URL too, so reopening the same player renders again.
+  AlbumArt::cancel();
   EntityPage::_last_album_art_url.clear();
 }
 
