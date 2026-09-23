@@ -154,6 +154,10 @@ esp_err_t AlbumArt::_run_pass(const std::string &base_url, uint16_t grid, const 
       memcpy(keep + (size_t)row_index * row_bytes, row, row_bytes);
     }
 
+    // Colour quantization would go here, masking low bits off each channel before runs are
+    // found: neighbouring pixels differ by a bit or two far more often than they differ
+    // visibly, which is what holds the average run down to 1.66 px. See TFT_SPEEDUP.md.
+
     fills += AlbumArt::_draw_row(row, grid, row_index, previous, previous_grid);
   }
 
@@ -176,6 +180,8 @@ uint32_t AlbumArt::_draw_row(const uint8_t *row, uint16_t grid, uint16_t row_ind
   // than by a scale factor.
   const uint16_t previous_row = (previous != NULL) ? (uint16_t)((uint32_t)row_index * previous_grid / grid) : 0;
 
+  // Runs merge horizontally only, so every fill is one block tall. Rows repeat too, and a taller
+  // fill costs no more bytes than a short one -- see "Vertical run merging" in TFT_SPEEDUP.md.
   uint32_t fills = 0;
   uint16_t run_start = 0;
   uint16_t run_color = AlbumArt::_pixel_at(row, grid, 0, 0);

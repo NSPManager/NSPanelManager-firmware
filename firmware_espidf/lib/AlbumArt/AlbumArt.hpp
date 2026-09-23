@@ -32,6 +32,12 @@
  * Both are data dependent, so every pass logs the fills it emitted against the blocks it covered.
  * That ratio is the number to watch when deciding whether this needs a faster UART.
  *
+ * Measured on real artwork: 21158 fills, 45 s for the full ladder, at a flat ~470 fills/s across
+ * every pass -- which is exactly the 115200 baud line rate, so this is wire bound with no
+ * headroom. Three things would speed it up, none of them applied here: merging runs vertically
+ * as well as horizontally, quantizing colour to lengthen runs, and raising the UART baud rate.
+ * TFT_SPEEDUP.md has the measurements and the tradeoffs.
+ *
  * The manager does the scaling. NSPanelManager PR #385 serves
  *   GET /nextion-img/media_player/<id>/album_art?v=<hash>[&w=<W>&h=<H>][&format=rgb565|png]
  * returning raw little-endian RGB565, row major from the top left, center cropped to fill W x H.
