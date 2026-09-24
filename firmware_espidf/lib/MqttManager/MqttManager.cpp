@@ -40,7 +40,7 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
   ESP_LOGI("MqttManager", "Starting MQTTManager, will connect to %s:%d", server->c_str(), *port);
   MqttManager::_connected = false;
   MqttManager::_subscriptions_mutex = xSemaphoreCreateMutex();
-  if (xTaskCreatePinnedToCore(MqttManager::_task_send_online_update, "mqtt_online_upd", 2048, NULL, 2, &MqttManager::_send_online_update_task_handle, 1) != pdPASS) {
+  if (xTaskCreatePinnedToCore(MqttManager::_task_send_online_update, "mqtt_online_upd", 3072, NULL, 2, &MqttManager::_send_online_update_task_handle, 1) != pdPASS) {
     // Without this task the panel never announces itself as online, so the manager only ever
     // sees the retained last will. Everything else still works.
     ESP_LOGE("MqttManager", "Failed to create MQTT online status task!");
@@ -153,11 +153,11 @@ void MqttManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
 
   switch ((esp_mqtt_event_id_t)event_id) {
   case MQTT_EVENT_CONNECTED:
-    ESP_LOGI("MqttManager", "Connected to MQTT server.");
     MqttManager::_connected = true;
     // Supersede any retry still running for an earlier connection, then wake the task to
     // publish the retained "online" status for this one.
     MqttManager::_online_update_generation++;
+    ESP_LOGI("MqttManager", "Connected to MQTT server. Online status generation %lu.", MqttManager::_online_update_generation.load());
     if (MqttManager::_send_online_update_task_handle != NULL) [[likely]] {
       xTaskNotifyGive(MqttManager::_send_online_update_task_handle);
     }
@@ -186,12 +186,12 @@ void MqttManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
     break;
 
   case MQTT_EVENT_DISCONNECTED:
-    ESP_LOGW("MqttManager", "Lost connection to MQTT server.");
     MqttManager::_connected = false;
     // Stop any online-status retry still running for the connection that just dropped. This
     // handler can be running on that very task — esp_mqtt_client_publish() dispatches
     // MQTT_EVENT_DISCONNECTED inline when its write fails — so it must never delete it.
     MqttManager::_online_update_generation++;
+    ESP_LOGW("MqttManager", "Lost connection to MQTT server. Online status generation %lu.", MqttManager::_online_update_generation.load());
     break;
 
   case MQTT_EVENT_ERROR:
@@ -221,16 +221,23 @@ void MqttManager::_task_send_online_update(void *param) {
     // below can deliver MQTT_EVENT_DISCONNECTED to _mqtt_event_handler on this task before it
     // returns, so the generation may already have moved on by the time it does.
     uint32_t generation = MqttManager::_online_update_generation.load();
+    ESP_LOGD("MqttManager", "Online status task woke for generation %lu.", generation);
     while (MqttManager::_online_update_generation.load() == generation && MqttManager::connected()) {
       if (MqttManager::publish(MqttManager::_state_topic,
                                MqttManager::_online_status_message.c_str(),
                                MqttManager::_online_status_message.size(),
                                true) == ESP_OK) {
+        ESP_LOGD("MqttManager", "Published online status for generation %lu.", generation);
         break;
       }
       ESP_LOGE("MqttManager", "Failed to publish online status to %s. Will retry in 5s.", MqttManager::_state_topic.c_str());
       vTaskDelay(pdMS_TO_TICKS(5000));
     }
+    // Reached on every exit from the loop: published, superseded by a newer generation, or
+    // disconnected. If a wake is not followed by this line, the task is still inside publish()
+    // — which is the state that used to wedge the client for good.
+    ESP_LOGD("MqttManager", "Online status task parked; generation %lu -> %lu, connected=%d.",
+             generation, MqttManager::_online_update_generation.load(), MqttManager::connected());
   }
 }
 
