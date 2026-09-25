@@ -1,0 +1,5 @@
+#pragma once
+#define ESP_TASK_PRIO_MAX 25
+#define ESP_TASK_PRIO_MIN 0
+#define ESP_TASKD_EVENT_PRIO (ESP_TASK_PRIO_MAX - 5)
+#define ESP_TASK_MAIN_PRIO (ESP_TASK_PRIO_MIN + 1)
