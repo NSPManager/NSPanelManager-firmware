@@ -1,6 +1,7 @@
 // Host unit test for RoomManager room navigation, built against the real
 // lib/RoomManager/RoomManager.cpp with shimmed ESP-IDF and faked collaborators.
 #include <RoomManager.hpp>
+#include <arch_rules.hpp>
 #include <protobuf_nspanel.pb-c.h>
 
 #include <cstdio>
@@ -105,6 +106,30 @@ static void test_empty_config_is_rejected() {
   CHECK_EQ(RoomManager::go_to_next_room(), ESP_ERR_NOT_FINISHED);
 }
 
+// A known violation, also recorded in tools/event_post_timeouts.baseline:
+// replace_home_page_status() posts HOME_PAGE_UPDATED onto the shared 32-slot
+// default loop with a 250 ms timeout, where CLAUDE.md requires a timeout of 0
+// plus back-off in the caller's own vTaskDelay(). Asserted rather than ignored
+// so the harness is shown to catch real firmware code, and so this becomes a
+// regression test the moment the call is fixed.
+static void test_replace_home_page_status_posts_with_a_blocking_timeout() {
+  std::printf("test_replace_home_page_status_posts_with_a_blocking_timeout\n");
+  arch::reset();
+
+  RoomManager::replace_home_page_status(nullptr);
+
+  const std::vector<arch::Violation> &found = arch::violations();
+  if (found.size() != 1 || found[0].rule != arch::Rule::BlockingPost) {
+    std::printf("  FAIL: expected one blocking post, got %zu violation(s).\n"
+                "        If this call was fixed, drop this test and refresh the\n"
+                "        lint baseline with `make lint-baseline`.\n",
+                found.size());
+    arch::print(stdout);
+    ++g_failures;
+  }
+  arch::reset();
+}
+
 int main() {
   RoomManager::init();
   test_next_room_advances_in_order();
@@ -113,6 +138,11 @@ int main() {
   test_unknown_room_falls_back_to_default();
   test_navigation_resubscribes_mqtt_topics();
   test_empty_config_is_rejected();
+  test_replace_home_page_status_posts_with_a_blocking_timeout();
+  // Whatever else these tests assert, the code under test must not have broken
+  // the concurrency rules in CLAUDE.md while doing it.
+  g_failures += arch::expect_clean();
+
   std::printf("\n%s\n", g_failures == 0 ? "ALL TESTS PASSED" : "TESTS FAILED");
   return g_failures == 0 ? 0 : 1;
 }
