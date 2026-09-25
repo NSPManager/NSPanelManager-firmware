@@ -95,6 +95,7 @@ typedef struct {
     int network_timeout_ms;
     int refresh_connection_after_ms;
     int reconnect_timeout_ms;
+    int timeout_ms; /* abort a network operation that has not finished in this long */
     bool disable_auto_reconnect;
   } network;
 } esp_mqtt_client_config_t;
