@@ -383,14 +383,11 @@ void MqttManager::_task_manage_subscriptions(void *param) {
       }
     }
     for (Subscription &subscription : MqttManager::_subscriptions) {
-      bool send = false;
       if (subscription.state == SubscriptionState::PENDING && now >= subscription.next_attempt_ms) {
-        send = true;
+        // Never sent, or a retry that has waited out its backoff.
       } else if (subscription.state == SubscriptionState::IN_FLIGHT && subscription.msg_id >= 0 && now - subscription.sent_ms > SUBACK_TIMEOUT_MS) {
         ESP_LOGW("MqttManager", "No SUBACK for '%s' after %dms. Sending SUBSCRIBE again.", subscription.topic.c_str(), SUBACK_TIMEOUT_MS);
-        send = true;
-      }
-      if (!send) {
+      } else {
         continue;
       }
       if (in_flight >= SUBSCRIBE_MAX_IN_FLIGHT) {
