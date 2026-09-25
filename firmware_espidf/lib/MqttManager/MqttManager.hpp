@@ -3,6 +3,7 @@
 #include <freertos/semphr.h>
 #include <freertos/task.h>
 #include <mqtt_client.h>
+#include <atomic>
 #include <string>
 #include <utility>
 #include <vector>
@@ -76,9 +77,12 @@ private:
   static void _mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
   /**
-   * Task that publishes the "online" retained status message, retrying every 5s
-   * until successful. Spawned on MQTT_EVENT_CONNECTED; cancelled on
-   * MQTT_EVENT_DISCONNECTED or when a new CONNECTED event supersedes it.
+   * Task that publishes the "online" retained status message, retrying every 5s until it
+   * succeeds. Created once in start() and never deleted: esp-mqtt dispatches its events
+   * synchronously on whichever task called into it, so MQTT_EVENT_DISCONNECTED can be delivered
+   * to _mqtt_event_handler on this very task, from inside the publish below. Deleting it from
+   * there would orphan esp-mqtt's internal API lock and wedge the client for good. Woken on
+   * MQTT_EVENT_CONNECTED, gives up when its generation is superseded.
    */
   static void _task_send_online_update(void *param);
 
@@ -173,20 +177,19 @@ private:
 
   /**
    * Pre-built "online" JSON payload published by _task_send_online_update.
-   * Built once in start() so the task holds no heap allocation of its own
-   * and can be safely deleted at any time.
+   * Built once in start() so the task holds no heap allocation of its own.
    */
   static inline std::string _online_status_message;
 
   /**
-   * Handle of the currently live online-status publish task, or NULL.
-   * Must be accessed only while holding _send_online_update_task_mutex.
+   * Handle of the permanent online-status publish task, notified on every MQTT_EVENT_CONNECTED.
    */
   static inline TaskHandle_t _send_online_update_task_handle = NULL;
 
   /**
-   * Guards _send_online_update_task_handle. Prevents the task's self-cleanup
-   * (NULL + vTaskDelete) from racing with the event handler's delete/create.
+   * Bumped on every connect and every disconnect. _task_send_online_update reads it before it
+   * starts publishing and stops retrying as soon as it changes, so a retry left over from a
+   * dropped connection can never publish "online" on behalf of a connection that is gone.
    */
-  static inline SemaphoreHandle_t _send_online_update_task_mutex = NULL;
+  static inline std::atomic<uint32_t> _online_update_generation = 0;
 };
