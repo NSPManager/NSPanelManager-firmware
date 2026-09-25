@@ -1,3 +1,4 @@
+#include <BuzzerManager.hpp>
 #include <ButtonManager.hpp>
 #include <ConfigManager.hpp>
 #include <InterfaceManager.hpp>
@@ -144,6 +145,9 @@ extern "C" void app_main() {
   // Setup ButtonManager to handle physical buttons and relays
   ButtonManager::init();
 
+  // Setup BuzzerManager to drive the buzzer and track panel events that can have sounds
+  BuzzerManager::init();
+
   // Only start managers for actual functionality if MQTT is configured.
   if (!ConfigManager::mqtt_server.empty()) {
     // Start task that handles MQTT connection
@@ -151,6 +155,7 @@ extern "C" void app_main() {
 
     // Now that we have created the MQTT client we can register callbacks from it, register ButtonManager
     ButtonManager::init_mqtt();
+    BuzzerManager::init_mqtt();
 
     // MQTT is now setup, enable custom logging through MQTT
     publish_mqtt_log_messages_queue = xQueueCreate(16, sizeof(char *));
