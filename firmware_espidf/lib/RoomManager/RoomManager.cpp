@@ -657,6 +657,11 @@ void RoomManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
   if (event_id == MQTT_EVENT_DATA) {
     // This function is only registered for MQTT_EVENT_DATA, handle data config data:
     esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
+    // A fragment of a message larger than the MQTT buffer would unpack as a truncated status, and a
+    // topicless continuation would match a topic not yet set. MqttManager logs the drop.
+    if (event->data_len != event->total_data_len) [[unlikely]] {
+      return;
+    }
     std::string topic_string = std::string(event->topic, event->topic_len);
 
     if (topic_string.compare(RoomManager::_current_home_page_status_topic.get()) == 0) {

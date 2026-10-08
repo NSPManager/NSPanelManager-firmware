@@ -40,7 +40,8 @@ void EntityPage::unshow() {
 void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
   if (event_id == MQTT_EVENT_DATA) {
     esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
-    if (event->topic_len == 0 || event->data_len == 0) [[unlikely]] {
+    // A fragment of a message larger than the MQTT buffer would unpack as a truncated state. MqttManager logs the drop.
+    if (event->topic_len == 0 || event->data_len == 0 || event->data_len != event->total_data_len) [[unlikely]] {
       return;
     }
     std::string topic_string = std::string(event->topic, event->topic_len);
