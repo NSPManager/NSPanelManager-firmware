@@ -46,6 +46,10 @@ void NSPM_ConfigManager::init() {
 void NSPM_ConfigManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
   if (event_id == MQTT_EVENT_DATA) {
     esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
+    // A fragment of a message larger than the MQTT buffer would unpack as a truncated config. MqttManager logs the drop.
+    if (event->data_len != event->total_data_len) [[unlikely]] {
+      return;
+    }
     std::string topic_string = std::string(event->topic, event->topic_len);
     // esp_mqtt_client_handle_t client = event->client;
 
