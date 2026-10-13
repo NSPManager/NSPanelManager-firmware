@@ -522,7 +522,9 @@ class GUI_MEDIA_PLAYER_CONTROL_PAGE {
 public:
   static inline constexpr const char *page_name = "mediaplayer";
 
-  static inline constexpr const uint8_t back_button_id = 6;
+  // PoC HMI: the top left and the player name in the lower left both go back to the entities page.
+  static inline constexpr const uint8_t back_button_id = 13;
+  static inline constexpr const uint8_t name_button_id = 3;
   static inline constexpr const uint8_t volume_slider_id = 1;
   static inline constexpr const uint8_t source_volume_slider_id = 2;
   static inline constexpr const uint8_t previous_track_button_id = 18;

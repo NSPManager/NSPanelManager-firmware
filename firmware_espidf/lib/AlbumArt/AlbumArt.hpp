@@ -108,10 +108,10 @@ private:
   static inline std::atomic<bool> _rendering = false;
   static inline std::atomic<bool> _cancelled = false;
 
-  // Where the art is drawn. The NSPanel display is 480x320. Every grid below divides draw_size
-  // exactly, so no pass leaves gaps.
-  static constexpr uint16_t draw_origin_x = 160;
-  static constexpr uint16_t draw_origin_y = 80;
+  // Where the art is drawn: the lower right corner of the US portrait display, which is 320 wide
+  // and 480 tall. Every grid below divides draw_size exactly, so no pass leaves gaps.
+  static constexpr uint16_t draw_origin_x = 320 - 160;
+  static constexpr uint16_t draw_origin_y = 480 - 160;
   static constexpr uint16_t draw_size = 160;
 
   // Passes, coarsest first, ending at one block per pixel. Block sizes: 20, 10, 5, 2, 1.

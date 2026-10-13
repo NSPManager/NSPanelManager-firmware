@@ -766,6 +766,7 @@ void EntityPage::_log_media_player_state(NSPanelEntityState__MediaPlayer *media_
 
 void EntityPage::_update_display_media_player() {
   ESP_LOGI("EntityPage", "Updating EntityPage with media player state.");
+  bool page_just_opened = false;
   if (!EntityPage::_currently_showing) {
     ESP_LOGD("EntityPage", "Switching page to %s", GUI_MEDIA_PLAYER_CONTROL_PAGE::page_name);
     EntityPage::_currently_showing = true;
@@ -784,10 +785,17 @@ void EntityPage::_update_display_media_player() {
     InterfaceManager::current_page_unshow_callback.set(EntityPage::unshow);
 
     esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event, NULL);
+    page_just_opened = true;
   }
 
   std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
   NSPanelEntityState__MediaPlayer *media_player = state->media_player;
+
+  // Proof of concept: draw the album art in the lower right corner as soon as the page opens. A
+  // render already in progress ignores the request, and unshow() cancels one that outlives the page.
+  if (page_just_opened && media_player->album_art_url != NULL && media_player->album_art_url[0] != '\0') {
+    AlbumArt::render(media_player->album_art_url);
+  }
 
   const char *state_text = EntityPage::_playback_state_name(media_player->state);
   bool is_playing = media_player->state == NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__PLAYING ||
@@ -800,11 +808,14 @@ void EntityPage::_update_display_media_player() {
 
   // Play/pause is a dual state button, value 1 shows it as playing.
   Nextion::set_component_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::play_pause_button_name, is_playing ? 1 : 0, 250);
+  // PoC HMI: b_play and b_mute are on a text font rather than the icon font, so label them.
+  Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::play_pause_button_name, is_playing ? "Pause" : "Play", 250);
   Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::play_pause_button_name, is_playing ? media_player->can_pause : media_player->can_play, 250);
   Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::previous_track_button_name, media_player->can_previous_track, 250);
   Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::next_track_button_name, media_player->can_next_track, 250);
 
   Nextion::set_component_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_name, media_player->is_muted ? 1 : 0, 250);
+  Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_name, media_player->is_muted ? "Unmute" : "Mute", 250);
   Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_name, media_player->can_mute, 250);
 
   Nextion::set_component_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_slider_name, media_player->volume, 250);
@@ -824,6 +835,7 @@ void EntityPage::_handle_touch_event_media_player(uint16_t component_id, bool pr
 
   switch (component_id) {
   case GUI_MEDIA_PLAYER_CONTROL_PAGE::back_button_id:
+  case GUI_MEDIA_PLAYER_CONTROL_PAGE::name_button_id:
     ESP_LOGD("EntityPage", "Received touch event to go back.");
     EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
     break;
