@@ -81,9 +81,17 @@ private:
   static void _task_save_scene_progress(void *scene_slot);
 
   // Vars
-  // Written by the RoomManager event loop and unshow(), read by the Nextion event loop and the save-scene task.
-  // Call get() once and use that copy. If another task swaps in a new page while you are still using
-  // the old one, your copy stops the old page from being freed until you are done with it.
+  // Shared between tasks: written by the RoomManager event loop and unshow(), read by the Nextion
+  // event loop and the save-scene task.
+  //
+  // Never dereference this directly. `->` on a shared_ptr returns a raw pointer and holds no reference,
+  // so if another task replaces or clears the page while you are reading through it, the old page can be
+  // freed underneath you (this member is often its last owner). Instead, call get() once per entry point,
+  // keep that local copy for the whole operation, and pass it down by const&. The copy holds a reference,
+  // so the page stays alive until you are done.
+  //
+  // The mutex protects taking the copy itself: only the refcount inside a shared_ptr is atomic, so copying
+  // it while another task assigns it is a data race.
   static inline MutexWrapped<std::shared_ptr<NSPanelRoomEntitiesPage>> _current_entities_page;
 
   // Set to 4, 8 or 12. Used to determine if we should send the command to switch page on Nextion display.

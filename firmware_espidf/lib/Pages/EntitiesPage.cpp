@@ -171,8 +171,8 @@ void EntitiesPage::_handle_roommanager_event(void *arg, esp_event_base_t event_b
 }
 
 void EntitiesPage::_handle_nextion_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-  // Use this copy for the whole event. unshow() or a page update on another task can swap the page out while
-  // we handle the touch, and our copy stops the old page from being freed underneath us.
+  // Take our own reference for the whole event. If we went through _current_entities_page directly,
+  // nothing would keep the page alive when unshow() or a page update on another task replaces it mid-handler.
   std::shared_ptr<NSPanelRoomEntitiesPage> page = EntitiesPage::_current_entities_page.get();
   if (page == nullptr || EntitiesPage::_currently_showing_page_type == 0) { // We are currently not displaying. Ignore Nextion event.
     return;
@@ -258,8 +258,8 @@ void EntitiesPage::_handle_items4_touch_event(const std::shared_ptr<NSPanelRoomE
       if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].label_id) {
         if (touch_data->pressed) {
           for (int j = 0; j < page->n_entities; j++) {
-            if (page->entities[j]->room_view_position == i) {
-              if (page->entities[j] != nullptr) [[likely]] {
+            if (page->entities[j] != nullptr) [[likely]] {
+              if (page->entities[j]->room_view_position == i) {
                 std::string topic_string = page->entities[j]->mqtt_state_topic;
                 if (!topic_string.empty()) [[likely]] {
                   EntityPage::show(topic_string);
