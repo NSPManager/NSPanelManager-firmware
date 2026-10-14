@@ -28,14 +28,14 @@ public:
   static void unshow();
 
   /**
-   * Update display with new values from _current_entities_page.
+   * Update display with new values from the given entities page.
    */
-  static void _update_display();
+  static void _update_display(const std::shared_ptr<NSPanelRoomEntitiesPage> &page);
 
   /**
    * Updated displayed items in each slot.
    */
-  static void _update_displayed_items();
+  static void _update_displayed_items(const std::shared_ptr<NSPanelRoomEntitiesPage> &page);
 
 private:
   /**
@@ -56,17 +56,17 @@ private:
   /**
    * Handle touch event in "items4" page.
    */
-  static void _handle_items4_touch_event(nextion_event_touch_t *touch_data);
+  static void _handle_items4_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data);
 
   /**
    * Handle touch event in "items8" page.
    */
-  static void _handle_items8_touch_event(nextion_event_touch_t *touch_data);
+  static void _handle_items8_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data);
 
   /**
    * Handle touch event in "items12" page.
    */
-  static void _handle_items12_touch_event(nextion_event_touch_t *touch_data);
+  static void _handle_items12_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data);
 
   /**
    * Send toggle command to manager
@@ -81,7 +81,10 @@ private:
   static void _task_save_scene_progress(void *scene_slot);
 
   // Vars
-  static inline std::shared_ptr<NSPanelRoomEntitiesPage> _current_entities_page;
+  // Written by the RoomManager event loop and unshow(), read by the Nextion event loop and the save-scene task.
+  // Call get() once and use that copy. If another task swaps in a new page while you are still using
+  // the old one, your copy stops the old page from being freed until you are done with it.
+  static inline MutexWrapped<std::shared_ptr<NSPanelRoomEntitiesPage>> _current_entities_page;
 
   // Set to 4, 8 or 12. Used to determine if we should send the command to switch page on Nextion display.
   static inline std::atomic<uint8_t> _currently_showing_page_type = 0;
