@@ -63,7 +63,7 @@ void InterfaceManager::init() {
 
   // No SSID configured, the access point has been started through WiFiManager
   // Show text to connect to AP and wait indefinefly. Panel will reboot once settings has been saved.
-  // TODO: Perhaps implement flag in WiFi manager for which more the we are currently in
+  // TODO: Perhaps implement flag in WiFi manager for which mode the we are currently in
   // instead of relying on empty WiFi SSID.
   if (ConfigManager::wifi_ssid.empty()) {
     for (;;) {

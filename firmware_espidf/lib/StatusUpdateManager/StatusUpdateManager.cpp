@@ -114,7 +114,7 @@ void StatusUpdateManager::init() {
 
   // Start the task that is responsible for reading new temperature data
   // We use a task for this instead of a periodic timer as a periodic timer does not wake CPU from light sleep
-  if (xTaskCreatePinnedToCore(StatusUpdateManager::_measure_temperature, "measure_temp", 2048, NULL, 1, NULL, 1) != pdTRUE) {
+  if (xTaskCreatePinnedToCore(StatusUpdateManager::_measure_temperature, "measure_temp", 3072, NULL, 1, NULL, 1) != pdTRUE) {
     ESP_LOGE("StatusUpdateManager", "Failed to create task to read temperature.");
   }
 }
@@ -182,8 +182,9 @@ void StatusUpdateManager::_measure_temperature(void *arg) {
   for (;;) {
     int read_voltage_mv_raw;
     if (adc_oneshot_read(StatusUpdateManager::_temp_adc_handle, ADC_CHANNEL_2, &read_voltage_mv_raw) != ESP_OK) {
-      ESP_LOGE("StatusUpdateManager", "Failed to read raw voltage data from temp sensor.");
-      return;
+      ESP_LOGE("StatusUpdateManager", "Failed to read raw voltage data from temp sensor. Will retry in 5 seconds.");
+      vTaskDelay(pdMS_TO_TICKS(1000));
+      continue;
     }
 
     int read_voltage_mv;
@@ -193,13 +194,18 @@ void StatusUpdateManager::_measure_temperature(void *arg) {
     }
 
     // We now have temperature as a voltage. Convert voltage into celsius:
-    double read_voltage_v = (double)read_voltage_mv_raw / 1000.0; // Convert mV to V.
+    double read_voltage_v = (double)read_voltage_mv / 1000.0; // Convert mV to V.
+    if (read_voltage_v <= 0.5 || read_voltage_v >= 3.25) {
+      ESP_LOGW("StatusUpdateManager", "Voltage read from thermistor outside of range. Will skip measurement.");
+      vTaskDelay(pdMS_TO_TICKS(1000));
+      continue;
+    }
 
     // Calculate temperature from NTC using the Steinhart–Hart equation
     // See https://robertvicol.com/tech/arduino-measuring-temperature-with-ntc-steinhart-hart-formula/ for example
     // Thanks to @atirage in https://github.com/arendst/Tasmota/discussions/15737 for providing reference values.
-    double R2 = 8800 / ((3.3 - read_voltage_v) - 1);
-    double steinhart = R2 / 12400;                   // (R/Ro)
+    double R2 = 10000.0 / ((3.3 / read_voltage_v) - 1);
+    double steinhart = R2 / 10000.0;                 // (R/Ro)
     steinhart = log(steinhart);                      // ln(R/Ro)
     steinhart /= 3950.0;                             // 1/B * ln(R/Ro)
     steinhart += 1.0 / (25.0 + 273.15);              // + (1/To)
@@ -394,7 +400,7 @@ void StatusUpdateManager::_update_from_config() {
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
     StatusUpdateManager::_measure_temperature_in_fahrenheit = config->use_fahrenheit;
-    StatusUpdateManager::_temperature_offset_calibration = (config->temperature_calibration / 10);
+    StatusUpdateManager::_temperature_offset_calibration = (config->temperature_calibration / 10.0);
   } else {
     ESP_LOGE("StatusUpdateManager", "Failed to get config to determine if we should measure temperature in C or F. Will assume C.");
   }
