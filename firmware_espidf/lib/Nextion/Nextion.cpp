@@ -80,6 +80,7 @@ esp_err_t Nextion::init() {
     ESP_LOGE("Nextion", "Failed to set UART pins! Error: %s", esp_err_to_name(cmd_err));
   }
 
+#if !defined(NSPM_QEMU)
   cmd_err = uart_enable_pattern_det_baud_intr(UART_NUM_2, 0xFF, 3, 9, 0, 0); // Setup pattern detection to trigger interrupt when 3 consecutive 0xFF has been received.
   if (cmd_err != ESP_OK) {
     ESP_LOGE("Nextion", "Failed to enable pattern detection on UART! Error: %s", esp_err_to_name(cmd_err));
@@ -89,6 +90,12 @@ esp_err_t Nextion::init() {
   if (cmd_err != ESP_OK) {
     ESP_LOGE("Nextion", "Failed to reset UART pattern queue! Error: %s", esp_err_to_name(cmd_err));
   }
+#else
+  // QEMU emulates no pattern detection (see _qemu_frame_uart_data). Its DPORT
+  // model also does not reflect the UART clock-enable bits, so the IDF 6
+  // driver's uart_get_baudrate() fails in pattern setup and the baud divisor
+  // is zero: IntegerDivideByZero.
+#endif
 
   // Register event handler for when uart data is fully read and processed into an Nextion event
   esp_err_t reg_handler_result = esp_event_handler_register_with(Nextion::_handle_uart_data_event_loop, NEXTION_EVENT, nextion_event_t::RECEIVED_DATA, &Nextion::_uart_data_handler, NULL);
@@ -196,6 +203,11 @@ void Nextion::_task_uart_event(void *param) {
                 }
               }
             }
+#if defined(NSPM_QEMU)
+            else {
+              Nextion::_qemu_frame_uart_data(event.size);
+            }
+#endif
             xSemaphoreGive(Nextion::_nextion_state_mutex);
           } else {
             ESP_LOGE("Nextion", "Failed to take _nextion_state_mutex while checking current state!");
@@ -260,6 +272,58 @@ void Nextion::_task_uart_event(void *param) {
     }
   }
 }
+
+#if defined(NSPM_QEMU)
+void Nextion::_qemu_frame_uart_data(size_t size) {
+  // QEMU's ESP32 UART does not emulate AT_CMD_CHAR pattern detection, so
+  // UART_PATTERN_DET never fires and every byte arrives as UART_DATA. Split on
+  // the 0xFF 0xFF 0xFF terminator here instead and post each frame exactly as
+  // the UART_PATTERN_DET path does.
+  //
+  // The handler receives a shallow copy of the std::vector and reads its heap
+  // storage after this function returns, so a frame's buffer must not be
+  // reused until it has been dispatched. Rotate through more buffers than the
+  // uart_handle_data queue can hold, plus the one being handled.
+  static std::vector<char> pending;
+  static std::vector<char> frames[NEXTION_UART_EVENT_LOOP_QUEUE_SIZE + 2];
+  static size_t next_frame = 0;
+
+  // Read exactly what is buffered, never what this event reports. If an
+  // earlier UART_DATA event was lost (event queue full), its bytes are still in
+  // the ring buffer and every later frame would wait behind them; and once they
+  // have been drained, the events that are still queued describe bytes already
+  // consumed, so reading their size would block waiting for data.
+  size_t buffered = 0;
+  if (uart_get_buffered_data_len(UART_NUM_2, &buffered) != ESP_OK || buffered == 0) {
+    return;
+  }
+  size = buffered;
+
+  size_t offset = pending.size();
+  pending.resize(offset + size);
+  int read = uart_read_bytes(UART_NUM_2, pending.data() + offset, size, 0);
+  pending.resize(offset + (read > 0 ? read : 0));
+
+  size_t start = 0;
+  for (size_t i = 0; i + 2 < pending.size(); i++) {
+    if ((uint8_t)pending[i] == 0xFF && (uint8_t)pending[i + 1] == 0xFF && (uint8_t)pending[i + 2] == 0xFF) {
+      std::vector<char> &frame = frames[next_frame];
+      next_frame = (next_frame + 1) % (sizeof(frames) / sizeof(frames[0]));
+      frame.assign(pending.begin() + start, pending.begin() + i);
+      if (esp_event_post_to(Nextion::_handle_uart_data_event_loop, NEXTION_EVENT, nextion_event_t::RECEIVED_DATA, &frame, sizeof(frame), pdMS_TO_TICKS(16)) != ESP_OK) {
+        ESP_LOGE("Nextion", "Failed to post new event data from UART event!");
+      }
+      i += 2;
+      start = i + 1;
+    }
+  }
+  pending.erase(pending.begin(), pending.begin() + start);
+  if (pending.size() > NEXTION_UART_BUFFER_SIZE * 4) {
+    ESP_LOGW("Nextion", "Discarding %zu bytes of unterminated UART data.", pending.size());
+    pending.clear();
+  }
+}
+#endif
 
 void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
   std::vector<char> *data = (std::vector<char> *)event_data;

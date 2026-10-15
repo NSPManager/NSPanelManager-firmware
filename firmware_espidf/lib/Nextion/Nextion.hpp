@@ -195,6 +195,11 @@ private:
   // Handle all events from UART
   static void _task_uart_event(void *param);
 
+#if defined(NSPM_QEMU)
+  // Software stand-in for the UART pattern detection QEMU does not emulate.
+  static void _qemu_frame_uart_data(size_t size);
+#endif
+
   // Process UART events
   static void _uart_data_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
