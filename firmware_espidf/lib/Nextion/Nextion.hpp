@@ -196,6 +196,11 @@ private:
   // Handle all events from UART
   static void _task_uart_event(void *param);
 
+#if defined(NSPM_QEMU)
+  // Software stand-in for the UART pattern detection QEMU does not emulate.
+  static void _qemu_frame_uart_data(size_t size);
+#endif
+
   // Post data read from UART to _uart_data_handler on the UART data event loop
   static void _post_received_data(const std::vector<char> &data);
 
