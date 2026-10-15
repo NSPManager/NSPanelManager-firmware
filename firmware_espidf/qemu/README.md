@@ -90,6 +90,36 @@ button checks `!pressed`, the ceiling and table buttons handle both, and next-ro
 act on any event, which means the TFT reports one edge for them. Send what the TFT sends. A full
 `press()` on next-room advances two rooms.
 
+## Stack tests
+
+`tests/test_stack.py` runs the firmware against the real NSPanelManager instead of
+`FakeManager`, using the dev stack from the NSPanelManager repo (`docker/dev`). Start the
+stack, then give the harness its broker:
+
+```
+docker/dev/nspm-dev up                                          # in NSPanelManager; prints the broker port
+NSPM_STACK_MQTT=127.0.0.1:<port> qemu/run_tests.sh -m stack     # here
+```
+
+`NSPM_STACK_WEB` is the stack's web UI (default `http://127.0.0.1:8010`). Tests marked
+`stack` are skipped without `NSPM_STACK_MQTT`.
+
+```
+   QEMU panel ── slirp ──► FaultProxy ──► stack mosquitto ◄──► MQTTManager ◄── Django
+                                               ▲                    ▲ STOMP     ▲ REST
+                                               └ observer ─── StackManager ─────┘
+```
+
+Each panel gets a random MAC and its own hostname, so it is new to the stack. It registers,
+shows up as awaiting accept, and `StackManager.accept()` accepts it through the same STOMP
+topics (`entity_states`, `nspanel/<mac>/status`) and REST call
+(`POST /rest/nspanel/<id>/accept`) the web UI uses. That makes any number of panels
+possible: `make_rig()` builds another one. At teardown the panel is deleted from the stack
+(`NSPM_STACK_KEEP_PANELS=1` keeps it, to look at it in the UI).
+
+The stack is shared state, so `subscriptions()` and the connect/subscribe waits, which read
+the harness's own mosquitto log, are unavailable here.
+
 ## What differs from hardware
 
 The `qemu` PlatformIO env is `original_sonoff` with `-DNSPM_QEMU` and

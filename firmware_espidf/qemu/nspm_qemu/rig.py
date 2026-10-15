@@ -8,6 +8,7 @@ from typing import Optional
 from .broker import Broker
 from .fake_manager import QEMU_HOST_ADDRESS, FakeManager
 from .panel import QemuPanel
+from .stack_manager import Stack, StackManager
 
 PROJECT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DEFAULT_BUILD_DIR = os.path.join(PROJECT_DIR, ".pio", "build", "qemu")
@@ -19,11 +20,21 @@ BOOT_TIMEOUT = 180
 
 
 class Rig:
+    """With `stack`, the panel joins a running NSPanelManager dev stack: its broker and its
+    real manager, watched through a StackManager. boot() accepts it in the stack's web UI,
+    and stop() deletes it again. Without, it gets its own mosquitto and a FakeManager."""
+
     def __init__(self, workdir: str, mac: str = "C0:49:EF:00:00:01", hostname: str = "qemu-panel",
-                 build_dir: Optional[str] = None, panel_config: Optional[dict] = None):
+                 build_dir: Optional[str] = None, panel_config: Optional[dict] = None,
+                 stack: Optional[Stack] = None):
         os.makedirs(workdir, exist_ok=True)
-        self.broker = Broker(log_path=os.path.join(workdir, "mosquitto.log"))
-        self.manager = FakeManager(self.broker)
+        if stack is None:
+            self.broker = Broker(log_path=os.path.join(workdir, "mosquitto.log"))
+            self.manager = FakeManager(self.broker)
+        else:
+            self.broker = Broker(external=stack.mqtt)
+            self.manager = StackManager(self.broker, stack, mac)
+        self.stack = stack
         self.hostname = hostname
         if panel_config is None:
             panel_config = self.default_panel_config()
@@ -57,7 +68,13 @@ class Rig:
     def boot(self) -> None:
         """Start the panel and wait until it is registered, configured and idle on its screensaver."""
         self.start()
+        self.wait_until_booted()
+
+    def wait_until_booted(self) -> None:
+        """The second half of boot(), for starting several panels before waiting on any."""
         self.manager.wait_for_registration(timeout=BOOT_TIMEOUT)
+        if self.stack is not None:
+            self.manager.accept()
         self.panel.wait_for_log(r"Manager is online!", timeout=60)
         self.panel.wait_for_log(r"ScreensaverPage: Showing screensaver", timeout=60)
         self.panel.check_alive()
@@ -79,4 +96,10 @@ class Rig:
 
     def stop(self) -> None:
         self.panel.stop()
+        if self.stack is not None:
+            try:
+                if not os.environ.get("NSPM_STACK_KEEP_PANELS"):
+                    self.manager.forget()
+            finally:
+                self.manager.close()
         self.broker.close()
