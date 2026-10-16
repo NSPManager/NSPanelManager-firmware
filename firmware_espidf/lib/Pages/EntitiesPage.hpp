@@ -28,14 +28,14 @@ public:
   static void unshow();
 
   /**
-   * Update display with new values from _current_entities_page.
+   * Update display with new values from the given entities page.
    */
-  static void _update_display();
+  static void _update_display(const std::shared_ptr<NSPanelRoomEntitiesPage> &page);
 
   /**
    * Updated displayed items in each slot.
    */
-  static void _update_displayed_items();
+  static void _update_displayed_items(const std::shared_ptr<NSPanelRoomEntitiesPage> &page);
 
 private:
   /**
@@ -56,17 +56,17 @@ private:
   /**
    * Handle touch event in "items4" page.
    */
-  static void _handle_items4_touch_event(nextion_event_touch_t *touch_data);
+  static void _handle_items4_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data);
 
   /**
    * Handle touch event in "items8" page.
    */
-  static void _handle_items8_touch_event(nextion_event_touch_t *touch_data);
+  static void _handle_items8_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data);
 
   /**
    * Handle touch event in "items12" page.
    */
-  static void _handle_items12_touch_event(nextion_event_touch_t *touch_data);
+  static void _handle_items12_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data);
 
   /**
    * Send toggle command to manager
@@ -81,7 +81,18 @@ private:
   static void _task_save_scene_progress(void *scene_slot);
 
   // Vars
-  static inline std::shared_ptr<NSPanelRoomEntitiesPage> _current_entities_page;
+  // Shared between tasks: written by the RoomManager event loop and unshow(), read by the Nextion
+  // event loop and the save-scene task.
+  //
+  // Never dereference this directly. `->` on a shared_ptr returns a raw pointer and holds no reference,
+  // so if another task replaces or clears the page while you are reading through it, the old page can be
+  // freed underneath you (this member is often its last owner). Instead, call get() once per entry point,
+  // keep that local copy for the whole operation, and pass it down by const&. The copy holds a reference,
+  // so the page stays alive until you are done.
+  //
+  // The mutex protects taking the copy itself: only the refcount inside a shared_ptr is atomic, so copying
+  // it while another task assigns it is a data race.
+  static inline MutexWrapped<std::shared_ptr<NSPanelRoomEntitiesPage>> _current_entities_page;
 
   // Set to 4, 8 or 12. Used to determine if we should send the command to switch page on Nextion display.
   static inline std::atomic<uint8_t> _currently_showing_page_type = 0;
