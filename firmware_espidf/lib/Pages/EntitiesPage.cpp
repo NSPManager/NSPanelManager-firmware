@@ -18,16 +18,15 @@ void EntitiesPage::show(display_type_t display_type) {
   esp_log_level_set("EntitiesPage", ConfigManager::log_level);
   EntitiesPage::_display_type = display_type;
 
-  InterfaceManager::call_unshow_callback();
-  InterfaceManager::current_page_unshow_callback.set(EntitiesPage::unshow);
+  std::shared_ptr<PageHandlers> handlers = InterfaceManager::begin_page(EntitiesPage::unshow);
 
   // EntitiesPage::_update_display();
-  if (RoomManager::register_handler(ESP_EVENT_ANY_ID, EntitiesPage::_handle_roommanager_event, NULL) != ESP_OK) [[unlikely]] {
+  if (handlers->add_to(RoomManager::event_loop(), ROOMMANAGER_EVENT, ESP_EVENT_ANY_ID, EntitiesPage::_handle_roommanager_event) != ESP_OK) [[unlikely]] {
     ESP_LOGE("EntitiesPage", "Failed to register event handler for EntitiesPage to RoomManager. Will return on HomePage.");
     HomePage::show();
   }
 
-  if (esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, EntitiesPage::_handle_nextion_event, NULL) != ESP_OK) [[unlikely]] {
+  if (handlers->add(NEXTION_EVENT, ESP_EVENT_ANY_ID, EntitiesPage::_handle_nextion_event) != ESP_OK) [[unlikely]] {
     ESP_LOGE("EntitiesPage", "Failed to register event handler for EntitiesPage to Nextion. Will return on HomePage.");
     HomePage::show();
   }
@@ -60,8 +59,7 @@ void EntitiesPage::show(display_type_t display_type) {
 }
 
 void EntitiesPage::unshow() {
-  RoomManager::unregister_handler(ESP_EVENT_ANY_ID, EntitiesPage::_handle_roommanager_event);
-  esp_event_handler_unregister(NEXTION_EVENT, ESP_EVENT_ANY_ID, EntitiesPage::_handle_nextion_event);
+  // Event handlers are removed by InterfaceManager (PageHandlers::retire()).
 
   EntitiesPage::_current_entities_page = nullptr;
   EntitiesPage::_currently_showing_page_type = 0;       // Set to 0 to force a page navigation on Nextion display when showing EntitiesPage next time.
@@ -71,7 +69,7 @@ void EntitiesPage::unshow() {
 void EntitiesPage::_update_display() {
   if (EntitiesPage::_current_entities_page == nullptr) {
     ESP_LOGE("EntitiesPage", "Tried to show RoomEntitiesPage but no _current_room_status has been set. Returning to HomePage.");
-    HomePage::show();
+    InterfaceManager::request_show_home_page(); // May run on the RoomManager loop; see InterfaceManager::_task_page_transitions.
     return;
   }
 
@@ -102,7 +100,7 @@ void EntitiesPage::_update_display() {
 
   default:
     ESP_LOGE("EntitiesPage", "Unknown entities page type! Type: %ld. Will navigate to home page.", EntitiesPage::_current_entities_page->page_type);
-    HomePage::show();
+    InterfaceManager::request_show_home_page(); // May run on the RoomManager loop; see InterfaceManager::_task_page_transitions.
     return;
   }
 
@@ -162,7 +160,8 @@ void EntitiesPage::_handle_roommanager_event(void *arg, esp_event_base_t event_b
       ESP_LOGE("EntitiesPage", "Got new entity page data event but couldn't get new entity page data!");
       if (EntitiesPage::_current_entities_page == nullptr) {
         ESP_LOGE("EntitiesPage", "Currently not showing entities page and we failed to get data. Will go back to HomePage.");
-        HomePage::show();
+        // Not HomePage::show(): this runs on the RoomManager loop, see InterfaceManager::_task_page_transitions.
+        InterfaceManager::request_show_home_page();
       }
     }
   }
