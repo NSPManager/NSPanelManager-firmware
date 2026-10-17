@@ -14,12 +14,29 @@ void AlbumArt::render(const std::string &url, uint16_t x, uint16_t y) {
     return;
   }
 
-  bool expected = false;
-  if (!AlbumArt::_rendering.compare_exchange_strong(expected, true)) {
-    ESP_LOGD("AlbumArt", "A render is already in progress, ignoring this one.");
+  std::lock_guard<std::mutex> lock_guard(AlbumArt::_request_mutex);
+  if (AlbumArt::_rendering) {
+    // Only the newest art matters, for example after skipping a track. Replace any request already
+    // waiting, and stop the running render so its task starts this one when it finishes.
+    ESP_LOGD("AlbumArt", "A render is already in progress, will start this one when it stops.");
+    AlbumArt::_next_request = _request_t{.url = url, .x = x, .y = y};
+    AlbumArt::_cancelled = true;
     return;
   }
 
+  AlbumArt::_rendering = true;
+  AlbumArt::_start_render(url, x, y);
+}
+
+void AlbumArt::cancel() {
+  std::lock_guard<std::mutex> lock_guard(AlbumArt::_request_mutex);
+  AlbumArt::_next_request.reset();
+  if (AlbumArt::_rendering) {
+    AlbumArt::_cancelled = true;
+  }
+}
+
+void AlbumArt::_start_render(const std::string &url, uint16_t x, uint16_t y) {
   AlbumArt::_cancelled = false;
   AlbumArt::_draw_origin_x = x;
   AlbumArt::_draw_origin_y = y;
@@ -30,12 +47,6 @@ void AlbumArt::render(const std::string &url, uint16_t x, uint16_t y) {
     ESP_LOGE("AlbumArt", "Failed to spawn album art render task.");
     delete url_copy;
     AlbumArt::_rendering = false;
-  }
-}
-
-void AlbumArt::cancel() {
-  if (AlbumArt::_rendering) {
-    AlbumArt::_cancelled = true;
   }
 }
 
@@ -83,8 +94,18 @@ void AlbumArt::_task_render(void *param) {
 
   free(previous);
   delete base_url;
-  AlbumArt::_cancelled = false;
-  AlbumArt::_rendering = false;
+  {
+    std::lock_guard<std::mutex> lock_guard(AlbumArt::_request_mutex);
+    if (AlbumArt::_next_request.has_value()) {
+      // render() was asked for newer art while this one ran. Start it, still marked as rendering.
+      _request_t next = std::move(AlbumArt::_next_request.value());
+      AlbumArt::_next_request.reset();
+      AlbumArt::_start_render(next.url, next.x, next.y);
+    } else {
+      AlbumArt::_cancelled = false;
+      AlbumArt::_rendering = false;
+    }
+  }
   vTaskDelete(NULL);
 }
 

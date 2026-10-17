@@ -815,10 +815,20 @@ void EntityPage::_update_display_media_player() {
     taskENTER_CRITICAL(&EntityPage::_entity_page_spinlock);
     EntityPage::_media_player_pending_volume.volume = -1;
     taskEXIT_CRITICAL(&EntityPage::_entity_page_spinlock);
+  }
 
-    // A render already in progress ignores the request, and unshow() cancels one that outlives the page.
-    if (media_player->album_art_url != NULL && media_player->album_art_url[0] != '\0') {
-      AlbumArt::render(media_player->album_art_url, GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_x, GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_y);
+  // Draw the art when the page opens and whenever it changes, for example on the next track. A new
+  // render replaces one still in progress, and unshow() cancels one that outlives the page.
+  {
+    std::string album_art_url = media_player->album_art_url != NULL ? media_player->album_art_url : "";
+    std::lock_guard<std::mutex> lock_guard(EntityPage::_media_player_album_art_url_mutex);
+    if (page_just_opened || album_art_url != EntityPage::_media_player_album_art_url) {
+      EntityPage::_media_player_album_art_url = album_art_url;
+      if (!album_art_url.empty()) {
+        AlbumArt::render(album_art_url, GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_x, GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_y);
+      } else {
+        AlbumArt::cancel();
+      }
     }
   }
 

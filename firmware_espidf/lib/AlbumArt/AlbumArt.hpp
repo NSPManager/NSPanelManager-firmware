@@ -4,6 +4,8 @@
 #include <esp_http_client.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <mutex>
+#include <optional>
 #include <stdint.h>
 #include <string>
 
@@ -58,7 +60,8 @@ public:
    * @brief Render album art from the given URL, in progressively finer passes.
    *
    * Returns immediately; the work happens on its own low priority task. A request made while a
-   * render is already running is ignored rather than queued.
+   * render is already running replaces it: the running render stops at its next row, and this one
+   * starts when it has. Only the newest waiting request is kept.
    * @param url: The album_art_url from NSPanelEntityState__MediaPlayer. Size parameters are
    *             appended per pass, so this should not already carry w/h.
    * @param x: Left edge of the draw_size x draw_size square, in absolute screen coordinates.
@@ -71,11 +74,16 @@ public:
    *
    * The full ladder takes seconds, so a render outlives the page that started it. Without this
    * it would keep painting over whatever the user navigated to. Returns immediately; the task
-   * stops at its next row boundary.
+   * stops at its next row boundary. Also drops a request waiting for the running render to stop.
    */
   static void cancel();
 
 private:
+  /**
+   * @brief Spawn the render task. Called with _request_mutex held and _rendering set.
+   */
+  static void _start_render(const std::string &url, uint16_t x, uint16_t y);
+
   /**
    * @brief Task body. Takes ownership of a heap allocated std::string holding the base URL.
    */
@@ -113,6 +121,18 @@ private:
 
   static inline std::atomic<bool> _rendering = false;
   static inline std::atomic<bool> _cancelled = false;
+
+  // The newest render requested while one was running, started by the task when it stops.
+  struct _request_t {
+    std::string url;
+    uint16_t x;
+    uint16_t y;
+  };
+  static inline std::optional<_request_t> _next_request;
+  // Guards _next_request and starting or finishing a render, so a request cannot slip in between the
+  // task checking for one and clearing _rendering. A std::mutex rather than a FreeRTOS one: it needs
+  // no creation, so there is no first-use race between the tasks that call render() and cancel().
+  static inline std::mutex _request_mutex;
 
   // Where the art is drawn, as given to render(). Only written while no render is running, so the
   // task reads a stable value.

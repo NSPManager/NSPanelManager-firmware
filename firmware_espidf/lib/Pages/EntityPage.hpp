@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <protobuf_nspanel.pb-c.h>
 #include <protobuf_nspanel_entity.pb-c.h>
 #include <string>
@@ -213,6 +214,11 @@ private:
   };
   static _media_player_component_t _media_player_components[];
   static inline std::atomic<bool> _media_player_component_ids_resolved = false;
+  // The album art URL last handed to AlbumArt, so that new art is drawn when it changes, for example on
+  // the next track. Guarded by _media_player_album_art_url_mutex: the page is updated from the MQTT
+  // task and from the Nextion handler.
+  static inline std::string _media_player_album_art_url;
+  static inline std::mutex _media_player_album_art_url_mutex;
 
   // Thermostat specific variables
   static inline std::atomic<bool> _is_currently_editing = false;
