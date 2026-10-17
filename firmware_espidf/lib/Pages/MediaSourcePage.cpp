@@ -43,13 +43,9 @@ void MediaSourcePage::show(std::string media_player_state_topic, bool source_pla
   MediaSourcePage::_current_source = source_player ? hard_coded_source_player_current_source : hard_coded_player_current_source;
   MediaSourcePage::_first_source_index = 0;
 
-  if (MediaSourcePage::_sources.size() <= 4) {
-    MediaSourcePage::_page_type = 4;
-  } else if (MediaSourcePage::_sources.size() <= 8) {
-    MediaSourcePage::_page_type = 8;
-  } else {
-    MediaSourcePage::_page_type = 12;
-  }
+  // items12 is never used: its labels are only 97 px wide, two columns, so source names are cut short.
+  // More than eight sources page through items8 instead.
+  MediaSourcePage::_page_type = MediaSourcePage::_sources.size() <= 4 ? 4 : 8;
 
   esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, &MediaSourcePage::_handle_nextion_event, NULL);
   MediaSourcePage::_update_display();
@@ -92,7 +88,10 @@ void MediaSourcePage::_update_displayed_source_in_slot(size_t source_index, cons
   if (source_index < MediaSourcePage::_sources.size()) {
     const std::string &source = MediaSourcePage::_sources[source_index];
     bool is_current = source == MediaSourcePage::_current_source;
-    Nextion::set_component_text(page_slot.label_name, (std::string("   ") + source).c_str(), 250);
+    // No indent, unlike EntitiesPage: the labels take at most 24 characters, and source names are long.
+    Nextion::set_component_text(page_slot.label_name, source.c_str(), 250);
+    // The name of the current source in the same color as its icon, the others in the labels' white.
+    Nextion::set_component_foreground(page_slot.label_name, is_current ? GUI_ITEMS_PAGE_COMMON::items_button_on_pco : GUI_ITEMS_PAGE_COMMON::items_button_off_pco, 250);
     Nextion::set_component_text(page_slot.button_name, GUI_ICONS::speaker, 250);
     Nextion::set_component_foreground(page_slot.button_name, is_current ? GUI_ITEMS_PAGE_COMMON::items_button_on_pco : GUI_ITEMS_PAGE_COMMON::items_button_off_pco, 250);
     Nextion::set_component_pco2(page_slot.button_name, is_current ? GUI_ITEMS_PAGE_COMMON::items_button_on_pco2 : GUI_ITEMS_PAGE_COMMON::items_button_off_pco2, 250);

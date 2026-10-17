@@ -7,8 +7,8 @@
 #include <vector>
 
 /*
- * Lets the user pick a source for a media player. Drawn on the items4, items8 or items12 page,
- * whichever is the smallest that fits the sources, paging through items12 when there are more.
+ * Lets the user pick a source for a media player. Drawn on the items4 page when there are up to four
+ * sources, otherwise on items8, paging through it when there are more than eight.
  * Opened from the media player page by pressing the album art. Pressing a source, or the back
  * button, returns to that media player page.
  *
