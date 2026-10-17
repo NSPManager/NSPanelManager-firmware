@@ -78,6 +78,7 @@ void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int3
           } else if (state->entity_case == NSPanelEntityState__EntityCase::NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER) {
             EntityPage::_current_mode = _entity_page_modes::MEDIA_PLAYER;
             EntityPage::_log_media_player_state(state->media_player);
+            EntityPage::_media_player_confirm_pending_volume(state->media_player);
           } else {
             ESP_LOGE("EntityPage", "Unknown entity state case!");
           }
@@ -797,6 +798,9 @@ void EntityPage::_update_display_media_player() {
     // The protobuf carries no playback position or duration yet, so there is nothing to show.
     Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::position_bar_name, false, 250);
     EntityPage::_media_player_controlling_source = false;
+    taskENTER_CRITICAL(&EntityPage::_entity_page_spinlock);
+    EntityPage::_media_player_pending_volume.volume = -1;
+    taskEXIT_CRITICAL(&EntityPage::_entity_page_spinlock);
 
     // A render already in progress ignores the request, and unshow() cancels one that outlives the page.
     if (media_player->album_art_url != NULL && media_player->album_art_url[0] != '\0') {
@@ -831,7 +835,7 @@ void EntityPage::_update_display_media_player() {
   Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_down_button_name, can_set_volume, 250);
   Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_up_button_name, can_set_volume, 250);
   // Only the value: the bar is shown briefly when the volume buttons are pressed, not on every update.
-  Nextion::set_component_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_bar_name, controlling_source ? media_player->source_volume : media_player->volume, 250);
+  Nextion::set_component_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_bar_name, EntityPage::_media_player_volume(media_player, controlling_source), 250);
 }
 
 void EntityPage::_handle_touch_event_media_player(uint16_t component_id, bool pressed) {
@@ -867,11 +871,11 @@ void EntityPage::_handle_touch_event_media_player(uint16_t component_id, bool pr
     break;
 
   case GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_up_button_id:
-    EntityPage::_media_player_step_volume(EntityPage::_media_player_volume_step);
+    EntityPage::_media_player_step_volume(1);
     break;
 
   case GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_down_button_id:
-    EntityPage::_media_player_step_volume(-EntityPage::_media_player_volume_step);
+    EntityPage::_media_player_step_volume(-1);
     break;
 
   case GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_hotspot_id:
@@ -938,32 +942,63 @@ void EntityPage::_media_player_set_source_volume(int32_t volume) {
   EntityPage::_send_media_player_command(&command);
 }
 
-void EntityPage::_media_player_step_volume(int32_t delta) {
+void EntityPage::_media_player_step_volume(int32_t direction) {
   std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
   if (state == nullptr || state->entity_case != NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER) [[unlikely]] {
     ESP_LOGE("EntityPage", "Tried to change volume without a media player state.");
     return;
   }
+  NSPanelEntityState__MediaPlayer *media_player = state->media_player;
 
-  // The command carries an absolute volume, and the state confirming a press takes a moment to come
-  // back. Step from the last requested volume while it is recent, or quick presses would all start
-  // from the same stale state and send the same value.
-  bool controlling_source = EntityPage::_media_player_controlling_source && state->media_player->has_source_volume;
-  int64_t now = esp_timer_get_time();
-  int32_t from = controlling_source ? state->media_player->source_volume : state->media_player->volume;
-  if (EntityPage::_media_player_requested_volume >= 0 && now - EntityPage::_media_player_requested_volume_at < EntityPage::_media_player_requested_volume_hold_us) {
-    from = EntityPage::_media_player_requested_volume;
-  }
-  int32_t volume = std::clamp<int32_t>(from + delta, 0, 100);
+  bool controlling_source = EntityPage::_media_player_controlling_source && media_player->has_source_volume;
+  // A manager from before volume_step was added sends 0.
+  int32_t step = media_player->volume_step > 0 ? media_player->volume_step : EntityPage::_media_player_default_volume_step;
+  // Step from the pending volume if there is one, so quick presses compound instead of each
+  // starting from a state that has not caught up yet.
+  int32_t volume = std::clamp<int32_t>(EntityPage::_media_player_volume(media_player, controlling_source) + direction * step, 0, 100);
 
-  EntityPage::_media_player_requested_volume = volume;
-  EntityPage::_media_player_requested_volume_at = now;
+  taskENTER_CRITICAL(&EntityPage::_entity_page_spinlock);
+  EntityPage::_media_player_pending_volume = {
+      .volume = volume,
+      .source = controlling_source,
+      .requested_at = esp_timer_get_time(),
+  };
+  taskEXIT_CRITICAL(&EntityPage::_entity_page_spinlock);
+
   if (controlling_source) {
     EntityPage::_media_player_set_source_volume(volume);
   } else {
     EntityPage::_media_player_set_volume(volume);
   }
   EntityPage::_media_player_show_volume_bar(volume);
+}
+
+int32_t EntityPage::_media_player_volume(const NSPanelEntityState__MediaPlayer *media_player, bool source) {
+  int32_t volume = source ? media_player->source_volume : media_player->volume;
+
+  taskENTER_CRITICAL(&EntityPage::_entity_page_spinlock);
+  const _media_player_pending_volume_t pending = EntityPage::_media_player_pending_volume;
+  taskEXIT_CRITICAL(&EntityPage::_entity_page_spinlock);
+
+  if (pending.volume >= 0 && pending.source == source && esp_timer_get_time() - pending.requested_at < EntityPage::_media_player_pending_volume_timeout_us) {
+    volume = pending.volume;
+  }
+  return volume;
+}
+
+void EntityPage::_media_player_confirm_pending_volume(const NSPanelEntityState__MediaPlayer *media_player) {
+  if (media_player == NULL) [[unlikely]] {
+    return;
+  }
+
+  // Only the state for the last press confirms it. States for earlier presses in a quick run arrive
+  // in between, and dropping the pending volume on those would make the bar jump back.
+  taskENTER_CRITICAL(&EntityPage::_entity_page_spinlock);
+  _media_player_pending_volume_t &pending = EntityPage::_media_player_pending_volume;
+  if (pending.volume >= 0 && pending.volume == (pending.source ? media_player->source_volume : media_player->volume)) {
+    pending.volume = -1;
+  }
+  taskEXIT_CRITICAL(&EntityPage::_entity_page_spinlock);
 }
 
 void EntityPage::_media_player_toggle_source() {
@@ -977,8 +1012,6 @@ void EntityPage::_media_player_toggle_source() {
   }
 
   EntityPage::_media_player_controlling_source = !EntityPage::_media_player_controlling_source;
-  // A volume requested for the other target is no base for this one.
-  EntityPage::_media_player_requested_volume = -1;
   ESP_LOGD("EntityPage", "Volume controls now act on the %s.", EntityPage::_media_player_controlling_source ? "source" : "player");
   EntityPage::_update_display_media_player();
 }

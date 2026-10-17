@@ -99,9 +99,21 @@ private:
   static void _media_player_set_source_volume(int32_t volume);
 
   /*
-   * Volume up or down by delta percent, from the volume -/+ buttons.
+   * Volume up (direction 1) or down (-1) by the player's volume_step, from the volume -/+ buttons.
+   * Sets a pending volume that the page shows, and steps from, until the state confirms it.
    */
-  static void _media_player_step_volume(int32_t delta);
+  static void _media_player_step_volume(int32_t direction);
+
+  /*
+   * The volume to show and step from for the player, or for its source: the pending volume if one is
+   * outstanding for that target, otherwise the state's.
+   */
+  static int32_t _media_player_volume(const NSPanelEntityState__MediaPlayer *media_player, bool source);
+
+  /*
+   * Clear the pending volume if the given state carries it.
+   */
+  static void _media_player_confirm_pending_volume(const NSPanelEntityState__MediaPlayer *media_player);
 
   /*
    * Switch the volume controls between the player and the source feeding it, from b_srcswitch.
@@ -159,13 +171,20 @@ private:
   // Whether the volume controls act on the source feeding the player rather than the player itself.
   // Reset to the player whenever the page opens.
   static inline std::atomic<bool> _media_player_controlling_source = false;
-  // Percent per press of the volume -/+ buttons.
-  static constexpr int32_t _media_player_volume_step = 5;
-  // The last volume a -/+ press asked for, or -1, and when. Only touched from the Nextion event handler.
-  static inline int32_t _media_player_requested_volume = -1;
-  static inline int64_t _media_player_requested_volume_at = 0;
-  // How long a requested volume is preferred over the state's, while the state catches up.
-  static constexpr int64_t _media_player_requested_volume_hold_us = 3 * 1000 * 1000;
+  // Percent per press of the volume -/+ buttons when the manager sends no volume_step. Matches Home
+  // Assistant's default.
+  static constexpr int32_t _media_player_default_volume_step = 10;
+  // The volume the last -/+ press asked for, shown in place of the state's until a state carrying it
+  // arrives. Guarded by _entity_page_spinlock: written from the Nextion handler, read from MQTT too.
+  struct _media_player_pending_volume_t {
+    int32_t volume;       // -1 when nothing is pending
+    bool source;          // Whether it is for the source rather than the player
+    int64_t requested_at; // esp_timer_get_time() of the press
+  };
+  static inline _media_player_pending_volume_t _media_player_pending_volume = {.volume = -1, .source = false, .requested_at = 0};
+  // How long a pending volume waits for its state before the state wins: in case the manager rounds
+  // it differently, or the player ignores it.
+  static constexpr int64_t _media_player_pending_volume_timeout_us = 5 * 1000 * 1000;
 
   // Thermostat specific variables
   static inline std::atomic<bool> _is_currently_editing = false;
