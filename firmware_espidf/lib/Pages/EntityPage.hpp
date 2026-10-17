@@ -188,6 +188,9 @@ private:
   // Whether the volume controls act on the source feeding the player rather than the player itself.
   // Reset to the player whenever the page opens.
   static inline std::atomic<bool> _media_player_controlling_source = false;
+  // How long the volume bar stays up after the last volume press or source switch. The page's tm_vol
+  // timer hides it; the TFT's own interval is shorter, so it is set whenever the page opens.
+  static constexpr uint16_t _media_player_volume_bar_timeout_ms = 3000;
   // Set by return_to_media_player() so that opening the page keeps _media_player_controlling_source.
   static inline std::atomic<bool> _media_player_returning = false;
   // Percent per press of the volume -/+ buttons when the manager sends no volume_step. Matches Home

@@ -818,6 +818,7 @@ void EntityPage::_update_display_media_player() {
 
     // The protobuf carries no playback position or duration yet, so there is nothing to show.
     Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::position_bar_name, false, 250);
+    Nextion::set_timer_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_bar_timer_name, EntityPage::_media_player_volume_bar_timeout_ms, 250);
     if (!EntityPage::_media_player_returning.exchange(false)) {
       EntityPage::_media_player_controlling_source = false;
     }
@@ -1077,6 +1078,8 @@ void EntityPage::_media_player_toggle_source() {
   EntityPage::_media_player_controlling_source = !EntityPage::_media_player_controlling_source;
   ESP_LOGD("EntityPage", "Volume controls now act on the %s.", EntityPage::_media_player_controlling_source ? "source" : "player");
   EntityPage::_update_display_media_player();
+  // Show the volume the controls now act on, as a volume press does.
+  EntityPage::_media_player_show_volume_bar(EntityPage::_media_player_volume(state->media_player, EntityPage::_media_player_controlling_source));
 }
 
 void EntityPage::_media_player_show_volume_bar(int32_t volume) {
