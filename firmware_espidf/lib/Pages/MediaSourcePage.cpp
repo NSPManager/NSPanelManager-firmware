@@ -7,21 +7,40 @@
 #include <Nextion_event.hpp>
 #include <esp_log.h>
 
-// Until the media player state carries its sources, show the inputs of the audio matrix zones.
-static const std::vector<std::string> hard_coded_sources = {"Movie Theatre", "Gym TV", "James Matrix", "Jo Matrix", "Disconnected", "Kitchen TV", "Alexa 1"};
-static const char *hard_coded_current_source = "James Matrix";
+// Until the media player state carries its sources (NSPanelManager PR #396), show those of an audio
+// matrix zone and of the Sonos speaker feeding it. Each list keeps the source last selected from it.
+static const std::vector<std::string> hard_coded_player_sources = {"Movie Theatre", "Gym TV", "James Matrix", "Jo Matrix", "Disconnected", "Kitchen TV", "Alexa 1"};
+static std::string hard_coded_player_current_source = "James Matrix";
+static const std::vector<std::string> hard_coded_source_player_sources = {
+    "Line-in",
+    "Bringing It All Back Home",
+    "Brothers In Arms",
+    "Christmas",
+    "Continuum",
+    "Eye In the Sky",
+    "James Mulcahy's Station",
+    "Mmm Mmm Mmm Mmm",
+    "Peaches!",
+    "Pomplamoose & Similar Artists Station",
+    "Scary Goldings: Live (feat. John Scofield)",
+    "True (Bonus Edition)",
+    "Vertigo",
+    "Workout playlist",
+    "Year of the Cat",
+    "ST Music",
+};
+static std::string hard_coded_source_player_current_source = ""; // Sonos reports no source for a playing favorite.
 
-void MediaSourcePage::show(std::string media_player_state_topic) {
+void MediaSourcePage::show(std::string media_player_state_topic, bool source_player) {
   esp_log_level_set("MediaSourcePage", ConfigManager::log_level);
 
   InterfaceManager::call_unshow_callback();
   InterfaceManager::current_page_unshow_callback.set(MediaSourcePage::unshow);
 
   MediaSourcePage::_media_player_state_topic = media_player_state_topic;
-  MediaSourcePage::_sources = hard_coded_sources;
-  if (MediaSourcePage::_current_source.empty()) {
-    MediaSourcePage::_current_source = hard_coded_current_source;
-  }
+  MediaSourcePage::_showing_source_player = source_player;
+  MediaSourcePage::_sources = source_player ? hard_coded_source_player_sources : hard_coded_player_sources;
+  MediaSourcePage::_current_source = source_player ? hard_coded_source_player_current_source : hard_coded_player_current_source;
   MediaSourcePage::_first_source_index = 0;
 
   if (MediaSourcePage::_sources.size() <= 4) {
@@ -56,7 +75,7 @@ void MediaSourcePage::_update_display() {
     return;
   }
 
-  Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, "Source", 250);
+  Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, MediaSourcePage::_showing_source_player ? "Favorites" : "Input", 250);
   for (size_t slot = 0; slot < MediaSourcePage::_page_type; slot++) {
     size_t source_index = MediaSourcePage::_first_source_index + slot;
     if (MediaSourcePage::_page_type == 12) {
@@ -141,12 +160,13 @@ void MediaSourcePage::_handle_touch_event(nextion_event_touch_t *touch_data, uin
 
 void MediaSourcePage::_select_source(size_t source_index) {
   MediaSourcePage::_current_source = MediaSourcePage::_sources[source_index];
-  // TODO: Send the selection to the manager once the protobuf has a command for it.
-  ESP_LOGI("MediaSourcePage", "Selected source '%s'. Not sent to the manager yet.", MediaSourcePage::_current_source.c_str());
+  (MediaSourcePage::_showing_source_player ? hard_coded_source_player_current_source : hard_coded_player_current_source) = MediaSourcePage::_current_source;
+  // TODO: Send the selection, by name, once the protobuf has the commands (NSPanelManager PR #396).
+  ESP_LOGI("MediaSourcePage", "Selected source '%s'. Would send %s, not sent to the manager yet.", MediaSourcePage::_current_source.c_str(),
+           MediaSourcePage::_showing_source_player ? "select_source_player_source" : "select_player_source");
   MediaSourcePage::_return_to_media_player();
 }
 
 void MediaSourcePage::_return_to_media_player() {
-  // Subscribing to the state topic again delivers the retained state, which opens the media player page.
-  EntityPage::show(MediaSourcePage::_media_player_state_topic);
+  EntityPage::return_to_media_player(MediaSourcePage::_media_player_state_topic);
 }

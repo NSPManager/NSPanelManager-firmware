@@ -44,6 +44,12 @@ void EntityPage::show(std::string state_topic) {
   EntityPage::_is_currently_editing = false;
 }
 
+void EntityPage::return_to_media_player(std::string state_topic) {
+  EntityPage::_media_player_returning = true;
+  // Subscribing to the state topic again delivers the retained state, which opens the media player page.
+  EntityPage::show(state_topic);
+}
+
 void EntityPage::unshow() {
   MqttManager::unregister_handler(MQTT_EVENT_ANY, &EntityPage::_handle_mqtt_event);
   esp_event_handler_unregister(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event);
@@ -812,7 +818,9 @@ void EntityPage::_update_display_media_player() {
 
     // The protobuf carries no playback position or duration yet, so there is nothing to show.
     Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::position_bar_name, false, 250);
-    EntityPage::_media_player_controlling_source = false;
+    if (!EntityPage::_media_player_returning.exchange(false)) {
+      EntityPage::_media_player_controlling_source = false;
+    }
     taskENTER_CRITICAL(&EntityPage::_entity_page_spinlock);
     EntityPage::_media_player_pending_volume.volume = -1;
     taskEXIT_CRITICAL(&EntityPage::_entity_page_spinlock);
@@ -908,9 +916,13 @@ void EntityPage::_handle_touch_event_media_player(uint16_t component_id, bool pr
       EntityPage::_media_player_step_volume(-1);
       break;
 
-    case _media_player_action::ALBUM_ART:
-      MediaSourcePage::show(EntityPage::_current_entity_mqtt_topic);
+    case _media_player_action::ALBUM_ART: {
+      // The source list follows the source switch, like the volume buttons.
+      std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+      bool source_player = EntityPage::_media_player_controlling_source && state != nullptr && state->entity_case == NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER && state->media_player->has_source_volume;
+      MediaSourcePage::show(EntityPage::_current_entity_mqtt_topic, source_player);
       break;
+    }
     }
     return;
   }

@@ -25,6 +25,12 @@ public:
    */
   static void unshow();
 
+  /**
+   * Show the media player page again after a page opened from it, such as MediaSourcePage. Unlike
+   * show(), this keeps what the volume controls and source list act on, the player or its source.
+   */
+  static void return_to_media_player(std::string state_topic);
+
 private:
   /**
    * Handle events from MQTT, such as new state events:
@@ -182,6 +188,8 @@ private:
   // Whether the volume controls act on the source feeding the player rather than the player itself.
   // Reset to the player whenever the page opens.
   static inline std::atomic<bool> _media_player_controlling_source = false;
+  // Set by return_to_media_player() so that opening the page keeps _media_player_controlling_source.
+  static inline std::atomic<bool> _media_player_returning = false;
   // Percent per press of the volume -/+ buttons when the manager sends no volume_step. Matches Home
   // Assistant's default.
   static constexpr int32_t _media_player_default_volume_step = 10;

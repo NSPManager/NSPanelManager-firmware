@@ -7,17 +7,23 @@
 #include <vector>
 
 /*
- * Lets the user pick the source of a media player. Drawn on the items4, items8 or items12 page,
+ * Lets the user pick a source for a media player. Drawn on the items4, items8 or items12 page,
  * whichever is the smallest that fits the sources, paging through items12 when there are more.
  * Opened from the media player page by pressing the album art. Pressing a source, or the back
  * button, returns to that media player page.
+ *
+ * A media player fed by another player (an audio matrix zone playing from a Sonos speaker, say)
+ * has two lists, as in the manager's protobuf: its own sources (the zone's inputs) and those of the
+ * source player feeding it (the speaker's favorites). The media player page's source switch picks
+ * which one is shown, the same way it picks what the volume buttons control.
  */
 class MediaSourcePage {
 public:
   /**
    * Show the sources of the media player whose state is published on media_player_state_topic.
+   * @param source_player: Show the sources of the player feeding it rather than its own.
    */
-  static void show(std::string media_player_state_topic);
+  static void show(std::string media_player_state_topic, bool source_player);
 
   /**
    * Unshow the source page.
@@ -59,7 +65,11 @@ private:
   // The media player's state topic, to return to its page.
   static inline std::string _media_player_state_topic;
 
-  // The sources to pick from, and the one currently selected.
+  // Whether the sources shown are those of the source player rather than the media player's own.
+  static inline bool _showing_source_player = false;
+
+  // The sources to pick from, and the one currently selected. The current source is often empty
+  // for a source player: Sonos only reports one for Line-in and TV, not for a playing favorite.
   static inline std::vector<std::string> _sources;
   static inline std::string _current_source;
 
