@@ -4,6 +4,7 @@
 #include <EntityPage.hpp>
 #include <GUI_data.hpp>
 #include <InterfaceManager.hpp>
+#include <MediaSourcePage.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
 #include <Nextion.hpp>
@@ -908,7 +909,7 @@ void EntityPage::_handle_touch_event_media_player(uint16_t component_id, bool pr
       break;
 
     case _media_player_action::ALBUM_ART:
-      ESP_LOGD("EntityPage", "Album art pressed. Source selection is not implemented yet.");
+      MediaSourcePage::show(EntityPage::_current_entity_mqtt_topic);
       break;
     }
     return;

@@ -1,6 +1,9 @@
 #pragma once
 
 #include <atomic>
+#include <esp_event.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <memory>
 #include <mutex>
 #include <protobuf_nspanel.pb-c.h>
