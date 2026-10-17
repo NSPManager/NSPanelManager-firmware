@@ -107,6 +107,16 @@ private:
   static uint32_t _draw_row(const uint8_t *row, uint16_t grid, uint16_t row_index, const uint8_t *previous, uint16_t previous_grid);
 
   /**
+   * @brief Wait until the display has processed every fill sent so far.
+   *
+   * Fills arrive at line rate, but the display handles some commands -- a page update redrawing a
+   * component, say -- far more slowly than it receives them. Without pacing, fills pile up behind
+   * those in its ~1 KB serial buffer until it overflows (0x24) and drops whatever was waiting,
+   * page updates included.
+   */
+  static void _wait_for_display();
+
+  /**
    * @brief Read exactly size bytes, looping over partial reads.
    */
   static esp_err_t _read_exact(esp_http_client_handle_t client, uint8_t *buffer, size_t size);
@@ -144,4 +154,10 @@ private:
 
   // Two bytes per pixel, RGB565. Only one row of the finest pass is ever held.
   static constexpr size_t max_row_bytes = draw_size * 2;
+
+  // Fills sent between waits for the display. At ~24 bytes each that is under 400 bytes in its
+  // serial buffer, leaving room for a page update sent while the art is drawing.
+  static constexpr uint16_t _fills_per_sync = 16;
+  // Only touched by the render task.
+  static inline uint16_t _fills_since_sync = 0;
 };
