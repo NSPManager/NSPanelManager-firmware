@@ -794,7 +794,7 @@ void EntityPage::_update_display_media_player() {
   // Proof of concept: draw the album art in the lower right corner as soon as the page opens. A
   // render already in progress ignores the request, and unshow() cancels one that outlives the page.
   if (page_just_opened && media_player->album_art_url != NULL && media_player->album_art_url[0] != '\0') {
-    AlbumArt::render(media_player->album_art_url);
+    AlbumArt::render(media_player->album_art_url, 320 - AlbumArt::draw_size, 480 - AlbumArt::draw_size);
   }
 
   const char *state_text = EntityPage::_playback_state_name(media_player->state);

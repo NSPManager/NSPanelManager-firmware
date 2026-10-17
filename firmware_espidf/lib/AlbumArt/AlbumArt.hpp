@@ -50,6 +50,10 @@
  */
 class AlbumArt {
 public:
+  // Side of the square the art is drawn into, in pixels. Every grid in passes divides it exactly,
+  // so no pass leaves gaps.
+  static constexpr uint16_t draw_size = 160;
+
   /**
    * @brief Render album art from the given URL, in progressively finer passes.
    *
@@ -57,8 +61,10 @@ public:
    * render is already running is ignored rather than queued.
    * @param url: The album_art_url from NSPanelEntityState__MediaPlayer. Size parameters are
    *             appended per pass, so this should not already carry w/h.
+   * @param x: Left edge of the draw_size x draw_size square, in absolute screen coordinates.
+   * @param y: Top edge of the square.
    */
-  static void render(const std::string &url);
+  static void render(const std::string &url, uint16_t x, uint16_t y);
 
   /**
    * @brief Ask an in-progress render to stop.
@@ -108,11 +114,10 @@ private:
   static inline std::atomic<bool> _rendering = false;
   static inline std::atomic<bool> _cancelled = false;
 
-  // Where the art is drawn: the lower right corner of the US portrait display, which is 320 wide
-  // and 480 tall. Every grid below divides draw_size exactly, so no pass leaves gaps.
-  static constexpr uint16_t draw_origin_x = 320 - 160;
-  static constexpr uint16_t draw_origin_y = 480 - 160;
-  static constexpr uint16_t draw_size = 160;
+  // Where the art is drawn, as given to render(). Only written while no render is running, so the
+  // task reads a stable value.
+  static inline uint16_t _draw_origin_x = 0;
+  static inline uint16_t _draw_origin_y = 0;
 
   // Passes, coarsest first, ending at one block per pixel. Block sizes: 20, 10, 5, 2, 1.
   static constexpr uint16_t passes[5] = {8, 16, 32, 80, 160};

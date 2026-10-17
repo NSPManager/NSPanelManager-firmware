@@ -6,7 +6,7 @@
 #include <esp_timer.h>
 #include <string.h>
 
-void AlbumArt::render(const std::string &url) {
+void AlbumArt::render(const std::string &url, uint16_t x, uint16_t y) {
   esp_log_level_set("AlbumArt", ConfigManager::log_level);
 
   if (url.empty()) [[unlikely]] {
@@ -21,6 +21,8 @@ void AlbumArt::render(const std::string &url) {
   }
 
   AlbumArt::_cancelled = false;
+  AlbumArt::_draw_origin_x = x;
+  AlbumArt::_draw_origin_y = y;
 
   // The task owns this and deletes it when done.
   std::string *url_copy = new std::string(url);
@@ -174,7 +176,7 @@ esp_err_t AlbumArt::_run_pass(const std::string &base_url, uint16_t grid, const 
 
 uint32_t AlbumArt::_draw_row(const uint8_t *row, uint16_t grid, uint16_t row_index, const uint8_t *previous, uint16_t previous_grid) {
   const uint16_t block_size = AlbumArt::draw_size / grid;
-  const uint32_t y = AlbumArt::draw_origin_y + (uint32_t)row_index * block_size;
+  const uint32_t y = AlbumArt::_draw_origin_y + (uint32_t)row_index * block_size;
 
   // The pass grids do not all divide each other (80 into 32, say), so map by proportion rather
   // than by a scale factor.
@@ -208,7 +210,7 @@ uint32_t AlbumArt::_draw_row(const uint8_t *row, uint16_t grid, uint16_t row_ind
     }
 
     if (run_changed) {
-      if (Nextion::fill(AlbumArt::draw_origin_x + (uint32_t)run_start * block_size, y,
+      if (Nextion::fill(AlbumArt::_draw_origin_x + (uint32_t)run_start * block_size, y,
                         (uint32_t)(col - run_start) * block_size, block_size, run_color, 250) != ESP_OK) {
         // The display is not in a state to be drawn on -- updating, most likely. Stop rather
         // than spin through thousands of failing writes.
