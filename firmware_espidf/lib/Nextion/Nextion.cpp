@@ -308,7 +308,11 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
       touch_event.page_number = data->data()[1];
       touch_event.component_id = data->data()[2];
       touch_event.pressed = data->data()[3];
-      esp_event_post(NEXTION_EVENT, nextion_event_t::TOUCH_EVENT, &touch_event, sizeof(touch_event), pdMS_TO_TICKS(16));
+      // A touch that cannot be posted is lost for good, so say so rather than leave a press that did nothing.
+      esp_err_t post_result = esp_event_post(NEXTION_EVENT, nextion_event_t::TOUCH_EVENT, &touch_event, sizeof(touch_event), pdMS_TO_TICKS(16));
+      if (post_result != ESP_OK) [[unlikely]] {
+        ESP_LOGW("Nextion", "Dropped touch event for page %d component %d: %s", touch_event.page_number, touch_event.component_id, esp_err_to_name(post_result));
+      }
     } else {
       ESP_LOGE("Nextion", "Not enough bytes sent for 0x65 touch event.");
     }
