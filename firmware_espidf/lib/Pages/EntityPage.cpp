@@ -9,7 +9,9 @@
 #include <Nextion.hpp>
 #include <Nextion_event.hpp>
 #include <StatusUpdateManager.hpp>
+#include <algorithm>
 #include <esp_log.h>
+#include <esp_timer.h>
 #include <protobuf_nspanel_entity.pb-c.h>
 
 void EntityPage::show(std::string state_topic) {
@@ -791,51 +793,48 @@ void EntityPage::_update_display_media_player() {
   std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
   NSPanelEntityState__MediaPlayer *media_player = state->media_player;
 
-  // Proof of concept: draw the album art in the lower right corner as soon as the page opens. A
-  // render already in progress ignores the request, and unshow() cancels one that outlives the page.
-  if (page_just_opened && media_player->album_art_url != NULL && media_player->album_art_url[0] != '\0') {
-    AlbumArt::render(media_player->album_art_url, 320 - AlbumArt::draw_size, 480 - AlbumArt::draw_size);
+  if (page_just_opened) {
+    // The protobuf carries no playback position or duration yet, so there is nothing to show.
+    Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::position_bar_name, false, 250);
+    // Not wired up yet.
+    Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_name, false, 250);
+
+    // A render already in progress ignores the request, and unshow() cancels one that outlives the page.
+    if (media_player->album_art_url != NULL && media_player->album_art_url[0] != '\0') {
+      AlbumArt::render(media_player->album_art_url, GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_x, GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_y);
+    }
   }
 
-  const char *state_text = EntityPage::_playback_state_name(media_player->state);
   bool is_playing = media_player->state == NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__PLAYING ||
                     media_player->state == NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__BUFFERING;
 
-  Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::name_label_name, media_player->name, 1000);
-  Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::state_label_name, state_text, 1000);
   Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::title_label_name, media_player->media_title, 1000);
   Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::artist_label_name, media_player->media_artist, 1000);
 
-  // Play/pause is a dual state button, value 1 shows it as playing.
-  Nextion::set_component_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::play_pause_button_name, is_playing ? 1 : 0, 250);
-  // PoC HMI: b_play and b_mute are on a text font rather than the icon font, so label them.
-  Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::play_pause_button_name, is_playing ? "Pause" : "Play", 250);
+  // Icons follow the player's state rather than the press, so the page stays right when something
+  // else controls the player.
+  Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::play_pause_button_name, is_playing ? GUI_MEDIA_ICONS::pause : GUI_MEDIA_ICONS::play, 250);
   Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::play_pause_button_name, is_playing ? media_player->can_pause : media_player->can_play, 250);
   Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::previous_track_button_name, media_player->can_previous_track, 250);
   Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::next_track_button_name, media_player->can_next_track, 250);
 
-  Nextion::set_component_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_name, media_player->is_muted ? 1 : 0, 250);
-  Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_name, media_player->is_muted ? "Unmute" : "Mute", 250);
+  Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_name, media_player->is_muted ? GUI_MEDIA_ICONS::volume_mute : GUI_MEDIA_ICONS::volume_high, 250);
   Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_name, media_player->can_mute, 250);
 
-  Nextion::set_component_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_slider_name, media_player->volume, 250);
-  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_slider_name, media_player->can_set_volume, 250);
-
-  if (media_player->has_source_volume) {
-    Nextion::set_component_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::source_volume_slider_name, media_player->source_volume, 250);
-  }
-  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::source_volume_slider_name, media_player->has_source_volume, 250);
+  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_down_button_name, media_player->can_set_volume, 250);
+  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_up_button_name, media_player->can_set_volume, 250);
+  // Only the value: the bar is shown briefly when the volume buttons are pressed, not on every update.
+  Nextion::set_component_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_bar_name, media_player->volume, 250);
 }
 
 void EntityPage::_handle_touch_event_media_player(uint16_t component_id, bool pressed) {
   ESP_LOGD("EntityPage", "Touch component %d, pressed %s", component_id, pressed ? "Yes" : "No");
   if (pressed) {
-    return; // Act on release so that sliders report their final value.
+    return; // The page sends release events only.
   }
 
   switch (component_id) {
   case GUI_MEDIA_PLAYER_CONTROL_PAGE::back_button_id:
-  case GUI_MEDIA_PLAYER_CONTROL_PAGE::name_button_id:
     ESP_LOGD("EntityPage", "Received touch event to go back.");
     EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
     break;
@@ -856,27 +855,17 @@ void EntityPage::_handle_touch_event_media_player(uint16_t component_id, bool pr
     EntityPage::_media_player_toggle_mute();
     break;
 
-  case GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_slider_id: {
-    int32_t new_volume;
-    if (Nextion::get_component_integer_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_slider_name, &new_volume, 250, 250) != ESP_OK) [[unlikely]] {
-      ESP_LOGE("EntityPage", "Failed to get new volume value from Nextion. Will not send update command.");
-      EntityPage::_update_display_media_player(); // Update display to reset values to those stored
-      return;
-    }
-    EntityPage::_media_player_set_volume(new_volume);
+  case GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_up_button_id:
+    EntityPage::_media_player_step_volume(EntityPage::_media_player_volume_step);
     break;
-  }
 
-  case GUI_MEDIA_PLAYER_CONTROL_PAGE::source_volume_slider_id: {
-    int32_t new_source_volume;
-    if (Nextion::get_component_integer_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::source_volume_slider_name, &new_source_volume, 250, 250) != ESP_OK) [[unlikely]] {
-      ESP_LOGE("EntityPage", "Failed to get new source volume value from Nextion. Will not send update command.");
-      EntityPage::_update_display_media_player(); // Update display to reset values to those stored
-      return;
-    }
-    EntityPage::_media_player_set_source_volume(new_source_volume);
+  case GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_down_button_id:
+    EntityPage::_media_player_step_volume(-EntityPage::_media_player_volume_step);
     break;
-  }
+
+  case GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_hotspot_id:
+    ESP_LOGD("EntityPage", "Album art pressed. Source selection is not implemented yet.");
+    break;
 
   default:
     break;
@@ -936,6 +925,40 @@ void EntityPage::_media_player_set_source_volume(int32_t volume) {
   command.has_source_volume = true;
   command.source_volume = volume;
   EntityPage::_send_media_player_command(&command);
+}
+
+void EntityPage::_media_player_step_volume(int32_t delta) {
+  std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+  if (state == nullptr || state->entity_case != NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER) [[unlikely]] {
+    ESP_LOGE("EntityPage", "Tried to change volume without a media player state.");
+    return;
+  }
+
+  // The command carries an absolute volume, and the state confirming a press takes a moment to come
+  // back. Step from the last requested volume while it is recent, or quick presses would all start
+  // from the same stale state and send the same value.
+  int64_t now = esp_timer_get_time();
+  int32_t from = state->media_player->volume;
+  if (EntityPage::_media_player_requested_volume >= 0 && now - EntityPage::_media_player_requested_volume_at < EntityPage::_media_player_requested_volume_hold_us) {
+    from = EntityPage::_media_player_requested_volume;
+  }
+  int32_t volume = std::clamp<int32_t>(from + delta, 0, 100);
+
+  EntityPage::_media_player_requested_volume = volume;
+  EntityPage::_media_player_requested_volume_at = now;
+  EntityPage::_media_player_set_volume(volume);
+  EntityPage::_media_player_show_volume_bar(volume);
+}
+
+void EntityPage::_media_player_show_volume_bar(int32_t volume) {
+  Nextion::set_component_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_bar_name, volume, 250);
+  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_bar_name, true, 250);
+
+  // The timer hides the bar. Stop it before starting it so that every press restarts the countdown,
+  // and holding the buttons keeps the bar up.
+  std::string timer = GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_bar_timer_name;
+  Nextion::send_raw_command((timer + ".en=0").c_str(), 250);
+  Nextion::send_raw_command((timer + ".en=1").c_str(), 250);
 }
 
 void EntityPage::_send_media_player_command(NSPanelMQTTManagerCommand__MediaPlayerCommand *command) {

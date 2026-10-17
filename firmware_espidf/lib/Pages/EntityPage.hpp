@@ -98,6 +98,16 @@ private:
   static void _media_player_set_volume(int32_t volume);
   static void _media_player_set_source_volume(int32_t volume);
 
+  /*
+   * Volume up or down by delta percent, from the volume -/+ buttons.
+   */
+  static void _media_player_step_volume(int32_t delta);
+
+  /*
+   * Show the volume bar at the given volume. The page's tm_vol timer hides it again.
+   */
+  static void _media_player_show_volume_bar(int32_t volume);
+
   /**
    * properly delete pointer and clear old data when shared_ptr expires
    */
@@ -139,6 +149,15 @@ private:
   static inline uint8_t _last_kelvin_pct = 0;
   static inline uint8_t _last_hue = 0;
   static inline uint8_t _last_saturation_pct = 0;
+
+  // Media player specific variables
+  // Percent per press of the volume -/+ buttons.
+  static constexpr int32_t _media_player_volume_step = 5;
+  // The last volume a -/+ press asked for, or -1, and when. Only touched from the Nextion event handler.
+  static inline int32_t _media_player_requested_volume = -1;
+  static inline int64_t _media_player_requested_volume_at = 0;
+  // How long a requested volume is preferred over the state's, while the state catches up.
+  static constexpr int64_t _media_player_requested_volume_hold_us = 3 * 1000 * 1000;
 
   // Thermostat specific variables
   static inline std::atomic<bool> _is_currently_editing = false;
