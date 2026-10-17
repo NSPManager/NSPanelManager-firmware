@@ -349,6 +349,9 @@ public:
 class GUI_ITEMS12_PAGE {
 public:
   static inline constexpr const char *page_name = "items12";
+  // TEMPORARY, revert before merging: these four IDs (slider_save, back, previous, next) were changed
+  // from 30, 25, 26 and 27 to match a TFT built from a local HMI based on an older version of the
+  // project's HMI. The project's own HMI may well still use the original values.
   static inline constexpr uint8_t slider_save_id = 25;
 
   static inline constexpr uint8_t button_back_id = 26;
