@@ -149,6 +149,9 @@ void ScreensaverPage::_mqtt_event_handler(void *arg, esp_event_base_t event_base
     if (event->topic_len == 0 || event->data_len == 0) {
       return; // Do not process empty messages
     }
+    if (event->data_len != event->total_data_len) [[unlikely]] {
+      return; // A fragment of a message larger than the MQTT buffer, e.g. a truncated forecast. MqttManager logs the drop.
+    }
 
     std::string topic_string = std::string(event->topic, event->topic_len);
 
