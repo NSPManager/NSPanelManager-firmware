@@ -796,8 +796,7 @@ void EntityPage::_update_display_media_player() {
   if (page_just_opened) {
     // The protobuf carries no playback position or duration yet, so there is nothing to show.
     Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::position_bar_name, false, 250);
-    // Not wired up yet.
-    Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_name, false, 250);
+    EntityPage::_media_player_controlling_source = false;
 
     // A render already in progress ignores the request, and unshow() cancels one that outlives the page.
     if (media_player->album_art_url != NULL && media_player->album_art_url[0] != '\0') {
@@ -807,6 +806,8 @@ void EntityPage::_update_display_media_player() {
 
   bool is_playing = media_player->state == NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__PLAYING ||
                     media_player->state == NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__BUFFERING;
+  // Fall back to the player if the source has gone away while it was selected.
+  bool controlling_source = EntityPage::_media_player_controlling_source && media_player->has_source_volume;
 
   Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::title_label_name, media_player->media_title, 1000);
   Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::artist_label_name, media_player->media_artist, 1000);
@@ -818,13 +819,19 @@ void EntityPage::_update_display_media_player() {
   Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::previous_track_button_name, media_player->can_previous_track, 250);
   Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::next_track_button_name, media_player->can_next_track, 250);
 
-  Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_name, media_player->is_muted ? GUI_MEDIA_ICONS::volume_mute : GUI_MEDIA_ICONS::volume_high, 250);
-  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_name, media_player->can_mute, 250);
+  // The switch shows what the volume controls act on now: this room's player, or the source feeding it.
+  Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_name, controlling_source ? GUI_MEDIA_ICONS::speaker_multiple : GUI_MEDIA_ICONS::speaker, 250);
+  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_name, media_player->has_source_volume, 250);
 
-  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_down_button_name, media_player->can_set_volume, 250);
-  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_up_button_name, media_player->can_set_volume, 250);
+  // The command can mute only the player, so there is no mute while controlling the source.
+  Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_name, media_player->is_muted ? GUI_MEDIA_ICONS::volume_mute : GUI_MEDIA_ICONS::volume_high, 250);
+  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_name, !controlling_source && media_player->can_mute, 250);
+
+  bool can_set_volume = controlling_source || media_player->can_set_volume;
+  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_down_button_name, can_set_volume, 250);
+  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_up_button_name, can_set_volume, 250);
   // Only the value: the bar is shown briefly when the volume buttons are pressed, not on every update.
-  Nextion::set_component_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_bar_name, media_player->volume, 250);
+  Nextion::set_component_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_bar_name, controlling_source ? media_player->source_volume : media_player->volume, 250);
 }
 
 void EntityPage::_handle_touch_event_media_player(uint16_t component_id, bool pressed) {
@@ -853,6 +860,10 @@ void EntityPage::_handle_touch_event_media_player(uint16_t component_id, bool pr
 
   case GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_id:
     EntityPage::_media_player_toggle_mute();
+    break;
+
+  case GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_id:
+    EntityPage::_media_player_toggle_source();
     break;
 
   case GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_up_button_id:
@@ -937,8 +948,9 @@ void EntityPage::_media_player_step_volume(int32_t delta) {
   // The command carries an absolute volume, and the state confirming a press takes a moment to come
   // back. Step from the last requested volume while it is recent, or quick presses would all start
   // from the same stale state and send the same value.
+  bool controlling_source = EntityPage::_media_player_controlling_source && state->media_player->has_source_volume;
   int64_t now = esp_timer_get_time();
-  int32_t from = state->media_player->volume;
+  int32_t from = controlling_source ? state->media_player->source_volume : state->media_player->volume;
   if (EntityPage::_media_player_requested_volume >= 0 && now - EntityPage::_media_player_requested_volume_at < EntityPage::_media_player_requested_volume_hold_us) {
     from = EntityPage::_media_player_requested_volume;
   }
@@ -946,8 +958,29 @@ void EntityPage::_media_player_step_volume(int32_t delta) {
 
   EntityPage::_media_player_requested_volume = volume;
   EntityPage::_media_player_requested_volume_at = now;
-  EntityPage::_media_player_set_volume(volume);
+  if (controlling_source) {
+    EntityPage::_media_player_set_source_volume(volume);
+  } else {
+    EntityPage::_media_player_set_volume(volume);
+  }
   EntityPage::_media_player_show_volume_bar(volume);
+}
+
+void EntityPage::_media_player_toggle_source() {
+  std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+  if (state == nullptr || state->entity_case != NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER) [[unlikely]] {
+    ESP_LOGE("EntityPage", "Tried to switch to the source without a media player state.");
+    return;
+  }
+  if (!state->media_player->has_source_volume) {
+    return; // The switch is hidden, but a press can race the state update that hid it.
+  }
+
+  EntityPage::_media_player_controlling_source = !EntityPage::_media_player_controlling_source;
+  // A volume requested for the other target is no base for this one.
+  EntityPage::_media_player_requested_volume = -1;
+  ESP_LOGD("EntityPage", "Volume controls now act on the %s.", EntityPage::_media_player_controlling_source ? "source" : "player");
+  EntityPage::_update_display_media_player();
 }
 
 void EntityPage::_media_player_show_volume_bar(int32_t volume) {

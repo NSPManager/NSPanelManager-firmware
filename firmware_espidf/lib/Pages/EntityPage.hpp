@@ -104,6 +104,11 @@ private:
   static void _media_player_step_volume(int32_t delta);
 
   /*
+   * Switch the volume controls between the player and the source feeding it, from b_srcswitch.
+   */
+  static void _media_player_toggle_source();
+
+  /*
    * Show the volume bar at the given volume. The page's tm_vol timer hides it again.
    */
   static void _media_player_show_volume_bar(int32_t volume);
@@ -151,6 +156,9 @@ private:
   static inline uint8_t _last_saturation_pct = 0;
 
   // Media player specific variables
+  // Whether the volume controls act on the source feeding the player rather than the player itself.
+  // Reset to the player whenever the page opens.
+  static inline std::atomic<bool> _media_player_controlling_source = false;
   // Percent per press of the volume -/+ buttons.
   static constexpr int32_t _media_player_volume_step = 5;
   // The last volume a -/+ press asked for, or -1, and when. Only touched from the Nextion event handler.
