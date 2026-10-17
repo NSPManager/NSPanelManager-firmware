@@ -14,6 +14,18 @@
 #include <esp_timer.h>
 #include <protobuf_nspanel_entity.pb-c.h>
 
+EntityPage::_media_player_component_t EntityPage::_media_player_components[] = {
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::back_button_name, _media_player_action::BACK, GUI_MEDIA_PLAYER_CONTROL_PAGE::back_button_id},
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::previous_track_button_name, _media_player_action::PREVIOUS_TRACK, GUI_MEDIA_PLAYER_CONTROL_PAGE::previous_track_button_id},
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::next_track_button_name, _media_player_action::NEXT_TRACK, GUI_MEDIA_PLAYER_CONTROL_PAGE::next_track_button_id},
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::play_pause_button_name, _media_player_action::PLAY_PAUSE, GUI_MEDIA_PLAYER_CONTROL_PAGE::play_pause_button_id},
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_name, _media_player_action::MUTE, GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_id},
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_name, _media_player_action::SOURCE_SWITCH, GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_id},
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_up_button_name, _media_player_action::VOLUME_UP, GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_up_button_id},
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_down_button_name, _media_player_action::VOLUME_DOWN, GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_down_button_id},
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_hotspot_name, _media_player_action::ALBUM_ART, GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_hotspot_id},
+};
+
 void EntityPage::show(std::string state_topic) {
   esp_log_level_set("EntityPage", ConfigManager::log_level);
 
@@ -795,6 +807,8 @@ void EntityPage::_update_display_media_player() {
   NSPanelEntityState__MediaPlayer *media_player = state->media_player;
 
   if (page_just_opened) {
+    EntityPage::_media_player_resolve_component_ids();
+
     // The protobuf carries no playback position or duration yet, so there is nothing to show.
     Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::position_bar_name, false, 250);
     EntityPage::_media_player_controlling_source = false;
@@ -844,47 +858,73 @@ void EntityPage::_handle_touch_event_media_player(uint16_t component_id, bool pr
     return; // The page sends release events only.
   }
 
-  switch (component_id) {
-  case GUI_MEDIA_PLAYER_CONTROL_PAGE::back_button_id:
-    ESP_LOGD("EntityPage", "Received touch event to go back.");
-    EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
-    break;
+  for (const _media_player_component_t &component : EntityPage::_media_player_components) {
+    if (component.id != component_id) {
+      continue;
+    }
 
-  case GUI_MEDIA_PLAYER_CONTROL_PAGE::play_pause_button_id:
-    EntityPage::_media_player_play_pause();
-    break;
+    switch (component.action) {
+    case _media_player_action::BACK:
+      ESP_LOGD("EntityPage", "Received touch event to go back.");
+      EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
+      break;
 
-  case GUI_MEDIA_PLAYER_CONTROL_PAGE::previous_track_button_id:
-    EntityPage::_media_player_previous_track();
-    break;
+    case _media_player_action::PLAY_PAUSE:
+      EntityPage::_media_player_play_pause();
+      break;
 
-  case GUI_MEDIA_PLAYER_CONTROL_PAGE::next_track_button_id:
-    EntityPage::_media_player_next_track();
-    break;
+    case _media_player_action::PREVIOUS_TRACK:
+      EntityPage::_media_player_previous_track();
+      break;
 
-  case GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_id:
-    EntityPage::_media_player_toggle_mute();
-    break;
+    case _media_player_action::NEXT_TRACK:
+      EntityPage::_media_player_next_track();
+      break;
 
-  case GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_id:
-    EntityPage::_media_player_toggle_source();
-    break;
+    case _media_player_action::MUTE:
+      EntityPage::_media_player_toggle_mute();
+      break;
 
-  case GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_up_button_id:
-    EntityPage::_media_player_step_volume(1);
-    break;
+    case _media_player_action::SOURCE_SWITCH:
+      EntityPage::_media_player_toggle_source();
+      break;
 
-  case GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_down_button_id:
-    EntityPage::_media_player_step_volume(-1);
-    break;
+    case _media_player_action::VOLUME_UP:
+      EntityPage::_media_player_step_volume(1);
+      break;
 
-  case GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_hotspot_id:
-    ESP_LOGD("EntityPage", "Album art pressed. Source selection is not implemented yet.");
-    break;
+    case _media_player_action::VOLUME_DOWN:
+      EntityPage::_media_player_step_volume(-1);
+      break;
 
-  default:
-    break;
+    case _media_player_action::ALBUM_ART:
+      ESP_LOGD("EntityPage", "Album art pressed. Source selection is not implemented yet.");
+      break;
+    }
+    return;
   }
+}
+
+void EntityPage::_media_player_resolve_component_ids() {
+  if (EntityPage::_media_player_component_ids_resolved) {
+    return;
+  }
+
+  bool all_resolved = true;
+  std::string resolved_ids;
+  for (_media_player_component_t &component : EntityPage::_media_player_components) {
+    int32_t id = -1;
+    if (Nextion::get_component_integer_attribute(component.name, "id", &id, 250, 250) == ESP_OK && id >= 0 && id <= UINT8_MAX) {
+      component.id = id;
+    } else {
+      // Keep the ID from GUI_data.hpp and try again the next time the page opens.
+      ESP_LOGE("EntityPage", "Failed to look up the ID of media player component %s, will use %d.", component.name, component.id.load());
+      all_resolved = false;
+    }
+    resolved_ids.append(" ").append(component.name).append("=").append(std::to_string(component.id.load()));
+  }
+  ESP_LOGI("EntityPage", "Media player component IDs:%s", resolved_ids.c_str());
+  EntityPage::_media_player_component_ids_resolved = all_resolved;
 }
 
 void EntityPage::_media_player_play_pause() {

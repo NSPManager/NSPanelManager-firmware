@@ -568,6 +568,9 @@ class GUI_MEDIA_PLAYER_CONTROL_PAGE {
 public:
   static inline constexpr const char *page_name = "mediaplayer2";
 
+  // The IDs the touchable components had when this was written. EntityPage looks the real IDs up
+  // by name when the page opens, as they change whenever a component is added to the page, and
+  // falls back to these only if a lookup fails.
   static inline constexpr const uint8_t back_button_id = 8;
   static inline constexpr const uint8_t previous_track_button_id = 12;
   static inline constexpr const uint8_t next_track_button_id = 13;
@@ -578,6 +581,8 @@ public:
   static inline constexpr const uint8_t volume_down_button_id = 18;
   static inline constexpr const uint8_t album_art_hotspot_id = 21;
 
+  static inline constexpr const char *back_button_name = "b_scenes";
+  static inline constexpr const char *album_art_hotspot_name = "h_art";
   static inline constexpr const char *title_label_name = "song";
   static inline constexpr const char *artist_label_name = "artist";
   static inline constexpr const char *previous_track_button_name = "b_prev";

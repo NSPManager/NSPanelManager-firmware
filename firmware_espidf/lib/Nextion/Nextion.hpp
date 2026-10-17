@@ -156,6 +156,17 @@ public:
   static esp_err_t get_component_integer_value(const char *component_id, int32_t *result, uint16_t timeout, uint16_t mutex_timeout);
 
   /**
+   * Request an integer attribute of a component on the Nextion display, for example "id"
+   * @param component_id: The name of the component to request the attribute from
+   * @param attribute: The attribute to request, without the leading "."
+   * @param result: Pointer to where to save the value
+   * @param timeout: The amount of time to wait for an answer in ms
+   * @param mutex_timeout: Timeout (in ms) of how long to wait for UART mutex
+   * @return: Return ESP_ERR_TIMEOUT if no value was returned within the given timeout
+   */
+  static esp_err_t get_component_integer_attribute(const char *component_id, const char *attribute, int32_t *result, uint16_t timeout, uint16_t mutex_timeout);
+
+  /**
    * Request the current value of a component on the Nextion display
    * @param brightness: The new brightness for the screen
    * @param mutex_timeout: Timeout (in ms) of how long to wait for UART mutex

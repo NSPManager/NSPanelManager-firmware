@@ -88,6 +88,13 @@ private:
   static void _handle_touch_event_media_player(uint16_t component_id, bool pressed);
 
   /*
+   * Look up the IDs of the touchable media player components by name and log them. Called with the
+   * page showing, as the Nextion only answers for components on the current page. Done once per boot:
+   * the IDs only change with a new TFT, and installing one reboots the panel.
+   */
+  static void _media_player_resolve_component_ids();
+
+  /*
    * Commands for the currently displayed media player. Decisions that depend on the
    * current state (play or pause, mute or unmute) are made from the last state received.
    */
@@ -185,6 +192,27 @@ private:
   // How long a pending volume waits for its state before the state wins: in case the manager rounds
   // it differently, or the player ignores it.
   static constexpr int64_t _media_player_pending_volume_timeout_us = 5 * 1000 * 1000;
+  // What a touch on a media player component does.
+  enum class _media_player_action {
+    BACK,
+    PREVIOUS_TRACK,
+    NEXT_TRACK,
+    PLAY_PAUSE,
+    MUTE,
+    SOURCE_SWITCH,
+    VOLUME_UP,
+    VOLUME_DOWN,
+    ALBUM_ART,
+  };
+  // A touchable media player component. id starts as the ID in GUI_data.hpp and is replaced by the one
+  // the Nextion reports. Written from the MQTT task, read from the Nextion handler.
+  struct _media_player_component_t {
+    const char *name;
+    _media_player_action action;
+    std::atomic<uint8_t> id;
+  };
+  static _media_player_component_t _media_player_components[];
+  static inline std::atomic<bool> _media_player_component_ids_resolved = false;
 
   // Thermostat specific variables
   static inline std::atomic<bool> _is_currently_editing = false;
