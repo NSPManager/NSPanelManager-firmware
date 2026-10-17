@@ -4,6 +4,52 @@
 // This file contains data that is needed to communicate between the Nextion display and the ESP32.
 // This includes data such as page names, component IDs and so on
 
+// Icon glyphs available in the "newfont9" icon font (font 11 in the HMI).
+//
+// The Nextion has no notion of an icon: an icon is just a character drawn in a font whose
+// glyphs are pictures. To show one, write the character into a text component (or the txt of
+// a dual state button) with Nextion::set_component_text, exactly as the items pages do for the
+// light switch icon. The component's own "font" attribute must already be 11 in the HMI --
+// there is no runtime way to change a component's font, so a component set to a text font will
+// render these as plain letters.
+//
+// newfont9 is 50x50 px and holds 18 glyphs on the character codes 'a'..'r'. Every glyph the
+// font has is listed here; anything not listed does not exist in the font.
+class GUI_ICONS {
+public:
+  // Font id as referenced by a component's "font" attribute in the HMI.
+  static inline constexpr const uint8_t icon_font_id = 11;
+
+  // Media transport
+  static inline constexpr const char *play = "m";
+  static inline constexpr const char *stop = "n";
+  static inline constexpr const char *previous_track = "o";
+  static inline constexpr const char *next_track = "p";
+
+  // NOTE: newfont9 has no pause glyph, and no muted-speaker glyph. A play/pause button has to
+  // either toggle between play and stop, or swap the picture rather than the character.
+
+  // Volume / chevrons
+  static inline constexpr const char *arrow_up = "k";
+  static inline constexpr const char *arrow_down = "l";
+  static inline constexpr const char *speaker = "q";        // single speaker
+  static inline constexpr const char *speaker_group = "r";  // two stacked speakers
+
+  // Power / misc
+  static inline constexpr const char *standby = "h";
+  static inline constexpr const char *thermometer = "j";
+  static inline constexpr const char *house_temperature = "i"; // house outline with a thermometer
+  static inline constexpr const char *spray_bottle = "g";
+  static inline constexpr const char *house_occupied = "a";    // house with a person inside
+  static inline constexpr const char *moon = "b";
+
+  // Alarm / shields
+  static inline constexpr const char *shield_disarmed = "c"; // shield with a slash through it
+  static inline constexpr const char *shield_home = "d";
+  static inline constexpr const char *shield_locked = "e";
+  static inline constexpr const char *shield_night = "f";
+};
+
 // BOOTSCREEN PAGE
 class GUI_LOADING_PAGE {
 public:
@@ -303,11 +349,14 @@ public:
 class GUI_ITEMS12_PAGE {
 public:
   static inline constexpr const char *page_name = "items12";
-  static inline constexpr uint8_t slider_save_id = 30;
+  // TEMPORARY, revert before merging: these four IDs (slider_save, back, previous, next) were changed
+  // from 30, 25, 26 and 27 to match a TFT built from a local HMI based on an older version of the
+  // project's HMI. The project's own HMI may well still use the original values.
+  static inline constexpr uint8_t slider_save_id = 25;
 
-  static inline constexpr uint8_t button_back_id = 25;
-  static inline constexpr uint8_t button_previous_page_id = 26;
-  static inline constexpr uint8_t button_next_page_id = 27;
+  static inline constexpr uint8_t button_back_id = 26;
+  static inline constexpr uint8_t button_previous_page_id = 27;
+  static inline constexpr uint8_t button_next_page_id = 29;
 
   static inline constexpr GUI_ITEMS_PAGE_ITEM_DATA item_slots[] = {
       {
@@ -468,4 +517,93 @@ public:
           .label_name = "set5text",
       },
   };
+};
+
+// Icon glyphs in the "mdi_media_h48" font (font 12 in the HMI), used by the media player page.
+//
+// Material Design Icons remapped onto ASCII by build_icon_font.py, because the Nextion font
+// generator drops MDI's private use code points. The letters follow the order of that script's
+// shortlist, so rebuilding the font with a different shortlist moves them. Every glyph in the font
+// is listed here.
+//
+// The generator keeps no left side bearing: every glyph is drawn flush left in a 47 px cell, so a
+// centred button shows its icon 6-13 px left of centre. The mediaplayer2 page compensates by
+// shifting each button right, which only holds for the glyphs that button was laid out for.
+class GUI_MEDIA_ICONS {
+public:
+  // Font id as referenced by a component's "font" attribute in the HMI.
+  static inline constexpr const uint8_t icon_font_id = 12;
+
+  // Transport
+  static inline constexpr const char *play = "A";
+  static inline constexpr const char *pause = "B";
+  static inline constexpr const char *next_track = "E";
+  static inline constexpr const char *previous_track = "F";
+
+  // Shuffle and repeat
+  static inline constexpr const char *shuffle = "O";
+  static inline constexpr const char *shuffle_variant = "P";
+  static inline constexpr const char *shuffle_disabled = "Q";
+  static inline constexpr const char *repeat = "R";
+  static inline constexpr const char *repeat_once = "S";
+  static inline constexpr const char *repeat_off = "T";
+  static inline constexpr const char *repeat_variant = "U";
+
+  // Volume
+  static inline constexpr const char *volume_high = "V"; // unmuted
+  static inline constexpr const char *volume_medium = "b";
+  static inline constexpr const char *volume_low = "c";
+  static inline constexpr const char *volume_mute = "X"; // muted
+  static inline constexpr const char *volume_plus = "Z";
+  static inline constexpr const char *volume_minus = "a";
+  static inline constexpr const char *plus = "d";
+  static inline constexpr const char *minus = "e";
+
+  // Player or source
+  static inline constexpr const char *speaker = "f";          // this room's player
+  static inline constexpr const char *speaker_multiple = "g"; // the source and every room on it
+  static inline constexpr const char *music_box_multiple = "j";
+  static inline constexpr const char *input_select = "n";
+};
+
+// MEDIA PLAYER PAGE ("mediaplayer2")
+class GUI_MEDIA_PLAYER_CONTROL_PAGE {
+public:
+  static inline constexpr const char *page_name = "mediaplayer2";
+
+  // The IDs the touchable components had when this was written. EntityPage looks the real IDs up
+  // by name when the page opens, as they change whenever a component is added to the page, and
+  // falls back to these only if a lookup fails.
+  static inline constexpr const uint8_t back_button_id = 8;
+  static inline constexpr const uint8_t previous_track_button_id = 12;
+  static inline constexpr const uint8_t next_track_button_id = 13;
+  static inline constexpr const uint8_t play_pause_button_id = 14;
+  static inline constexpr const uint8_t mute_button_id = 15;
+  static inline constexpr const uint8_t source_switch_button_id = 16;
+  static inline constexpr const uint8_t volume_up_button_id = 17;
+  static inline constexpr const uint8_t volume_down_button_id = 18;
+  static inline constexpr const uint8_t album_art_hotspot_id = 21;
+
+  static inline constexpr const char *back_button_name = "b_scenes";
+  static inline constexpr const char *album_art_hotspot_name = "h_art";
+  static inline constexpr const char *title_label_name = "song";
+  static inline constexpr const char *artist_label_name = "artist";
+  static inline constexpr const char *previous_track_button_name = "b_prev";
+  static inline constexpr const char *next_track_button_name = "b_next";
+  static inline constexpr const char *play_pause_button_name = "b_play";
+  static inline constexpr const char *mute_button_name = "b_vol";
+  static inline constexpr const char *source_switch_button_name = "b_srcswitch";
+  static inline constexpr const char *volume_up_button_name = "b_vol_up";
+  static inline constexpr const char *volume_down_button_name = "b_vol_down";
+  static inline constexpr const char *position_bar_name = "p_pos";
+  static inline constexpr const char *volume_bar_name = "p_volume";
+
+  // Hides volume_bar_name when it fires, then disables itself. The page hides the bar in its
+  // Preinitialize event, so it starts hidden.
+  static inline constexpr const char *volume_bar_timer_name = "tm_vol";
+
+  // The album art is drawn over the h_art hotspot. A hotspot draws nothing, so pressing it does
+  // not repaint over the art the way a button would.
+  static inline constexpr const uint16_t album_art_x = 78;
+  static inline constexpr const uint16_t album_art_y = 290;
 };

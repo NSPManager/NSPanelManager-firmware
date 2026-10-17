@@ -5,6 +5,7 @@
 #include <esp_err.h>
 #include <esp_event.h>
 #include <freertos/semphr.h>
+#include <vector>
 
 /**
  * Different available states of the Nextion display
@@ -156,6 +157,29 @@ public:
   static esp_err_t get_component_integer_value(const char *component_id, int32_t *result, uint16_t timeout, uint16_t mutex_timeout);
 
   /**
+   * Request an integer attribute of a component on the Nextion display, for example "id"
+   * @param component_id: The name of the component to request the attribute from
+   * @param attribute: The attribute to request, without the leading "."
+   * @param result: Pointer to where to save the value
+   * @param timeout: The amount of time to wait for an answer in ms
+   * @param mutex_timeout: Timeout (in ms) of how long to wait for UART mutex
+   * @return: Return ESP_ERR_TIMEOUT if no value was returned within the given timeout
+   */
+  static esp_err_t get_component_integer_attribute(const char *component_id, const char *attribute, int32_t *result, uint16_t timeout, uint16_t mutex_timeout);
+
+  /**
+   * Request the value of an integer expression on the Nextion display, for example "dp" for the
+   * current page. The display handles commands in order, so the answer also means that everything
+   * sent before it has been processed.
+   * @param expression: What to get, as written after "get "
+   * @param result: Pointer to where to save the value
+   * @param timeout: The amount of time to wait for an answer in ms
+   * @param mutex_timeout: Timeout (in ms) of how long to wait for UART mutex
+   * @return: Return ESP_ERR_TIMEOUT if no value was returned within the given timeout
+   */
+  static esp_err_t get_integer_value(const char *expression, int32_t *result, uint16_t timeout, uint16_t mutex_timeout);
+
+  /**
    * Request the current value of a component on the Nextion display
    * @param brightness: The new brightness for the screen
    * @param mutex_timeout: Timeout (in ms) of how long to wait for UART mutex
@@ -194,6 +218,9 @@ public:
 private:
   // Handle all events from UART
   static void _task_uart_event(void *param);
+
+  // Post data read from UART to _uart_data_handler on the UART data event loop
+  static void _post_received_data(const std::vector<char> &data);
 
   // Process UART events
   static void _uart_data_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);

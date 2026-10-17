@@ -1,15 +1,31 @@
+#include <AlbumArt.hpp>
 #include <ConfigManager.hpp>
 #include <EntitiesPage.hpp>
 #include <EntityPage.hpp>
 #include <GUI_data.hpp>
 #include <InterfaceManager.hpp>
+#include <MediaSourcePage.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
 #include <Nextion.hpp>
 #include <Nextion_event.hpp>
 #include <StatusUpdateManager.hpp>
+#include <algorithm>
 #include <esp_log.h>
+#include <esp_timer.h>
 #include <protobuf_nspanel_entity.pb-c.h>
+
+EntityPage::_media_player_component_t EntityPage::_media_player_components[] = {
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::back_button_name, _media_player_action::BACK, GUI_MEDIA_PLAYER_CONTROL_PAGE::back_button_id},
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::previous_track_button_name, _media_player_action::PREVIOUS_TRACK, GUI_MEDIA_PLAYER_CONTROL_PAGE::previous_track_button_id},
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::next_track_button_name, _media_player_action::NEXT_TRACK, GUI_MEDIA_PLAYER_CONTROL_PAGE::next_track_button_id},
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::play_pause_button_name, _media_player_action::PLAY_PAUSE, GUI_MEDIA_PLAYER_CONTROL_PAGE::play_pause_button_id},
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_name, _media_player_action::MUTE, GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_id},
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_name, _media_player_action::SOURCE_SWITCH, GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_id},
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_up_button_name, _media_player_action::VOLUME_UP, GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_up_button_id},
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_down_button_name, _media_player_action::VOLUME_DOWN, GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_down_button_id},
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_hotspot_name, _media_player_action::ALBUM_ART, GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_hotspot_id},
+};
 
 void EntityPage::show(std::string state_topic) {
   esp_log_level_set("EntityPage", ConfigManager::log_level);
@@ -28,6 +44,12 @@ void EntityPage::show(std::string state_topic) {
   EntityPage::_is_currently_editing = false;
 }
 
+void EntityPage::return_to_media_player(std::string state_topic) {
+  EntityPage::_media_player_returning = true;
+  // Subscribing to the state topic again delivers the retained state, which opens the media player page.
+  EntityPage::show(state_topic);
+}
+
 void EntityPage::unshow() {
   MqttManager::unregister_handler(MQTT_EVENT_ANY, &EntityPage::_handle_mqtt_event);
   esp_event_handler_unregister(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event);
@@ -35,6 +57,9 @@ void EntityPage::unshow() {
     MqttManager::unsubscribe(EntityPage::_current_entity_mqtt_topic);
   }
   EntityPage::_currently_showing = false;
+  // A full render takes seconds and outlives this page, so stop it rather than let it paint
+  // over whatever comes next.
+  AlbumArt::cancel();
 }
 
 void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -69,6 +94,10 @@ void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int3
             }
           } else if (state->entity_case == NSPanelEntityState__EntityCase::NSPANEL_ENTITY_STATE__ENTITY_THERMOSTAT) {
             EntityPage::_current_mode = _entity_page_modes::THERMOSTAT;
+          } else if (state->entity_case == NSPanelEntityState__EntityCase::NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER) {
+            EntityPage::_current_mode = _entity_page_modes::MEDIA_PLAYER;
+            EntityPage::_log_media_player_state(state->media_player);
+            EntityPage::_media_player_confirm_pending_volume(state->media_player);
           } else {
             ESP_LOGE("EntityPage", "Unknown entity state case!");
           }
@@ -101,6 +130,10 @@ void EntityPage::_update_display() {
     EntityPage::_update_display_thermostat();
     break;
 
+  case NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER:
+    EntityPage::_update_display_media_player();
+    break;
+
   default:
     ESP_LOGE("EntityPage", "Unknown state type. Can't call appropriate update display function.");
     break;
@@ -127,6 +160,9 @@ void EntityPage::_handle_nextion_event(void *arg, esp_event_base_t event_base, i
       EntityPage::_handle_string_event_thermostat(state, (char *)event_data);
       break;
 
+    case NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER:
+      break;
+
     default:
       ESP_LOGE("EntityPage", "Unknown state type. Can't call appropriate string event function.");
       break;
@@ -144,6 +180,10 @@ void EntityPage::_handle_touch_event(const std::shared_ptr<NSPanelEntityState> &
     break;
 
   case NSPANEL_ENTITY_STATE__ENTITY_THERMOSTAT:
+    break;
+
+  case NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER:
+    EntityPage::_handle_touch_event_media_player(component_id, pressed);
     break;
 
   default:
@@ -709,5 +749,373 @@ void EntityPage::_send_thermostat_setpoint_command() {
     }
 
     EntityPage::_update_display_thermostat();
+  }
+}
+
+const char *EntityPage::_playback_state_name(NSPanelEntityState__MediaPlayer__PlaybackState state) {
+  switch (state) {
+  case NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__OFF:
+    return "Off";
+  case NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__ON:
+    return "On";
+  case NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__IDLE:
+    return "Idle";
+  case NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__PLAYING:
+    return "Playing";
+  case NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__PAUSED:
+    return "Paused";
+  case NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__BUFFERING:
+    return "Buffering";
+  default:
+    return "";
+  }
+}
+
+void EntityPage::_log_media_player_state(NSPanelEntityState__MediaPlayer *media_player) {
+  if (media_player == NULL) [[unlikely]] {
+    ESP_LOGE("EntityPage", "Media player state case set but no media player payload.");
+    return;
+  }
+
+  // The whole decode path runs before anything touches the display, so this verifies the protobuf
+  // round trip even on a panel whose TFT has no media player page.
+  ESP_LOGD("EntityPage", "Media player %ld '%s': %s", media_player->media_player_id, media_player->name != NULL ? media_player->name : "(no name)", EntityPage::_playback_state_name(media_player->state));
+  ESP_LOGD("EntityPage", "  title '%s' artist '%s'", media_player->media_title != NULL ? media_player->media_title : "", media_player->media_artist != NULL ? media_player->media_artist : "");
+  ESP_LOGD("EntityPage", "  volume %ld, muted %s, source volume %ld (present: %s)", media_player->volume, media_player->is_muted ? "yes" : "no", media_player->source_volume, media_player->has_source_volume ? "yes" : "no");
+  ESP_LOGD("EntityPage", "  can: play %d pause %d next %d prev %d set_volume %d mute %d", media_player->can_play, media_player->can_pause, media_player->can_next_track, media_player->can_previous_track, media_player->can_set_volume, media_player->can_mute);
+  ESP_LOGD("EntityPage", "  album art: %s", media_player->album_art_url != NULL && media_player->album_art_url[0] != '\0' ? media_player->album_art_url : "(none)");
+}
+
+void EntityPage::_update_display_media_player() {
+  ESP_LOGI("EntityPage", "Updating EntityPage with media player state.");
+  bool page_just_opened = false;
+  if (!EntityPage::_currently_showing) {
+    ESP_LOGD("EntityPage", "Switching page to %s", GUI_MEDIA_PLAYER_CONTROL_PAGE::page_name);
+    EntityPage::_currently_showing = true;
+    if (Nextion::go_to_page(GUI_MEDIA_PLAYER_CONTROL_PAGE::page_name, 1000) != ESP_OK) [[unlikely]] {
+      // The official HMI has no media player page yet, so on a stock TFT this fails every time
+      // rather than never. Clear the flag before backing out: otherwise the next state update
+      // takes the "already showing" path, skips the page switch, and writes the media player
+      // components onto whatever page is actually displayed.
+      ESP_LOGE("EntityPage", "Failed to navigate Nextion to page. Will go back.");
+      EntityPage::_currently_showing = false;
+      EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
+      return;
+    }
+
+    InterfaceManager::call_unshow_callback();
+    InterfaceManager::current_page_unshow_callback.set(EntityPage::unshow);
+
+    esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event, NULL);
+    page_just_opened = true;
+  }
+
+  std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+  NSPanelEntityState__MediaPlayer *media_player = state->media_player;
+
+  if (page_just_opened) {
+    EntityPage::_media_player_resolve_component_ids();
+
+    // The protobuf carries no playback position or duration yet, so there is nothing to show.
+    Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::position_bar_name, false, 250);
+    Nextion::set_timer_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_bar_timer_name, EntityPage::_media_player_volume_bar_timeout_ms, 250);
+    if (!EntityPage::_media_player_returning.exchange(false)) {
+      EntityPage::_media_player_controlling_source = false;
+    }
+    taskENTER_CRITICAL(&EntityPage::_entity_page_spinlock);
+    EntityPage::_media_player_pending_volume.volume = -1;
+    taskEXIT_CRITICAL(&EntityPage::_entity_page_spinlock);
+  }
+
+  // Draw the art when the page opens and whenever it changes, for example on the next track. A new
+  // render replaces one still in progress, and unshow() cancels one that outlives the page.
+  {
+    std::string album_art_url = media_player->album_art_url != NULL ? media_player->album_art_url : "";
+    std::lock_guard<std::mutex> lock_guard(EntityPage::_media_player_album_art_url_mutex);
+    if (page_just_opened || album_art_url != EntityPage::_media_player_album_art_url) {
+      EntityPage::_media_player_album_art_url = album_art_url;
+      if (!album_art_url.empty()) {
+        AlbumArt::render(album_art_url, GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_x, GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_y);
+      } else {
+        AlbumArt::cancel();
+      }
+    }
+  }
+
+  bool is_playing = media_player->state == NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__PLAYING ||
+                    media_player->state == NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__BUFFERING;
+  // Fall back to the player if the source has gone away while it was selected.
+  bool controlling_source = EntityPage::_media_player_controlling_source && media_player->has_source_volume;
+
+  Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::title_label_name, media_player->media_title, 1000);
+  Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::artist_label_name, media_player->media_artist, 1000);
+
+  // Icons follow the player's state rather than the press, so the page stays right when something
+  // else controls the player.
+  Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::play_pause_button_name, is_playing ? GUI_MEDIA_ICONS::pause : GUI_MEDIA_ICONS::play, 250);
+  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::play_pause_button_name, is_playing ? media_player->can_pause : media_player->can_play, 250);
+  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::previous_track_button_name, media_player->can_previous_track, 250);
+  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::next_track_button_name, media_player->can_next_track, 250);
+
+  // The switch shows what the volume controls act on now: this room's player, or the source feeding it.
+  Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_name, controlling_source ? GUI_MEDIA_ICONS::speaker_multiple : GUI_MEDIA_ICONS::speaker, 250);
+  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_name, media_player->has_source_volume, 250);
+
+  // The command can mute only the player, so there is no mute while controlling the source.
+  Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_name, media_player->is_muted ? GUI_MEDIA_ICONS::volume_mute : GUI_MEDIA_ICONS::volume_high, 250);
+  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_name, !controlling_source && media_player->can_mute, 250);
+
+  bool can_set_volume = controlling_source || media_player->can_set_volume;
+  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_down_button_name, can_set_volume, 250);
+  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_up_button_name, can_set_volume, 250);
+  // Only the value: the bar is shown briefly when the volume buttons are pressed, not on every update.
+  Nextion::set_component_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_bar_name, EntityPage::_media_player_volume(media_player, controlling_source), 250);
+}
+
+void EntityPage::_handle_touch_event_media_player(uint16_t component_id, bool pressed) {
+  ESP_LOGD("EntityPage", "Touch component %d, pressed %s", component_id, pressed ? "Yes" : "No");
+  if (pressed) {
+    return; // The page sends release events only.
+  }
+
+  for (const _media_player_component_t &component : EntityPage::_media_player_components) {
+    if (component.id != component_id) {
+      continue;
+    }
+
+    switch (component.action) {
+    case _media_player_action::BACK:
+      ESP_LOGD("EntityPage", "Received touch event to go back.");
+      EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
+      break;
+
+    case _media_player_action::PLAY_PAUSE:
+      EntityPage::_media_player_play_pause();
+      break;
+
+    case _media_player_action::PREVIOUS_TRACK:
+      EntityPage::_media_player_previous_track();
+      break;
+
+    case _media_player_action::NEXT_TRACK:
+      EntityPage::_media_player_next_track();
+      break;
+
+    case _media_player_action::MUTE:
+      EntityPage::_media_player_toggle_mute();
+      break;
+
+    case _media_player_action::SOURCE_SWITCH:
+      EntityPage::_media_player_toggle_source();
+      break;
+
+    case _media_player_action::VOLUME_UP:
+      EntityPage::_media_player_step_volume(1);
+      break;
+
+    case _media_player_action::VOLUME_DOWN:
+      EntityPage::_media_player_step_volume(-1);
+      break;
+
+    case _media_player_action::ALBUM_ART: {
+      // The source list follows the source switch, like the volume buttons.
+      std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+      bool source_player = EntityPage::_media_player_controlling_source && state != nullptr && state->entity_case == NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER && state->media_player->has_source_volume;
+      MediaSourcePage::show(EntityPage::_current_entity_mqtt_topic, source_player);
+      break;
+    }
+    }
+    return;
+  }
+}
+
+void EntityPage::_media_player_resolve_component_ids() {
+  if (EntityPage::_media_player_component_ids_resolved) {
+    return;
+  }
+
+  bool all_resolved = true;
+  std::string resolved_ids;
+  for (_media_player_component_t &component : EntityPage::_media_player_components) {
+    int32_t id = -1;
+    if (Nextion::get_component_integer_attribute(component.name, "id", &id, 250, 250) == ESP_OK && id >= 0 && id <= UINT8_MAX) {
+      component.id = id;
+    } else {
+      // Keep the ID from GUI_data.hpp and try again the next time the page opens.
+      ESP_LOGE("EntityPage", "Failed to look up the ID of media player component %s, will use %d.", component.name, component.id.load());
+      all_resolved = false;
+    }
+    resolved_ids.append(" ").append(component.name).append("=").append(std::to_string(component.id.load()));
+  }
+  ESP_LOGI("EntityPage", "Media player component IDs:%s", resolved_ids.c_str());
+  EntityPage::_media_player_component_ids_resolved = all_resolved;
+}
+
+void EntityPage::_media_player_play_pause() {
+  std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+  if (state == nullptr || state->entity_case != NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER) [[unlikely]] {
+    ESP_LOGE("EntityPage", "Tried to play/pause without a media player state.");
+    return;
+  }
+
+  NSPanelMQTTManagerCommand__MediaPlayerCommand command = NSPANEL_MQTTMANAGER_COMMAND__MEDIA_PLAYER_COMMAND__INIT;
+  if (state->media_player->state == NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__PLAYING || state->media_player->state == NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__BUFFERING) {
+    command.playback_action = NSPANEL_MQTTMANAGER_COMMAND__MEDIA_PLAYER_COMMAND__PLAYBACK_ACTION__PAUSE;
+  } else {
+    command.playback_action = NSPANEL_MQTTMANAGER_COMMAND__MEDIA_PLAYER_COMMAND__PLAYBACK_ACTION__PLAY;
+  }
+  EntityPage::_send_media_player_command(&command);
+}
+
+void EntityPage::_media_player_next_track() {
+  NSPanelMQTTManagerCommand__MediaPlayerCommand command = NSPANEL_MQTTMANAGER_COMMAND__MEDIA_PLAYER_COMMAND__INIT;
+  command.playback_action = NSPANEL_MQTTMANAGER_COMMAND__MEDIA_PLAYER_COMMAND__PLAYBACK_ACTION__NEXT_TRACK;
+  EntityPage::_send_media_player_command(&command);
+}
+
+void EntityPage::_media_player_previous_track() {
+  NSPanelMQTTManagerCommand__MediaPlayerCommand command = NSPANEL_MQTTMANAGER_COMMAND__MEDIA_PLAYER_COMMAND__INIT;
+  command.playback_action = NSPANEL_MQTTMANAGER_COMMAND__MEDIA_PLAYER_COMMAND__PLAYBACK_ACTION__PREVIOUS_TRACK;
+  EntityPage::_send_media_player_command(&command);
+}
+
+void EntityPage::_media_player_toggle_mute() {
+  std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+  if (state == nullptr || state->entity_case != NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER) [[unlikely]] {
+    ESP_LOGE("EntityPage", "Tried to toggle mute without a media player state.");
+    return;
+  }
+
+  NSPanelMQTTManagerCommand__MediaPlayerCommand command = NSPANEL_MQTTMANAGER_COMMAND__MEDIA_PLAYER_COMMAND__INIT;
+  command.has_muted = true;
+  command.muted = !state->media_player->is_muted;
+  EntityPage::_send_media_player_command(&command);
+}
+
+void EntityPage::_media_player_set_volume(int32_t volume) {
+  NSPanelMQTTManagerCommand__MediaPlayerCommand command = NSPANEL_MQTTMANAGER_COMMAND__MEDIA_PLAYER_COMMAND__INIT;
+  command.has_volume = true;
+  command.volume = volume;
+  EntityPage::_send_media_player_command(&command);
+}
+
+void EntityPage::_media_player_set_source_volume(int32_t volume) {
+  NSPanelMQTTManagerCommand__MediaPlayerCommand command = NSPANEL_MQTTMANAGER_COMMAND__MEDIA_PLAYER_COMMAND__INIT;
+  command.has_source_volume = true;
+  command.source_volume = volume;
+  EntityPage::_send_media_player_command(&command);
+}
+
+void EntityPage::_media_player_step_volume(int32_t direction) {
+  std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+  if (state == nullptr || state->entity_case != NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER) [[unlikely]] {
+    ESP_LOGE("EntityPage", "Tried to change volume without a media player state.");
+    return;
+  }
+  NSPanelEntityState__MediaPlayer *media_player = state->media_player;
+
+  bool controlling_source = EntityPage::_media_player_controlling_source && media_player->has_source_volume;
+  // A manager from before volume_step was added sends 0.
+  int32_t step = media_player->volume_step > 0 ? media_player->volume_step : EntityPage::_media_player_default_volume_step;
+  // Step from the pending volume if there is one, so quick presses compound instead of each
+  // starting from a state that has not caught up yet.
+  int32_t volume = std::clamp<int32_t>(EntityPage::_media_player_volume(media_player, controlling_source) + direction * step, 0, 100);
+
+  taskENTER_CRITICAL(&EntityPage::_entity_page_spinlock);
+  EntityPage::_media_player_pending_volume = {
+      .volume = volume,
+      .source = controlling_source,
+      .requested_at = esp_timer_get_time(),
+  };
+  taskEXIT_CRITICAL(&EntityPage::_entity_page_spinlock);
+
+  if (controlling_source) {
+    EntityPage::_media_player_set_source_volume(volume);
+  } else {
+    EntityPage::_media_player_set_volume(volume);
+  }
+  EntityPage::_media_player_show_volume_bar(volume);
+}
+
+int32_t EntityPage::_media_player_volume(const NSPanelEntityState__MediaPlayer *media_player, bool source) {
+  int32_t volume = source ? media_player->source_volume : media_player->volume;
+
+  taskENTER_CRITICAL(&EntityPage::_entity_page_spinlock);
+  const _media_player_pending_volume_t pending = EntityPage::_media_player_pending_volume;
+  taskEXIT_CRITICAL(&EntityPage::_entity_page_spinlock);
+
+  if (pending.volume >= 0 && pending.source == source && esp_timer_get_time() - pending.requested_at < EntityPage::_media_player_pending_volume_timeout_us) {
+    volume = pending.volume;
+  }
+  return volume;
+}
+
+void EntityPage::_media_player_confirm_pending_volume(const NSPanelEntityState__MediaPlayer *media_player) {
+  if (media_player == NULL) [[unlikely]] {
+    return;
+  }
+
+  // Only the state for the last press confirms it. States for earlier presses in a quick run arrive
+  // in between, and dropping the pending volume on those would make the bar jump back.
+  taskENTER_CRITICAL(&EntityPage::_entity_page_spinlock);
+  _media_player_pending_volume_t &pending = EntityPage::_media_player_pending_volume;
+  if (pending.volume >= 0 && pending.volume == (pending.source ? media_player->source_volume : media_player->volume)) {
+    pending.volume = -1;
+  }
+  taskEXIT_CRITICAL(&EntityPage::_entity_page_spinlock);
+}
+
+void EntityPage::_media_player_toggle_source() {
+  std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+  if (state == nullptr || state->entity_case != NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER) [[unlikely]] {
+    ESP_LOGE("EntityPage", "Tried to switch to the source without a media player state.");
+    return;
+  }
+  if (!state->media_player->has_source_volume) {
+    return; // The switch is hidden, but a press can race the state update that hid it.
+  }
+
+  EntityPage::_media_player_controlling_source = !EntityPage::_media_player_controlling_source;
+  ESP_LOGD("EntityPage", "Volume controls now act on the %s.", EntityPage::_media_player_controlling_source ? "source" : "player");
+  EntityPage::_update_display_media_player();
+  // Show the volume the controls now act on, as a volume press does.
+  EntityPage::_media_player_show_volume_bar(EntityPage::_media_player_volume(state->media_player, EntityPage::_media_player_controlling_source));
+}
+
+void EntityPage::_media_player_show_volume_bar(int32_t volume) {
+  Nextion::set_component_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_bar_name, volume, 250);
+  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_bar_name, true, 250);
+
+  // The timer hides the bar. Stop it before starting it so that every press restarts the countdown,
+  // and holding the buttons keeps the bar up.
+  std::string timer = GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_bar_timer_name;
+  Nextion::send_raw_command((timer + ".en=0").c_str(), 250);
+  Nextion::send_raw_command((timer + ".en=1").c_str(), 250);
+}
+
+void EntityPage::_send_media_player_command(NSPanelMQTTManagerCommand__MediaPlayerCommand *command) {
+  std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+  if (state == nullptr || state->entity_case != NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER) [[unlikely]] {
+    ESP_LOGE("EntityPage", "Tried to send media player command without a media player state.");
+    return;
+  }
+  command->media_player_id = state->media_player->media_player_id;
+
+  NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
+  cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_MEDIA_PLAYER_COMMAND;
+  cmd.media_player_command = command;
+  cmd.nspanel_id = NSPM_ConfigManager::get_nspanel_id();
+
+  uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
+  std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
+  size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
+  if (packed_data_size == packed_length) [[likely]] {
+    if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) [[unlikely]] {
+      ESP_LOGE("EntityPage", "Failed to send MQTT message with command payload.");
+      EntityPage::_update_display_media_player(); // Update display to reset values to those stored
+    }
+  } else {
+    ESP_LOGE("EntityPage", "Failed to pack protobuf command.");
+    EntityPage::_update_display_media_player(); // Update display to reset values to those stored
   }
 }
