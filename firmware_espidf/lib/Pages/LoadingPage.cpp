@@ -4,21 +4,20 @@
 #include <Nextion.hpp>
 
 void LoadingPage::show() {
-  if (LoadingPage::_currently_showing) {
+  if (LoadingPage::showing()) {
     return; // Do now show page multiple times.
   }
 
   InterfaceManager::begin_page(LoadingPage::unshow);
   Nextion::go_to_page(GUI_LOADING_PAGE::page_name, 250);
-  LoadingPage::_currently_showing = true;
 }
 
 void LoadingPage::unshow() {
-  LoadingPage::_currently_showing = false;
+  // Nothing to reset; InterfaceManager tracks whether this page is shown.
 }
 
 bool LoadingPage::showing() {
-  return LoadingPage::_currently_showing;
+  return InterfaceManager::is_current_page(LoadingPage::unshow);
 }
 
 void LoadingPage::set_loading_text(std::string text) {

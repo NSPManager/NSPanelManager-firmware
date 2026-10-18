@@ -49,8 +49,8 @@ esp_err_t HttpEventHandler(esp_http_client_event_t *event) {
 }
 
 void ScreensaverPage::show() {
-  ESP_LOGD("ScreensaverPage", "Showing screensaver page. Currently shown? %s", ScreensaverPage::_currently_shown ? "Yes" : "No");
-  if (ScreensaverPage::_currently_shown) {
+  ESP_LOGD("ScreensaverPage", "Showing screensaver page. Currently shown? %s", ScreensaverPage::showing() ? "Yes" : "No");
+  if (ScreensaverPage::showing()) {
     // Do not "show" page again when it's already showing.
     return;
   }
@@ -135,11 +135,11 @@ void ScreensaverPage::show() {
 }
 
 void ScreensaverPage::unshow() {
-  ScreensaverPage::_currently_shown = false;
+  // Nothing to reset; InterfaceManager tracks whether this page is shown.
 }
 
 bool ScreensaverPage::showing() {
-  return ScreensaverPage::_currently_shown;
+  return InterfaceManager::is_current_page(ScreensaverPage::unshow);
 }
 
 void ScreensaverPage::_mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -221,7 +221,7 @@ void ScreensaverPage::_nspm_config_event_handler(void *arg, esp_event_base_t eve
   case nspm_configmanager_event::CONFIG_LOADED: { // New config loaded while showing screensaver. Update screen
     // Only touches MQTT if the manager address or inside temperature topic changed.
     ScreensaverPage::_subscribe_to_mqtt_topics();
-    if (ScreensaverPage::_currently_shown) {
+    if (ScreensaverPage::showing()) {
       std::shared_ptr<NSPanelConfig> new_config;
       if (NSPM_ConfigManager::get_config(&new_config) == ESP_OK) [[likely]] {
         if (ScreensaverPage::_current_screensaver_mode.get() != new_config->screensaver_mode) {
@@ -424,7 +424,6 @@ void ScreensaverPage::_go_to_nextion_page() {
     ESP_LOGD("ScreensaverPage", "Showing screensaver: weather with background");
     Nextion::set_component_value(GUI_SCREENSAVER_PAGE::screensaver_background_control_variable_name, 1, 250);
     Nextion::go_to_page(GUI_SCREENSAVER_PAGE::page_name, 250);
-    ScreensaverPage::_currently_shown = true;
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_am_pm_name_raw, config->clock_us_style, 250);
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_current_room_temperature_name, config->show_screensaver_inside_temperature, 250);
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_current_room_temperature_icon_name, config->show_screensaver_inside_temperature, 250);
@@ -435,7 +434,6 @@ void ScreensaverPage::_go_to_nextion_page() {
     ESP_LOGD("ScreensaverPage", "Showing screensaver: weather without background");
     Nextion::set_component_value(GUI_SCREENSAVER_PAGE::screensaver_background_control_variable_name, 0, 250);
     Nextion::go_to_page(GUI_SCREENSAVER_PAGE::page_name, 250);
-    ScreensaverPage::_currently_shown = true;
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_am_pm_name_raw, config->clock_us_style, 250);
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_current_room_temperature_name, config->show_screensaver_inside_temperature, 250);
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_current_room_temperature_icon_name, config->show_screensaver_inside_temperature, 250);
@@ -446,7 +444,6 @@ void ScreensaverPage::_go_to_nextion_page() {
     ESP_LOGD("ScreensaverPage", "Showing screensaver: minimal with background");
     Nextion::set_component_value(GUI_SCREENSAVER_PAGE::screensaver_minimal_background_control_variable_name, 1, 250);
     Nextion::go_to_page(GUI_SCREENSAVER_PAGE::screensaver_minimal_page_name, 250);
-    ScreensaverPage::_currently_shown = true;
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_screensaver_minimal_am_pm_name_raw, config->clock_us_style, 250);
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_screensaver_minimal_current_room_temperature_name, config->show_screensaver_inside_temperature, 250);
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_screensaver_minimal_current_room_temperature_icon_name, config->show_screensaver_inside_temperature, 250);
@@ -459,7 +456,6 @@ void ScreensaverPage::_go_to_nextion_page() {
     ESP_LOGD("ScreensaverPage", "Showing screensaver: minimal without background");
     Nextion::set_component_value(GUI_SCREENSAVER_PAGE::screensaver_minimal_background_control_variable_name, 0, 250);
     Nextion::go_to_page(GUI_SCREENSAVER_PAGE::screensaver_minimal_page_name, 250);
-    ScreensaverPage::_currently_shown = true;
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_screensaver_minimal_am_pm_name_raw, config->clock_us_style, 250);
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_screensaver_minimal_current_room_temperature_name, config->show_screensaver_inside_temperature, 250);
     Nextion::set_component_visibility(GUI_SCREENSAVER_PAGE::label_screensaver_minimal_current_room_temperature_icon_name, config->show_screensaver_inside_temperature, 250);
@@ -470,7 +466,6 @@ void ScreensaverPage::_go_to_nextion_page() {
   case NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__NO_SCREENSAVER:
     ESP_LOGD("ScreensaverPage", "Showing screensaver: no screensaver");
     Nextion::go_to_page(GUI_SCREENSAVER_PAGE::screensaver_minimal_page_name, 250);
-    ScreensaverPage::_currently_shown = true;
     break;
   }
 
