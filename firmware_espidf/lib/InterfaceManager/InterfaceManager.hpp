@@ -43,6 +43,17 @@ public:
   static void request_show_home_page();
 
 private:
+  // Pages that can be requested from the page-transition task. Only the latest
+  // request is shown, so a quick "screen off, screen on" ends with the screen on.
+  enum class PageRequest : uint8_t {
+    NONE,
+    HOME,
+    SCREEN_ON, // Screen brightness, then the default page
+    SCREENSAVER,
+  };
+
+  static void _request_page(PageRequest page);
+
   /**
    * @brief Handle any event trigger from the Nextion display
    */
@@ -98,11 +109,18 @@ private:
   // deadlock that freezes the UI (e.g. the screensaver is touched just as the
   // first room state arrives). A plain task holds no loop mutex, so it cannot
   // be part of that cycle. Handlers notify it with xTaskNotify, which never blocks.
+  //
+  // The MQTT client task needs the same treatment. esp-mqtt holds the client's
+  // API lock while it runs our MQTT handlers, and default-loop handlers publish
+  // (which takes that lock) while the loop's mutex is held. A page switch from
+  // an MQTT handler (the screen_cmd topic) would wait on the default loop's
+  // mutex while holding the API lock: the same cycle, between those two tasks.
   static void _task_page_transitions(void *param);
   static void _associate_with_manager_if_ready();
   static inline TaskHandle_t _page_transitions_task = NULL;
+  static inline std::atomic<PageRequest> _requested_page = PageRequest::NONE;
   static constexpr uint32_t PAGE_TRANSITION_ASSOCIATE = 1 << 0;
-  static constexpr uint32_t PAGE_TRANSITION_SHOW_HOME = 1 << 1;
+  static constexpr uint32_t PAGE_TRANSITION_SHOW_PAGE = 1 << 1;
 
   // Vars
   // Queue of unshow function pointer to call from _task_unshow_page
