@@ -31,6 +31,15 @@ public:
   static std::shared_ptr<PageHandlers> begin_page(void (*unshow)());
 
   /**
+   * @brief Is the page with this unshow function the current page?
+   *
+   * Pages must use this rather than a flag cleared in their unshow(): unshow
+   * runs later, on another task, so such a flag still reads "shown" for a
+   * while after another page has been shown.
+   */
+  static bool is_current_page(void (*unshow)());
+
+  /**
    * Show the user selected default page
    */
   static void show_default_page();

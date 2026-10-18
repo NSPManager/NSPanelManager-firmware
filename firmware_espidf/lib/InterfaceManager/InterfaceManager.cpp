@@ -155,14 +155,18 @@ std::shared_ptr<PageHandlers> InterfaceManager::begin_page(void (*unshow)()) {
   return next.handlers;
 }
 
+bool InterfaceManager::is_current_page(void (*unshow)()) {
+  portENTER_CRITICAL(&InterfaceManager::_current_page_lock);
+  bool current = InterfaceManager::_current_page.unshow == unshow;
+  portEXIT_CRITICAL(&InterfaceManager::_current_page_lock);
+  return current;
+}
+
 void InterfaceManager::_finish_unshow(ShownPage *page) {
   // Always safe: removes only the registrations that page's show() made.
   page->handlers->retire();
 
-  portENTER_CRITICAL(&InterfaceManager::_current_page_lock);
-  bool shown_again = InterfaceManager::_current_page.unshow == page->unshow;
-  portEXIT_CRITICAL(&InterfaceManager::_current_page_lock);
-  if (shown_again) {
+  if (InterfaceManager::is_current_page(page->unshow)) {
     ESP_LOGD("InterfaceManager", "Page was shown again before its unshow ran; keeping its state.");
   } else {
     page->unshow();
