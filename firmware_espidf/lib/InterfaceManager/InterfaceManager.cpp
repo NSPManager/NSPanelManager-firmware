@@ -201,7 +201,12 @@ void InterfaceManager::show_default_page() {
 }
 
 void InterfaceManager::request_show_home_page() {
-  xTaskNotify(InterfaceManager::_page_transitions_task, PAGE_TRANSITION_SHOW_HOME, eSetBits);
+  InterfaceManager::_request_page(PageRequest::HOME);
+}
+
+void InterfaceManager::_request_page(PageRequest page) {
+  InterfaceManager::_requested_page = page;
+  xTaskNotify(InterfaceManager::_page_transitions_task, PAGE_TRANSITION_SHOW_PAGE, eSetBits);
 }
 
 void InterfaceManager::_task_page_transitions(void *param) {
@@ -211,8 +216,30 @@ void InterfaceManager::_task_page_transitions(void *param) {
     if (requested & PAGE_TRANSITION_ASSOCIATE) {
       InterfaceManager::_associate_with_manager_if_ready();
     }
-    if (requested & PAGE_TRANSITION_SHOW_HOME) {
-      HomePage::show();
+    if (requested & PAGE_TRANSITION_SHOW_PAGE) {
+      switch (InterfaceManager::_requested_page.exchange(PageRequest::NONE)) {
+      case PageRequest::HOME:
+        HomePage::show();
+        break;
+
+      case PageRequest::SCREEN_ON: {
+        std::shared_ptr<NSPanelConfig> config;
+        if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+          Nextion::set_brightness_level(config->screen_dim_level, 1000);
+          InterfaceManager::show_default_page();
+        } else {
+          ESP_LOGE("InterfaceManager", "Failed to get config while trying to turn screen on.");
+        }
+        break;
+      }
+
+      case PageRequest::SCREENSAVER:
+        ScreensaverPage::show();
+        break;
+
+      case PageRequest::NONE:
+        break; // Already handled by an earlier wake-up
+      }
     }
   }
 }
@@ -495,20 +522,15 @@ void InterfaceManager::_mqtt_event_handler(void *arg, esp_event_base_t event_bas
           ESP_LOGE("InterfaceManager", "Failed to get mutable config while trying to process config update data from MQTT topic %s.", topic_string.c_str());
         }
       } else if (topic_string.compare(InterfaceManager::_screen_on_off_command_topic) == 0) {
-        std::shared_ptr<NSPanelConfig> config;
-        if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
-          if (data.compare("0") == 0) {
-            ScreensaverPage::show();
-            MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "0", strlen("0"), true);
-          } else if (data.compare("1") == 0) {
-            Nextion::set_brightness_level(config->screen_dim_level, 1000);
-            InterfaceManager::show_default_page();
-            MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "1", strlen("1"), true);
-          } else {
-            ESP_LOGE("InterfaceManager", "Got request to turn screen on/off but got unknown data: '%s'. Valid data is 0 or 1", data.c_str());
-          }
+        // Never switch pages here, on the MQTT client task: see _task_page_transitions.
+        if (data.compare("0") == 0) {
+          InterfaceManager::_request_page(PageRequest::SCREENSAVER);
+          MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "0", strlen("0"), true);
+        } else if (data.compare("1") == 0) {
+          InterfaceManager::_request_page(PageRequest::SCREEN_ON);
+          MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "1", strlen("1"), true);
         } else {
-          ESP_LOGE("InterfaceManager", "Failed to get config while trying to turn screen on or off.");
+          ESP_LOGE("InterfaceManager", "Got request to turn screen on/off but got unknown data: '%s'. Valid data is 0 or 1", data.c_str());
         }
       } else if (topic_string.compare(InterfaceManager::_screensaver_mode_command_topic) == 0) {
         std::shared_ptr<NSPanelConfig> mutable_config;
