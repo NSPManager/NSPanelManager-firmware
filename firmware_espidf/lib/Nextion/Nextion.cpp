@@ -178,23 +178,7 @@ void Nextion::_task_uart_event(void *param) {
                 read_nextion_jump_instruction = false; // Reset special handling
               }
 
-              if (uart_buffer.size() <= NEXTION_UART_EVENT_LOOP_STACK_SIZE - 512) { // Subtract 512 to allow for internal variables in the event loop
-                switch (esp_event_post_to(Nextion::_handle_uart_data_event_loop, NEXTION_EVENT, nextion_event_t::RECEIVED_DATA, &uart_buffer, sizeof(uart_buffer), pdMS_TO_TICKS(16))) {
-                case ESP_OK:
-                  break;
-
-                case ESP_ERR_TIMEOUT:
-                  ESP_LOGE("Nextion", "Failed to post new event data from UART event!");
-                  break;
-
-                case ESP_ERR_INVALID_ARG:
-                  ESP_LOGE("Nextion", "Invalid combination of event base and data when posting event from UART data!");
-                  break;
-
-                default:
-                  ESP_LOGE("Nextion", "Unknown error when posting event data from UART event!");
-                }
-              }
+              Nextion::_post_received_data(uart_buffer);
             }
             xSemaphoreGive(Nextion::_nextion_state_mutex);
           } else {
@@ -228,24 +212,7 @@ void Nextion::_task_uart_event(void *param) {
             uart_read_bytes(UART_NUM_2, uart_buffer.data(), pattern_position, pdMS_TO_TICKS(64));
             uart_read_bytes(UART_NUM_2, uart_pattern_buffer.data(), 3, pdMS_TO_TICKS(64)); // Read last three 0XFF as well to clear buffer.
 
-            if (sizeof(uart_buffer) <= NEXTION_UART_EVENT_LOOP_STACK_SIZE - 512) { // Subtract 512 to allow for internal variables in the event loop
-              switch (esp_event_post_to(Nextion::_handle_uart_data_event_loop, NEXTION_EVENT, nextion_event_t::RECEIVED_DATA, &uart_buffer, sizeof(uart_buffer), pdMS_TO_TICKS(16))) {
-              case ESP_OK:
-                [[likely]];
-                break;
-
-              case ESP_ERR_TIMEOUT:
-                ESP_LOGE("Nextion", "Failed to post new event data from UART event!");
-                break;
-
-              case ESP_ERR_INVALID_ARG:
-                ESP_LOGE("Nextion", "Invalid combination of event base and data when posting event from UART data!");
-                break;
-
-              default:
-                ESP_LOGE("Nextion", "Unknown error when posting event data from UART event!");
-              }
-            }
+            Nextion::_post_received_data(uart_buffer);
           }
         } else [[unlikely]] {
           ESP_LOGE("Nextion", "Failed to get UART data buffered size!");
@@ -261,8 +228,44 @@ void Nextion::_task_uart_event(void *param) {
   }
 }
 
+void Nextion::_post_received_data(const std::vector<char> &data) {
+  if (data.size() > NEXTION_UART_EVENT_LOOP_STACK_SIZE - 512) { // Subtract 512 to allow for internal variables in the event loop
+    return;
+  }
+
+  // esp_event copies the posted bytes, so post the data itself rather than the vector, which would copy
+  // only its pointer to a buffer the UART task reuses for the next message, possibly before the handler
+  // has read this one. Handlers are not told the size, so it goes first.
+  uint16_t size = data.size();
+  std::vector<uint8_t> message(sizeof(size) + size);
+  memcpy(message.data(), &size, sizeof(size));
+  memcpy(message.data() + sizeof(size), data.data(), size);
+
+  switch (esp_event_post_to(Nextion::_handle_uart_data_event_loop, NEXTION_EVENT, nextion_event_t::RECEIVED_DATA, message.data(), message.size(), pdMS_TO_TICKS(16))) {
+  case ESP_OK:
+    [[likely]];
+    break;
+
+  case ESP_ERR_TIMEOUT:
+    ESP_LOGE("Nextion", "Failed to post new event data from UART event!");
+    break;
+
+  case ESP_ERR_INVALID_ARG:
+    ESP_LOGE("Nextion", "Invalid combination of event base and data when posting event from UART data!");
+    break;
+
+  default:
+    ESP_LOGE("Nextion", "Unknown error when posting event data from UART event!");
+  }
+}
+
 void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-  std::vector<char> *data = (std::vector<char> *)event_data;
+  // _post_received_data posts the size, then the data.
+  uint16_t size;
+  memcpy(&size, event_data, sizeof(size));
+  const char *received_data = (const char *)event_data + sizeof(size);
+  std::vector<char> received(received_data, received_data + size);
+  std::vector<char> *data = &received;
   if (data->size() <= 0) [[unlikely]] {
     return;
   }
@@ -305,7 +308,11 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
       touch_event.page_number = data->data()[1];
       touch_event.component_id = data->data()[2];
       touch_event.pressed = data->data()[3];
-      esp_event_post(NEXTION_EVENT, nextion_event_t::TOUCH_EVENT, &touch_event, sizeof(touch_event), pdMS_TO_TICKS(16));
+      // A touch that cannot be posted is lost for good, so say so rather than leave a press that did nothing.
+      esp_err_t post_result = esp_event_post(NEXTION_EVENT, nextion_event_t::TOUCH_EVENT, &touch_event, sizeof(touch_event), pdMS_TO_TICKS(16));
+      if (post_result != ESP_OK) [[unlikely]] {
+        ESP_LOGW("Nextion", "Dropped touch event for page %d component %d: %s", touch_event.page_number, touch_event.component_id, esp_err_to_name(post_result));
+      }
     } else {
       ESP_LOGE("Nextion", "Not enough bytes sent for 0x65 touch event.");
     }
@@ -342,6 +349,8 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
     } else {
       ESP_LOGE("Nextion", "Not enough bytes sent for NEX_RET_UPDATE_JUMP_TO_OFFSET (0x08)! Only read %zu bytes.", data->size());
     }
+  } else if (data->data()[0] == NEX_OUT_BUFFER_OVERFLOW) {
+    ESP_LOGW("Nextion", "NEX_OUT_BUFFER_OVERFLOW (0x24): the display's serial buffer overflowed and the commands waiting in it were lost.");
   } else {
     ESP_LOGW("Nextion", "Unknown event data from Nextion: %.*s", data->size(), data->data());
   }
