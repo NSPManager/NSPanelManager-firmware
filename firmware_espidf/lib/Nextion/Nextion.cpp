@@ -349,6 +349,8 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
     } else {
       ESP_LOGE("Nextion", "Not enough bytes sent for NEX_RET_UPDATE_JUMP_TO_OFFSET (0x08)! Only read %zu bytes.", data->size());
     }
+  } else if (data->data()[0] == NEX_OUT_BUFFER_OVERFLOW) {
+    ESP_LOGW("Nextion", "NEX_OUT_BUFFER_OVERFLOW (0x24): the display's serial buffer overflowed and the commands waiting in it were lost.");
   } else {
     ESP_LOGW("Nextion", "Unknown event data from Nextion: %.*s", data->size(), data->data());
   }
