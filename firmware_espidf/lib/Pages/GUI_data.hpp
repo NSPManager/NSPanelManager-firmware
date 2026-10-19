@@ -303,11 +303,11 @@ public:
 class GUI_ITEMS12_PAGE {
 public:
   static inline constexpr const char *page_name = "items12";
-  static inline constexpr uint8_t slider_save_id = 30;
+  static inline constexpr uint8_t slider_save_id = 25;
 
-  static inline constexpr uint8_t button_back_id = 25;
-  static inline constexpr uint8_t button_previous_page_id = 26;
-  static inline constexpr uint8_t button_next_page_id = 27;
+  static inline constexpr uint8_t button_back_id = 26;
+  static inline constexpr uint8_t button_previous_page_id = 27;
+  static inline constexpr uint8_t button_next_page_id = 29;
 
   static inline constexpr GUI_ITEMS_PAGE_ITEM_DATA item_slots[] = {
       {
