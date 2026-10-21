@@ -99,6 +99,7 @@ void PanelClock::_mqtt_event_handler(void *arg, esp_event_base_t event_base, int
 
   if (!PanelClock::_clock_set.exchange(true)) {
     ESP_LOGI("PanelClock", "Clock set from manager to %lld ms since the Unix epoch.", epoch_ms.value());
+    PanelClock::_log_local_time();
   } else {
     // How far the clock had drifted since the last time, plus however long this message took to arrive.
     ESP_LOGD("PanelClock", "Clock set from manager, moved by %lld ms.", epoch_ms.value() - now_ms);
@@ -111,7 +112,8 @@ void PanelClock::_apply_timezone(const char *tz_posix) {
     return;
   }
 
-  // Nothing renders local time from the panel's own clock yet, so there is no reader to race with here.
+  // newlib's tzset() and localtime_r() take the same lock, so _log_local_time() on the MQTT task can't see a
+  // half-applied rule.
   if (rule.empty()) {
     unsetenv("TZ");
     ESP_LOGI("PanelClock", "No timezone from manager, local time is UTC.");
@@ -121,4 +123,20 @@ void PanelClock::_apply_timezone(const char *tz_posix) {
   }
   tzset();
   PanelClock::_tz_posix = rule;
+
+  // Before the clock is set, local time would be some time on 1970-01-01, which says nothing about the rule.
+  if (PanelClock::_clock_set) {
+    PanelClock::_log_local_time();
+  }
+}
+
+void PanelClock::_log_local_time() {
+  time_t now = time(NULL);
+  struct tm local;
+  localtime_r(&now, &local);
+
+  // newlib falls back to UTC for a rule it can't parse, so this shows whether tz_posix was understood.
+  char formatted[64];
+  strftime(formatted, sizeof(formatted), "%Y-%m-%d %H:%M:%S %Z (UTC%z)", &local);
+  ESP_LOGI("PanelClock", "Local time is %s at %lld s since the Unix epoch.", formatted, static_cast<long long>(now));
 }

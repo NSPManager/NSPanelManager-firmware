@@ -40,6 +40,12 @@ private:
    */
   static void _apply_timezone(const char *tz_posix);
 
+  /**
+   * @brief Log the local time, as the panel's own clock and timezone give it, so the rule newlib actually applied
+   * can be checked against tz_posix.
+   */
+  static void _log_local_time();
+
   static inline std::atomic<bool> _clock_set = false;
 
   // Written from the default event loop task, read from the MQTT task. Only accessed while holding _topic_mutex.
