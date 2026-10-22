@@ -12,7 +12,7 @@
 
 /*
  * The media player page: title and artist, playback and volume controls, and the position bar,
- * with the album art drawn by AlbumArt.
+ * with the album art drawn by AlbumArt, which opens MediaSourcePage when pressed.
  *
  * EntityPage follows the player's state topic and holds its state, as for every entity, and
  * switches to the page. This class draws the page from that state and handles its touches.
@@ -39,6 +39,18 @@ public:
    * The page has closed.
    */
   static void unshow();
+
+  /**
+   * Show the media player page again after a page opened from it, such as MediaSourcePage. Unlike
+   * EntityPage::show(), this keeps what the volume controls and source list act on, the player or its source.
+   */
+  static void return_to_media_player(std::string state_topic);
+
+  /**
+   * Select a source, by name, for the media player last shown, from MediaSourcePage.
+   * @param source_player: Select it on the source player feeding the media player rather than on the player itself.
+   */
+  static void select_source(const std::string &source, bool source_player);
 
 private:
   /**
@@ -93,6 +105,12 @@ private:
   static void _confirm_pending_volume(const NSPanelEntityState__MediaPlayer *media_player);
 
   /*
+   * The source list the album art opens: the source player's while the controls act on it, otherwise
+   * the player's own. NULL if that list is missing, empty or can't be selected from.
+   */
+  static const NSPanelEntityState__MediaPlayer__SourceSelection *_selectable_sources(const NSPanelEntityState__MediaPlayer *media_player, bool controlling_source);
+
+  /*
    * Switch the volume controls between the player and the source feeding it, from b_srcswitch.
    */
   static void _toggle_source();
@@ -133,6 +151,8 @@ private:
   // How long the volume bar stays up after the last volume press or source switch. The page's tm_vol
   // timer hides it; the TFT's own interval is shorter, so it is set whenever the page opens.
   static constexpr uint16_t _volume_bar_timeout_ms = 3000;
+  // Set by return_to_media_player() so that opening the page keeps _controlling_source.
+  static inline std::atomic<bool> _returning = false;
   // Percent per press of the volume -/+ buttons when the manager sends no volume_step. Matches Home
   // Assistant's default.
   static constexpr int32_t _default_volume_step = 10;
@@ -170,6 +190,7 @@ private:
     SOURCE_SWITCH,
     VOLUME_UP,
     VOLUME_DOWN,
+    ALBUM_ART,
   };
   // A touchable media player component. id starts as the ID in GUI_data.hpp and is replaced by the one
   // the Nextion reports. Written from the MQTT task, read from the Nextion handler.

@@ -676,6 +676,10 @@ std::shared_ptr<NSPanelEntityState> EntityPage::get_current_state() {
   return EntityPage::_get_current_state();
 }
 
+std::string EntityPage::get_current_state_topic() {
+  return EntityPage::_current_entity_mqtt_topic;
+}
+
 void EntityPage::_send_thermostat_option_command() {
   if (EntityPage::_is_currently_editing) {
     NSPanelMQTTManagerCommand__ThermostatCommand command = NSPANEL_MQTTMANAGER_COMMAND__THERMOSTAT_COMMAND__INIT;
