@@ -560,7 +560,9 @@ public:
   static inline constexpr uint16_t button_disabled_pco = 23243; // grey, #5A595A
 
   // The album art is drawn over the h_art hotspot. A hotspot draws nothing, so pressing it does
-  // not repaint over the art the way a button would.
+  // not repaint over the art the way a button would. MediaPlayerPage reads the hotspot's position when the
+  // page opens, as each layout (US portrait, EU landscape) puts it elsewhere; these are the US
+  // position, used only if that read fails.
   static inline constexpr const uint16_t album_art_x = 70;
   static inline constexpr const uint16_t album_art_y = 271;
 };
