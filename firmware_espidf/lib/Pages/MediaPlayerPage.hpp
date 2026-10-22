@@ -70,6 +70,7 @@ private:
   static void _previous_track();
   static void _toggle_mute();
   static void _set_volume(int32_t volume);
+  static void _set_source_volume(int32_t volume);
 
   /*
    * Volume up (direction 1) or down (-1) by the player's volume_step, from the volume -/+ buttons.
@@ -78,14 +79,20 @@ private:
   static void _step_volume(int32_t direction);
 
   /*
-   * The volume to show and step from: the pending volume if one is outstanding, otherwise the state's.
+   * The volume to show and step from for the player, or for its source: the pending volume if one is
+   * outstanding for that target, otherwise the state's.
    */
-  static int32_t _volume(const NSPanelEntityState__MediaPlayer *media_player);
+  static int32_t _volume(const NSPanelEntityState__MediaPlayer *media_player, bool source);
 
   /*
    * Clear the pending volume if the given state carries it.
    */
   static void _confirm_pending_volume(const NSPanelEntityState__MediaPlayer *media_player);
+
+  /*
+   * Switch the volume controls between the player and the source feeding it, from b_srcswitch.
+   */
+  static void _toggle_source();
 
   /*
    * Show the volume bar at the given volume. The page's tm_vol timer hides it again.
@@ -117,7 +124,10 @@ private:
   // task stops writing to the display.
   static inline std::atomic<bool> _showing = false;
 
-  // How long the volume bar stays up after the last volume press. The page's tm_vol
+  // Whether the volume controls act on the source feeding the player rather than the player itself.
+  // Reset to the player whenever the page opens.
+  static inline std::atomic<bool> _controlling_source = false;
+  // How long the volume bar stays up after the last volume press or source switch. The page's tm_vol
   // timer hides it; the TFT's own interval is shorter, so it is set whenever the page opens.
   static constexpr uint16_t _volume_bar_timeout_ms = 3000;
   // Percent per press of the volume -/+ buttons when the manager sends no volume_step. Matches Home
@@ -132,15 +142,18 @@ private:
   //    earlier presses in a quick run don't, so the bar doesn't jump back while Home Assistant
   //    catches up.
   //  - It lapses after _pending_volume_timeout_us, and opening the page clears it.
+  // It is for the player or for its source, whichever the controls acted on, and is ignored while they
+  // act on the other.
   // A press that changes nothing, + at 100 say, stays pending until it lapses, as no new state comes;
   // the two volumes are equal, so that is harmless. Nothing redraws when it lapses, but the volume bar
   // has hidden itself by then.
   // Guarded by _spinlock: written from the Nextion handler, read from MQTT too.
   struct _pending_volume_t {
     int32_t volume;       // -1 when nothing is pending
+    bool source;          // Whether it is for the source rather than the player
     int64_t requested_at; // esp_timer_get_time() of the press
   };
-  static inline _pending_volume_t _pending_volume = {.volume = -1, .requested_at = 0};
+  static inline _pending_volume_t _pending_volume = {.volume = -1, .source = false, .requested_at = 0};
   // How long a pending volume waits for its state before the state wins: in case the manager rounds
   // it differently, or the player ignores it.
   static constexpr int64_t _pending_volume_timeout_us = 5 * 1000 * 1000;
@@ -151,6 +164,7 @@ private:
     NEXT_TRACK,
     PLAY_PAUSE,
     MUTE,
+    SOURCE_SWITCH,
     VOLUME_UP,
     VOLUME_DOWN,
   };
@@ -164,7 +178,7 @@ private:
   static _component_t _components[];
   // Whether the media player can do what action does now. Buttons it can't are greyed out, and
   // their presses ignored.
-  static bool _action_enabled(_action action, const NSPanelEntityState__MediaPlayer *media_player);
+  static bool _action_enabled(_action action, const NSPanelEntityState__MediaPlayer *media_player, bool controlling_source);
   static void _set_button_enabled(const char *button_name, bool enabled);
   static inline std::atomic<bool> _component_ids_resolved = false;
   // What the position bar shows: its value, -1 while hidden, or -2 when unknown because the page has just

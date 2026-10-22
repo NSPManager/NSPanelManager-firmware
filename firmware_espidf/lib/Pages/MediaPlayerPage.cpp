@@ -16,6 +16,7 @@ MediaPlayerPage::_component_t MediaPlayerPage::_components[] = {
     {GUI_MEDIA_PLAYER_CONTROL_PAGE::next_track_button_name, _action::NEXT_TRACK, GUI_MEDIA_PLAYER_CONTROL_PAGE::next_track_button_id},
     {GUI_MEDIA_PLAYER_CONTROL_PAGE::play_pause_button_name, _action::PLAY_PAUSE, GUI_MEDIA_PLAYER_CONTROL_PAGE::play_pause_button_id},
     {GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_name, _action::MUTE, GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_id},
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_name, _action::SOURCE_SWITCH, GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_id},
     {GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_up_button_name, _action::VOLUME_UP, GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_up_button_id},
     {GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_down_button_name, _action::VOLUME_DOWN, GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_down_button_id},
 };
@@ -89,6 +90,7 @@ void MediaPlayerPage::update_display(const NSPanelEntityState__MediaPlayer *medi
       }
     }
     Nextion::set_timer_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_bar_timer_name, MediaPlayerPage::_volume_bar_timeout_ms, 250);
+    MediaPlayerPage::_controlling_source = false;
     taskENTER_CRITICAL(&MediaPlayerPage::_spinlock);
     MediaPlayerPage::_pending_volume.volume = -1; // A press from the last time the page was open no longer counts.
     taskEXIT_CRITICAL(&MediaPlayerPage::_spinlock);
@@ -96,6 +98,8 @@ void MediaPlayerPage::update_display(const NSPanelEntityState__MediaPlayer *medi
 
   bool is_playing = media_player->state == NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__PLAYING ||
                     media_player->state == NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__BUFFERING;
+  // Fall back to the player if the source has gone away while it was selected.
+  bool controlling_source = MediaPlayerPage::_controlling_source && media_player->has_source_volume;
 
   Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::title_label_name, media_player->media_title, 1000);
   Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::artist_label_name, media_player->media_artist, 1000);
@@ -112,19 +116,20 @@ void MediaPlayerPage::update_display(const NSPanelEntityState__MediaPlayer *medi
     case _action::MUTE:
     case _action::VOLUME_UP:
     case _action::VOLUME_DOWN:
-      MediaPlayerPage::_set_button_enabled(component.name, MediaPlayerPage::_action_enabled(component.action, media_player));
+      MediaPlayerPage::_set_button_enabled(component.name, MediaPlayerPage::_action_enabled(component.action, media_player, controlling_source));
       break;
     default:
       break;
     }
   }
 
-  // Switching the volume controls to the source is not supported yet, so hide the switch.
-  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_name, false, 250);
+  // The switch shows what the volume controls act on now: this room's player, or the source feeding it.
+  Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_name, controlling_source ? GUI_MEDIA_ICONS::speaker_multiple : GUI_MEDIA_ICONS::speaker, 250);
+  Nextion::set_component_visibility(GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_name, media_player->has_source_volume, 250);
 
   Nextion::set_component_text(GUI_MEDIA_PLAYER_CONTROL_PAGE::mute_button_name, media_player->is_muted ? GUI_MEDIA_ICONS::volume_mute : GUI_MEDIA_ICONS::volume_high, 250);
   // Only the value: the bar is shown briefly when the volume buttons are pressed, not on every update.
-  Nextion::set_component_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_bar_name, MediaPlayerPage::_volume(media_player), 250);
+  Nextion::set_component_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_bar_name, MediaPlayerPage::_volume(media_player, controlling_source), 250);
 
   MediaPlayerPage::_update_position_bar(media_player);
   // The task advances the bar while playing, and sleeps otherwise, so let it look at the new state.
@@ -191,7 +196,7 @@ void MediaPlayerPage::_task_position(void *param) {
   }
 }
 
-bool MediaPlayerPage::_action_enabled(_action action, const NSPanelEntityState__MediaPlayer *media_player) {
+bool MediaPlayerPage::_action_enabled(_action action, const NSPanelEntityState__MediaPlayer *media_player, bool controlling_source) {
   switch (action) {
   case _action::PREVIOUS_TRACK:
     return media_player->can_previous_track;
@@ -203,10 +208,11 @@ bool MediaPlayerPage::_action_enabled(_action action, const NSPanelEntityState__
     return is_playing ? media_player->can_pause : media_player->can_play;
   }
   case _action::MUTE:
-    return media_player->can_mute;
+    // The command can mute only the player, so there is no mute while controlling the source.
+    return !controlling_source && media_player->can_mute;
   case _action::VOLUME_UP:
   case _action::VOLUME_DOWN:
-    return media_player->can_set_volume;
+    return controlling_source || media_player->can_set_volume;
   default:
     return true;
   }
@@ -230,10 +236,12 @@ void MediaPlayerPage::handle_touch(uint16_t component_id, bool pressed) {
 
     // The button is greyed out, but the Nextion still reports presses.
     std::shared_ptr<NSPanelEntityState> state = EntityPage::get_current_state();
-    if (state != nullptr && state->entity_case == NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER &&
-        !MediaPlayerPage::_action_enabled(component.action, state->media_player)) {
-      ESP_LOGD("MediaPlayerPage", "Ignoring a press on %s, which the media player can't do now.", component.name);
-      return;
+    if (state != nullptr && state->entity_case == NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER) {
+      bool controlling_source = MediaPlayerPage::_controlling_source && state->media_player->has_source_volume;
+      if (!MediaPlayerPage::_action_enabled(component.action, state->media_player, controlling_source)) {
+        ESP_LOGD("MediaPlayerPage", "Ignoring a press on %s, which the media player can't do now.", component.name);
+        return;
+      }
     }
 
     switch (component.action) {
@@ -256,6 +264,10 @@ void MediaPlayerPage::handle_touch(uint16_t component_id, bool pressed) {
 
     case _action::MUTE:
       MediaPlayerPage::_toggle_mute();
+      break;
+
+    case _action::SOURCE_SWITCH:
+      MediaPlayerPage::_toggle_source();
       break;
 
     case _action::VOLUME_UP:
@@ -340,6 +352,13 @@ void MediaPlayerPage::_set_volume(int32_t volume) {
   MediaPlayerPage::_send_command(&command);
 }
 
+void MediaPlayerPage::_set_source_volume(int32_t volume) {
+  NSPanelMQTTManagerCommand__MediaPlayerCommand command = NSPANEL_MQTTMANAGER_COMMAND__MEDIA_PLAYER_COMMAND__INIT;
+  command.has_source_volume = true;
+  command.source_volume = volume;
+  MediaPlayerPage::_send_command(&command);
+}
+
 void MediaPlayerPage::_step_volume(int32_t direction) {
   std::shared_ptr<NSPanelEntityState> state = EntityPage::get_current_state();
   if (state == nullptr || state->entity_case != NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER) [[unlikely]] {
@@ -348,31 +367,37 @@ void MediaPlayerPage::_step_volume(int32_t direction) {
   }
   NSPanelEntityState__MediaPlayer *media_player = state->media_player;
 
+  bool controlling_source = MediaPlayerPage::_controlling_source && media_player->has_source_volume;
   // A manager from before volume_step was added sends 0.
   int32_t step = media_player->volume_step > 0 ? media_player->volume_step : MediaPlayerPage::_default_volume_step;
   // Step from the pending volume if there is one, so quick presses compound instead of each
   // starting from a state that has not caught up yet.
-  int32_t volume = std::clamp<int32_t>(MediaPlayerPage::_volume(media_player) + direction * step, 0, 100);
+  int32_t volume = std::clamp<int32_t>(MediaPlayerPage::_volume(media_player, controlling_source) + direction * step, 0, 100);
 
   taskENTER_CRITICAL(&MediaPlayerPage::_spinlock);
   MediaPlayerPage::_pending_volume = {
       .volume = volume,
+      .source = controlling_source,
       .requested_at = esp_timer_get_time(),
   };
   taskEXIT_CRITICAL(&MediaPlayerPage::_spinlock);
 
-  MediaPlayerPage::_set_volume(volume);
+  if (controlling_source) {
+    MediaPlayerPage::_set_source_volume(volume);
+  } else {
+    MediaPlayerPage::_set_volume(volume);
+  }
   MediaPlayerPage::_show_volume_bar(volume);
 }
 
-int32_t MediaPlayerPage::_volume(const NSPanelEntityState__MediaPlayer *media_player) {
-  int32_t volume = media_player->volume;
+int32_t MediaPlayerPage::_volume(const NSPanelEntityState__MediaPlayer *media_player, bool source) {
+  int32_t volume = source ? media_player->source_volume : media_player->volume;
 
   taskENTER_CRITICAL(&MediaPlayerPage::_spinlock);
   const _pending_volume_t pending = MediaPlayerPage::_pending_volume;
   taskEXIT_CRITICAL(&MediaPlayerPage::_spinlock);
 
-  if (pending.volume >= 0 && esp_timer_get_time() - pending.requested_at < MediaPlayerPage::_pending_volume_timeout_us) {
+  if (pending.volume >= 0 && pending.source == source && esp_timer_get_time() - pending.requested_at < MediaPlayerPage::_pending_volume_timeout_us) {
     volume = pending.volume;
   }
   return volume;
@@ -387,10 +412,27 @@ void MediaPlayerPage::_confirm_pending_volume(const NSPanelEntityState__MediaPla
   // in between, and dropping the pending volume on those would make the bar jump back.
   taskENTER_CRITICAL(&MediaPlayerPage::_spinlock);
   _pending_volume_t &pending = MediaPlayerPage::_pending_volume;
-  if (pending.volume >= 0 && pending.volume == media_player->volume) {
+  if (pending.volume >= 0 && pending.volume == (pending.source ? media_player->source_volume : media_player->volume)) {
     pending.volume = -1;
   }
   taskEXIT_CRITICAL(&MediaPlayerPage::_spinlock);
+}
+
+void MediaPlayerPage::_toggle_source() {
+  std::shared_ptr<NSPanelEntityState> state = EntityPage::get_current_state();
+  if (state == nullptr || state->entity_case != NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER) [[unlikely]] {
+    ESP_LOGE("MediaPlayerPage", "Tried to switch to the source without a media player state.");
+    return;
+  }
+  if (!state->media_player->has_source_volume) {
+    return; // The switch is hidden, but a press can race the state update that hid it.
+  }
+
+  MediaPlayerPage::_controlling_source = !MediaPlayerPage::_controlling_source;
+  ESP_LOGD("MediaPlayerPage", "Volume controls now act on the %s.", MediaPlayerPage::_controlling_source ? "source" : "player");
+  MediaPlayerPage::_redraw();
+  // Show the volume the controls now act on, as a volume press does.
+  MediaPlayerPage::_show_volume_bar(MediaPlayerPage::_volume(state->media_player, MediaPlayerPage::_controlling_source));
 }
 
 void MediaPlayerPage::_show_volume_bar(int32_t volume) {
