@@ -29,6 +29,11 @@ public:
    */
   static std::shared_ptr<NSPanelEntityState> get_current_state();
 
+  /**
+   * The state topic of the entity shown.
+   */
+  static std::string get_current_state_topic();
+
 private:
   /**
    * Handle events from MQTT, such as new state events:

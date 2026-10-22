@@ -3,6 +3,7 @@
 #include <EntityPage.hpp>
 #include <GUI_data.hpp>
 #include <MediaPlayerPage.hpp>
+#include <MediaSourcePage.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
 #include <Nextion.hpp>
@@ -20,7 +21,14 @@ MediaPlayerPage::_component_t MediaPlayerPage::_components[] = {
     {GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_name, _action::SOURCE_SWITCH, GUI_MEDIA_PLAYER_CONTROL_PAGE::source_switch_button_id},
     {GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_up_button_name, _action::VOLUME_UP, GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_up_button_id},
     {GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_down_button_name, _action::VOLUME_DOWN, GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_down_button_id},
+    {GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_hotspot_name, _action::ALBUM_ART, GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_hotspot_id},
 };
+
+void MediaPlayerPage::return_to_media_player(std::string state_topic) {
+  MediaPlayerPage::_returning = true;
+  // Subscribing to the state topic again delivers the retained state, which opens the media player page.
+  EntityPage::show(state_topic);
+}
 
 void MediaPlayerPage::handle_state(const NSPanelEntityState__MediaPlayer *media_player) {
   MediaPlayerPage::_log_state(media_player);
@@ -76,6 +84,12 @@ void MediaPlayerPage::_log_state(const NSPanelEntityState__MediaPlayer *media_pl
   ESP_LOGD("MediaPlayerPage", "  volume %ld, muted %s, source volume %ld (present: %s)", media_player->volume, media_player->is_muted ? "yes" : "no", media_player->source_volume, media_player->has_source_volume ? "yes" : "no");
   ESP_LOGD("MediaPlayerPage", "  can: play %d pause %d next %d prev %d set_volume %d mute %d", media_player->can_play, media_player->can_pause, media_player->can_next_track, media_player->can_previous_track, media_player->can_set_volume, media_player->can_mute);
   ESP_LOGD("MediaPlayerPage", "  album art: %s", media_player->album_art_url != NULL && media_player->album_art_url[0] != '\0' ? media_player->album_art_url : "(none)");
+  if (media_player->player_sources != NULL) {
+    ESP_LOGD("MediaPlayerPage", "  player sources: %u, current '%s', can select %d", (unsigned)media_player->player_sources->n_sources, media_player->player_sources->current_source, media_player->player_sources->can_select);
+  }
+  if (media_player->source_player_sources != NULL) {
+    ESP_LOGD("MediaPlayerPage", "  source player sources: %u, current '%s', can select %d", (unsigned)media_player->source_player_sources->n_sources, media_player->source_player_sources->current_source, media_player->source_player_sources->can_select);
+  }
   if (media_player->has_media_position) {
     ESP_LOGD("MediaPlayerPage", "  position %lds of %lds at %lld", media_player->media_position, media_player->media_duration, media_player->media_position_updated_at);
   }
@@ -94,7 +108,9 @@ void MediaPlayerPage::update_display(const NSPanelEntityState__MediaPlayer *medi
       }
     }
     Nextion::set_timer_value(GUI_MEDIA_PLAYER_CONTROL_PAGE::volume_bar_timer_name, MediaPlayerPage::_volume_bar_timeout_ms, 250);
-    MediaPlayerPage::_controlling_source = false;
+    if (!MediaPlayerPage::_returning.exchange(false)) {
+      MediaPlayerPage::_controlling_source = false;
+    }
     taskENTER_CRITICAL(&MediaPlayerPage::_spinlock);
     MediaPlayerPage::_pending_volume.volume = -1; // A press from the last time the page was open no longer counts.
     taskEXIT_CRITICAL(&MediaPlayerPage::_spinlock);
@@ -298,6 +314,21 @@ void MediaPlayerPage::handle_touch(uint16_t component_id, bool pressed) {
     case _action::VOLUME_DOWN:
       MediaPlayerPage::_step_volume(-1);
       break;
+
+    case _action::ALBUM_ART: {
+      if (state == nullptr || state->entity_case != NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER) [[unlikely]] {
+        break;
+      }
+      // The source list follows the source switch, like the volume buttons.
+      bool source_player = MediaPlayerPage::_controlling_source && state->media_player->has_source_volume;
+      const NSPanelEntityState__MediaPlayer__SourceSelection *sources = MediaPlayerPage::_selectable_sources(state->media_player, source_player);
+      if (sources == NULL) {
+        ESP_LOGD("MediaPlayerPage", "No %s sources to select from.", source_player ? "source player" : "player");
+        break;
+      }
+      MediaSourcePage::show(EntityPage::get_current_state_topic(), source_player, sources);
+      break;
+    }
     }
     return;
   }
@@ -451,6 +482,24 @@ void MediaPlayerPage::_confirm_pending_volume(const NSPanelEntityState__MediaPla
     pending.volume = -1;
   }
   taskEXIT_CRITICAL(&MediaPlayerPage::_spinlock);
+}
+
+const NSPanelEntityState__MediaPlayer__SourceSelection *MediaPlayerPage::_selectable_sources(const NSPanelEntityState__MediaPlayer *media_player, bool controlling_source) {
+  const NSPanelEntityState__MediaPlayer__SourceSelection *sources = controlling_source ? media_player->source_player_sources : media_player->player_sources;
+  if (sources == NULL || sources->n_sources == 0 || !sources->can_select) {
+    return NULL;
+  }
+  return sources;
+}
+
+void MediaPlayerPage::select_source(const std::string &source, bool source_player) {
+  NSPanelMQTTManagerCommand__MediaPlayerCommand command = NSPANEL_MQTTMANAGER_COMMAND__MEDIA_PLAYER_COMMAND__INIT;
+  if (source_player) {
+    command.select_source_player_source = (char *)source.c_str();
+  } else {
+    command.select_player_source = (char *)source.c_str();
+  }
+  MediaPlayerPage::_send_command(&command);
 }
 
 void MediaPlayerPage::_toggle_source() {
