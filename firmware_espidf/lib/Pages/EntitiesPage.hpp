@@ -75,6 +75,17 @@ private:
   static void _handle_items12_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data);
 
   /**
+   * Get the entity in the given slot of the given entities page, or nullptr if the slot is empty.
+   */
+  static NSPanelRoomEntitiesPage__EntitySlot *_get_entity_in_slot(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, int32_t slot);
+
+  /**
+   * Handle a press on the entity button in the given slot.
+   * Media players are opened on the entity page, all other entities are toggled.
+   */
+  static void _handle_entity_button_pressed(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, int32_t slot);
+
+  /**
    * Send toggle command to manager
    */
   static void _send_entity_toggle_command_to_manager(uint32_t entities_page_id, uint32_t entity_slot);

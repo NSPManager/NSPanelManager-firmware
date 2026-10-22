@@ -1,0 +1,227 @@
+#pragma once
+
+#include <GUI_data.hpp>
+#include <atomic>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <memory>
+#include <mutex>
+#include <protobuf_nspanel.pb-c.h>
+#include <protobuf_nspanel_entity.pb-c.h>
+#include <string>
+
+/*
+ * The media player page: title and artist, playback and volume controls, and the position bar,
+ * with the album art drawn by AlbumArt, which opens MediaSourcePage when pressed.
+ *
+ * EntityPage follows the player's state topic and holds its state, as for every entity, and
+ * switches to the page. This class draws the page from that state and handles its touches.
+ */
+class MediaPlayerPage {
+public:
+  /**
+   * Handle a new state for the media player: log it, and confirm the pending volume if it carries it.
+   */
+  static void handle_state(const NSPanelEntityState__MediaPlayer *media_player);
+
+  /**
+   * Draw the page from the given state.
+   * @param page_just_opened: EntityPage has just switched to the page, so set up what lasts while it is open.
+   */
+  static void update_display(const NSPanelEntityState__MediaPlayer *media_player, bool page_just_opened);
+
+  /**
+   * Handle a touch on the page.
+   */
+  static void handle_touch(uint16_t component_id, bool pressed);
+
+  /**
+   * The page has closed.
+   */
+  static void unshow();
+
+  /**
+   * Show the media player page again after a page opened from it, such as MediaSourcePage. Unlike
+   * EntityPage::show(), this keeps what the volume controls and source list act on, the player or its source.
+   */
+  static void return_to_media_player(std::string state_topic);
+
+  /**
+   * Select a source, by name, for the media player last shown, from MediaSourcePage.
+   * @param source_player: Select it on the source player feeding the media player rather than on the player itself.
+   */
+  static void select_source(const std::string &source, bool source_player);
+
+private:
+  /**
+   * Draw the page again from the current state, if it is showing.
+   */
+  static void _redraw();
+
+  /*
+   * Human readable name for a playback state, for the log.
+   */
+  static const char *_playback_state_name(NSPanelEntityState__MediaPlayer__PlaybackState state);
+
+  /*
+   * Log a decoded media player state at debug level.
+   */
+  static void _log_state(const NSPanelEntityState__MediaPlayer *media_player);
+
+  /*
+   * Look up the IDs of the touchable media player components by name, and where the album art goes,
+   * and log them. Called with the page showing, as the Nextion only answers for components on the
+   * current page. Done once per boot: these only change with a new TFT, and installing one reboots
+   * the panel.
+   */
+  static void _resolve_component_ids();
+
+  /*
+   * Commands for the currently displayed media player. Decisions that depend on the
+   * current state (play or pause, mute or unmute) are made from the last state received.
+   */
+  static void _play_pause();
+  static void _next_track();
+  static void _previous_track();
+  static void _toggle_mute();
+  static void _set_volume(int32_t volume);
+  static void _set_source_volume(int32_t volume);
+
+  /*
+   * Volume up (direction 1) or down (-1) by the player's volume_step, from the volume -/+ buttons.
+   * Sets a pending volume that the page shows, and steps from, until the state confirms it.
+   */
+  static void _step_volume(int32_t direction);
+
+  /*
+   * The volume to show and step from for the player, or for its source: the pending volume if one is
+   * outstanding for that target, otherwise the state's.
+   */
+  static int32_t _volume(const NSPanelEntityState__MediaPlayer *media_player, bool source);
+
+  /*
+   * Clear the pending volume if the given state carries it.
+   */
+  static void _confirm_pending_volume(const NSPanelEntityState__MediaPlayer *media_player);
+
+  /*
+   * The source list the album art opens: the source player's while the controls act on it, otherwise
+   * the player's own. NULL if that list is missing, empty or can't be selected from.
+   */
+  static const NSPanelEntityState__MediaPlayer__SourceSelection *_selectable_sources(const NSPanelEntityState__MediaPlayer *media_player, bool controlling_source);
+
+  /*
+   * Switch the volume controls between the player and the source feeding it, from b_srcswitch.
+   */
+  static void _toggle_source();
+
+  /*
+   * Show the volume bar at the given volume. The page's tm_vol timer hides it again.
+   */
+  static void _show_volume_bar(int32_t volume);
+
+  /*
+   * Show the position bar at the current playback position, or hide it if there is none to show.
+   * Only talks to the display when what it shows changes.
+   */
+  static void _update_position_bar(const NSPanelEntityState__MediaPlayer *media_player);
+
+  /*
+   * The position bar's value, 0-100, for the media player's position now, or -1 if there is none to
+   * show: no position, an unknown duration, or a playing player and no wall clock to advance it by.
+   */
+  static int32_t _position_percent(const NSPanelEntityState__MediaPlayer *media_player);
+
+  /*
+   * Advances the position bar about once a second while the media player page is showing and the
+   * player is playing. Sleeps otherwise, until update_display() wakes it.
+   */
+  static void _task_position(void *param);
+
+  // Send a command for the currently displayed media player to the manager. Fills in the media player ID.
+  static void _send_command(NSPanelMQTTManagerCommand__MediaPlayerCommand *command);
+
+  // Whether the page is showing: set when it opens, and cleared when it closes so that the position
+  // task stops writing to the display.
+  static inline std::atomic<bool> _showing = false;
+
+  // Whether the volume controls act on the source feeding the player rather than the player itself.
+  // Reset to the player whenever the page opens.
+  static inline std::atomic<bool> _controlling_source = false;
+  // How long the volume bar stays up after the last volume press or source switch. The page's tm_vol
+  // timer hides it; the TFT's own interval is shorter, so it is set whenever the page opens.
+  static constexpr uint16_t _volume_bar_timeout_ms = 3000;
+  // Set by return_to_media_player() so that opening the page keeps _controlling_source.
+  static inline std::atomic<bool> _returning = false;
+  // Percent per press of the volume -/+ buttons when the manager sends no volume_step. Matches Home
+  // Assistant's default.
+  static constexpr int32_t _default_volume_step = 10;
+  // The volume the last -/+ press asked for. Volume presses are optimistic: the page shows, and steps
+  // from, this volume before Home Assistant confirms it, so that quick presses add up. Only the last
+  // press is kept, and only for the volume: mute and play/pause decide from the last state.
+  //  - _step_volume() sets it and sends the command.
+  //  - _volume() returns it in place of the state's volume while it is pending.
+  //  - _confirm_pending_volume() clears it when a state carries exactly that volume. States for
+  //    earlier presses in a quick run don't, so the bar doesn't jump back while Home Assistant
+  //    catches up.
+  //  - It lapses after _pending_volume_timeout_us, and opening the page clears it.
+  // It is for the player or for its source, whichever the controls acted on, and is ignored while they
+  // act on the other.
+  // A press that changes nothing, + at 100 say, stays pending until it lapses, as no new state comes;
+  // the two volumes are equal, so that is harmless. Nothing redraws when it lapses, but the volume bar
+  // has hidden itself by then.
+  // Guarded by _spinlock: written from the Nextion handler, read from MQTT too.
+  struct _pending_volume_t {
+    int32_t volume;       // -1 when nothing is pending
+    bool source;          // Whether it is for the source rather than the player
+    int64_t requested_at; // esp_timer_get_time() of the press
+  };
+  static inline _pending_volume_t _pending_volume = {.volume = -1, .source = false, .requested_at = 0};
+  // How long a pending volume waits for its state before the state wins: in case the manager rounds
+  // it differently, or the player ignores it.
+  static constexpr int64_t _pending_volume_timeout_us = 5 * 1000 * 1000;
+  // What a touch on a media player component does.
+  enum class _action {
+    BACK,
+    PREVIOUS_TRACK,
+    NEXT_TRACK,
+    PLAY_PAUSE,
+    MUTE,
+    SOURCE_SWITCH,
+    VOLUME_UP,
+    VOLUME_DOWN,
+    ALBUM_ART,
+  };
+  // A touchable media player component. id starts as the ID in GUI_data.hpp and is replaced by the one
+  // the Nextion reports. Written from the MQTT task, read from the Nextion handler.
+  struct _component_t {
+    const char *name;
+    _action action;
+    std::atomic<uint8_t> id;
+  };
+  static _component_t _components[];
+  // Whether the media player can do what action does now. Buttons it can't are greyed out, and
+  // their presses ignored.
+  static bool _action_enabled(_action action, const NSPanelEntityState__MediaPlayer *media_player, bool controlling_source);
+  static void _set_button_enabled(const char *button_name, bool enabled);
+  static inline std::atomic<bool> _component_ids_resolved = false;
+  // What the position bar shows: its value, -1 while hidden, or -2 when unknown because the page has just
+  // opened. Updated from the MQTT task and from the position task.
+  static inline std::atomic<int32_t> _position_bar_value = -2;
+  static inline TaskHandle_t _position_task_handle = NULL;
+  // Wall clock times before this (2026-01-01 UTC) mean the panel's clock hasn't been set yet. A playing
+  // player's position can't be advanced without it, so the bar is hidden until it is.
+  // TODO: Use PanelClock::is_set() once the panel sets its clock from the manager.
+  static constexpr int64_t _min_wall_clock = 1767225600;
+
+  // Top left of the album art: the position of the h_art hotspot on this TFT's layout.
+  static inline std::atomic<uint16_t> _album_art_x = GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_x;
+  static inline std::atomic<uint16_t> _album_art_y = GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_y;
+  // The album art URL last handed to AlbumArt, so that new art is drawn when it changes, for example on
+  // the next track. Guarded by _album_art_url_mutex: the page is updated from the MQTT
+  // task and from the Nextion handler.
+  static inline std::string _album_art_url;
+  static inline std::mutex _album_art_url_mutex;
+
+  static inline portMUX_TYPE _spinlock = portMUX_INITIALIZER_UNLOCKED;
+};
