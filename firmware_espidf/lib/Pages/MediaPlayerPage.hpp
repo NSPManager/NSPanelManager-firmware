@@ -5,12 +5,14 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <memory>
+#include <mutex>
 #include <protobuf_nspanel.pb-c.h>
 #include <protobuf_nspanel_entity.pb-c.h>
 #include <string>
 
 /*
- * The media player page: title and artist, playback and volume controls, and the position bar.
+ * The media player page: title and artist, playback and volume controls, and the position bar,
+ * with the album art drawn by AlbumArt.
  *
  * EntityPage follows the player's state topic and holds its state, as for every entity, and
  * switches to the page. This class draws the page from that state and handles its touches.
@@ -55,9 +57,10 @@ private:
   static void _log_state(const NSPanelEntityState__MediaPlayer *media_player);
 
   /*
-   * Look up the IDs of the touchable media player components by name and log them. Called with the
-   * page showing, as the Nextion only answers for components on the current page. Done once per boot:
-   * the IDs only change with a new TFT, and installing one reboots the panel.
+   * Look up the IDs of the touchable media player components by name, and where the album art goes,
+   * and log them. Called with the page showing, as the Nextion only answers for components on the
+   * current page. Done once per boot: these only change with a new TFT, and installing one reboots
+   * the panel.
    */
   static void _resolve_component_ids();
 
@@ -189,6 +192,15 @@ private:
   // player's position can't be advanced without it, so the bar is hidden until it is.
   // TODO: Use PanelClock::is_set() once the panel sets its clock from the manager.
   static constexpr int64_t _min_wall_clock = 1767225600;
+
+  // Top left of the album art: the position of the h_art hotspot on this TFT's layout.
+  static inline std::atomic<uint16_t> _album_art_x = GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_x;
+  static inline std::atomic<uint16_t> _album_art_y = GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_y;
+  // The album art URL last handed to AlbumArt, so that new art is drawn when it changes, for example on
+  // the next track. Guarded by _album_art_url_mutex: the page is updated from the MQTT
+  // task and from the Nextion handler.
+  static inline std::string _album_art_url;
+  static inline std::mutex _album_art_url_mutex;
 
   static inline portMUX_TYPE _spinlock = portMUX_INITIALIZER_UNLOCKED;
 };

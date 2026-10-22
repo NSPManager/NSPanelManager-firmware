@@ -1,3 +1,4 @@
+#include <AlbumArt.hpp>
 #include <EntitiesPage.hpp>
 #include <EntityPage.hpp>
 #include <GUI_data.hpp>
@@ -28,6 +29,9 @@ void MediaPlayerPage::handle_state(const NSPanelEntityState__MediaPlayer *media_
 
 void MediaPlayerPage::unshow() {
   MediaPlayerPage::_showing = false;
+  // A full render takes seconds and outlives this page, so stop it rather than let it paint
+  // over whatever comes next.
+  AlbumArt::cancel();
 }
 
 void MediaPlayerPage::_redraw() {
@@ -94,6 +98,23 @@ void MediaPlayerPage::update_display(const NSPanelEntityState__MediaPlayer *medi
     taskENTER_CRITICAL(&MediaPlayerPage::_spinlock);
     MediaPlayerPage::_pending_volume.volume = -1; // A press from the last time the page was open no longer counts.
     taskEXIT_CRITICAL(&MediaPlayerPage::_spinlock);
+  }
+
+  // Draw the art when the page opens and whenever it changes, for example on the next track. A new
+  // render replaces one still in progress, and unshow() cancels one that outlives the page.
+  {
+    std::string album_art_url = media_player->album_art_url != NULL ? media_player->album_art_url : "";
+    std::lock_guard<std::mutex> lock_guard(MediaPlayerPage::_album_art_url_mutex);
+    if (page_just_opened || album_art_url != MediaPlayerPage::_album_art_url) {
+      MediaPlayerPage::_album_art_url = album_art_url;
+      if (!album_art_url.empty()) {
+        AlbumArt::render(album_art_url, MediaPlayerPage::_album_art_x, MediaPlayerPage::_album_art_y);
+      } else if (page_just_opened) {
+        AlbumArt::cancel(); // Nothing drawn on this page yet.
+      } else {
+        AlbumArt::clear(); // Remove the last track's art, or what was drawn of it.
+      }
+    }
   }
 
   bool is_playing = media_player->state == NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__PLAYING ||
@@ -301,6 +322,20 @@ void MediaPlayerPage::_resolve_component_ids() {
     resolved_ids.append(" ").append(component.name).append("=").append(std::to_string(component.id.load()));
   }
   ESP_LOGI("MediaPlayerPage", "Media player component IDs:%s", resolved_ids.c_str());
+
+  int32_t x = -1;
+  int32_t y = -1;
+  if (Nextion::get_component_integer_attribute(GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_hotspot_name, "x", &x, 250, 250) == ESP_OK &&
+      Nextion::get_component_integer_attribute(GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_hotspot_name, "y", &y, 250, 250) == ESP_OK &&
+      x >= 0 && x <= UINT16_MAX && y >= 0 && y <= UINT16_MAX) {
+    MediaPlayerPage::_album_art_x = x;
+    MediaPlayerPage::_album_art_y = y;
+    ESP_LOGI("MediaPlayerPage", "Album art at %ld,%ld.", x, y);
+  } else {
+    ESP_LOGE("MediaPlayerPage", "Failed to read the position of %s, will draw the album art at %d,%d.", GUI_MEDIA_PLAYER_CONTROL_PAGE::album_art_hotspot_name,
+             MediaPlayerPage::_album_art_x.load(), MediaPlayerPage::_album_art_y.load());
+    all_resolved = false;
+  }
   MediaPlayerPage::_component_ids_resolved = all_resolved;
 }
 
