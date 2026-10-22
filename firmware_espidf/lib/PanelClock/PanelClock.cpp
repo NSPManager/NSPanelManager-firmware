@@ -92,6 +92,8 @@ void PanelClock::_mqtt_event_handler(void *arg, esp_event_base_t event_base, int
   struct timeval new_time;
   new_time.tv_sec = static_cast<time_t>(epoch_ms.value() / 1000);
   new_time.tv_usec = static_cast<suseconds_t>((epoch_ms.value() % 1000) * 1000);
+  // The clock is kept in UTC. Local time comes from the TZ rule (_apply_timezone()), so the panel follows DST
+  // changes on its own, even while the manager is offline.
   if (settimeofday(&new_time, NULL) != 0) {
     ESP_LOGE("PanelClock", "Failed to set the clock to %lld ms.", epoch_ms.value());
     return;
