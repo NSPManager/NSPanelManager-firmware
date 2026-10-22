@@ -3,6 +3,7 @@
 #include <EntityPage.hpp>
 #include <GUI_data.hpp>
 #include <InterfaceManager.hpp>
+#include <MediaPlayerPage.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
 #include <Nextion.hpp>
@@ -13,6 +14,7 @@
 
 void EntityPage::show(std::string state_topic) {
   esp_log_level_set("EntityPage", ConfigManager::log_level);
+  esp_log_level_set("MediaPlayerPage", ConfigManager::log_level);
 
   if (EntityPage::_current_state_mutex == NULL) {
     EntityPage::_current_state_mutex = xSemaphoreCreateMutex();
@@ -35,6 +37,7 @@ void EntityPage::unshow() {
     MqttManager::unsubscribe(EntityPage::_current_entity_mqtt_topic);
   }
   EntityPage::_currently_showing = false;
+  MediaPlayerPage::unshow();
 }
 
 void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -69,6 +72,9 @@ void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int3
             }
           } else if (state->entity_case == NSPanelEntityState__EntityCase::NSPANEL_ENTITY_STATE__ENTITY_THERMOSTAT) {
             EntityPage::_current_mode = _entity_page_modes::THERMOSTAT;
+          } else if (state->entity_case == NSPanelEntityState__EntityCase::NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER) {
+            EntityPage::_current_mode = _entity_page_modes::MEDIA_PLAYER;
+            MediaPlayerPage::handle_state(state->media_player);
           } else {
             ESP_LOGE("EntityPage", "Unknown entity state case!");
           }
@@ -101,6 +107,10 @@ void EntityPage::_update_display() {
     EntityPage::_update_display_thermostat();
     break;
 
+  case NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER:
+    EntityPage::_update_display_media_player();
+    break;
+
   default:
     ESP_LOGE("EntityPage", "Unknown state type. Can't call appropriate update display function.");
     break;
@@ -127,6 +137,9 @@ void EntityPage::_handle_nextion_event(void *arg, esp_event_base_t event_base, i
       EntityPage::_handle_string_event_thermostat(state, (char *)event_data);
       break;
 
+    case NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER:
+      break;
+
     default:
       ESP_LOGE("EntityPage", "Unknown state type. Can't call appropriate string event function.");
       break;
@@ -144,6 +157,10 @@ void EntityPage::_handle_touch_event(const std::shared_ptr<NSPanelEntityState> &
     break;
 
   case NSPANEL_ENTITY_STATE__ENTITY_THERMOSTAT:
+    break;
+
+  case NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER:
+    MediaPlayerPage::handle_touch(component_id, pressed);
     break;
 
   default:
@@ -655,6 +672,10 @@ std::shared_ptr<NSPanelEntityState> EntityPage::_get_current_state() {
   return nullptr;
 }
 
+std::shared_ptr<NSPanelEntityState> EntityPage::get_current_state() {
+  return EntityPage::_get_current_state();
+}
+
 void EntityPage::_send_thermostat_option_command() {
   if (EntityPage::_is_currently_editing) {
     NSPanelMQTTManagerCommand__ThermostatCommand command = NSPANEL_MQTTMANAGER_COMMAND__THERMOSTAT_COMMAND__INIT;
@@ -708,4 +729,32 @@ void EntityPage::_send_thermostat_setpoint_command() {
 
     EntityPage::_update_display_thermostat();
   }
+}
+
+void EntityPage::_update_display_media_player() {
+  ESP_LOGI("EntityPage", "Updating EntityPage with media player state.");
+  bool page_just_opened = false;
+  if (!EntityPage::_currently_showing) {
+    ESP_LOGD("EntityPage", "Switching page to %s", GUI_MEDIA_PLAYER_CONTROL_PAGE::page_name);
+    EntityPage::_currently_showing = true;
+    if (Nextion::go_to_page(GUI_MEDIA_PLAYER_CONTROL_PAGE::page_name, 1000) != ESP_OK) [[unlikely]] {
+      // The official HMI has no media player page yet, so on a stock TFT this fails every time
+      // rather than never. Clear the flag before backing out: otherwise the next state update
+      // takes the "already showing" path, skips the page switch, and writes the media player
+      // components onto whatever page is actually displayed.
+      ESP_LOGE("EntityPage", "Failed to navigate Nextion to page. Will go back.");
+      EntityPage::_currently_showing = false;
+      EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
+      return;
+    }
+
+    InterfaceManager::call_unshow_callback();
+    InterfaceManager::current_page_unshow_callback.set(EntityPage::unshow);
+
+    esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event, NULL);
+    page_just_opened = true;
+  }
+
+  std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+  MediaPlayerPage::update_display(state->media_player, page_just_opened);
 }

@@ -522,7 +522,7 @@ class GUI_MEDIA_PLAYER_CONTROL_PAGE {
 public:
   static inline constexpr const char *page_name = "mediaplayer";
 
-  // The IDs the touchable components had when this was written. EntityPage looks the real IDs up
+  // The IDs the touchable components had when this was written. MediaPlayerPage looks the real IDs up
   // by name when the page opens, as they change whenever a component is added to the page, and
   // falls back to these only if a lookup fails.
   static inline constexpr const uint8_t back_button_id = 8;
@@ -552,6 +552,12 @@ public:
   // Hides volume_bar_name when it fires, then disables itself. The page hides the bar in its
   // Preinitialize event, so it starts hidden.
   static inline constexpr const char *volume_bar_timer_name = "tm_vol";
+
+  // Button glyph colours (RGB565). The HMI makes the buttons white, and amber while pressed as on the
+  // entities page. Buttons the player can't use now are set grey, with no pressed colour, and back.
+  static inline constexpr uint16_t button_pco = 65535;          // white
+  static inline constexpr uint16_t button_pressed_pco2 = 65024; // amber, #FFC300
+  static inline constexpr uint16_t button_disabled_pco = 23243; // grey, #5A595A
 
   // The album art is drawn over the h_art hotspot. A hotspot draws nothing, so pressing it does
   // not repaint over the art the way a button would.
