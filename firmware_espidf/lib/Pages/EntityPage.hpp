@@ -23,6 +23,12 @@ public:
    */
   static void unshow();
 
+  /**
+   * The state of the entity shown, or nullptr until the first state has arrived. Keep the copy for
+   * the whole operation, as for _get_current_state().
+   */
+  static std::shared_ptr<NSPanelEntityState> get_current_state();
+
 private:
   /**
    * Handle events from MQTT, such as new state events:
@@ -69,6 +75,11 @@ private:
    */
   static void _handle_string_event_thermostat(const std::shared_ptr<NSPanelEntityState> &state, char *data);
 
+  /*
+   * Update displayed page and value of "Media player" page.
+   */
+  static void _update_display_media_player();
+
   /**
    * properly delete pointer and clear old data when shared_ptr expires
    */
@@ -88,6 +99,7 @@ private:
     LIGHT_COLOR_TEMPERATURE,
     LIGHT_RGB,
     THERMOSTAT,
+    MEDIA_PLAYER,
   };
   static inline std::atomic<_entity_page_modes> _current_mode;
 

@@ -274,7 +274,7 @@ void EntitiesPage::_handle_items4_touch_event(const std::shared_ptr<NSPanelRoomE
     for (int i = 0; i < 4; i++) {
       if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].button_id) {
         if (touch_data->pressed) {
-          EntitiesPage::_send_entity_toggle_command_to_manager(page->id, i);
+          EntitiesPage::_handle_entity_button_pressed(page, i);
         }
         return; // Found match, no need to continue.
       }
@@ -377,7 +377,7 @@ void EntitiesPage::_handle_items8_touch_event(const std::shared_ptr<NSPanelRoomE
     for (int i = 0; i < 8; i++) {
       if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].button_id) {
         if (touch_data->pressed) {
-          EntitiesPage::_send_entity_toggle_command_to_manager(page->id, i);
+          EntitiesPage::_handle_entity_button_pressed(page, i);
         }
         return; // Found match, no need to continue.
       }
@@ -482,7 +482,7 @@ void EntitiesPage::_handle_items12_touch_event(const std::shared_ptr<NSPanelRoom
     for (int i = 0; i < 12; i++) {
       if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].button_id) {
         if (touch_data->pressed) {
-          EntitiesPage::_send_entity_toggle_command_to_manager(page->id, i);
+          EntitiesPage::_handle_entity_button_pressed(page, i);
         }
         return; // Found match, no need to continue.
       }
@@ -541,6 +541,25 @@ void EntitiesPage::_handle_items12_touch_event(const std::shared_ptr<NSPanelRoom
       break;
     }
   }
+}
+
+NSPanelRoomEntitiesPage__EntitySlot *EntitiesPage::_get_entity_in_slot(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, int32_t slot) {
+  for (int i = 0; i < page->n_entities; i++) {
+    if (page->entities[i] != nullptr && page->entities[i]->room_view_position == slot) {
+      return page->entities[i];
+    }
+  }
+  return nullptr;
+}
+
+void EntitiesPage::_handle_entity_button_pressed(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, int32_t slot) {
+  NSPanelRoomEntitiesPage__EntitySlot *entity = EntitiesPage::_get_entity_in_slot(page, slot);
+  // Media players can't be toggled, open their control page instead.
+  if (entity != nullptr && entity->type == NSPANEL_ROOM_ENTITIES_PAGE__ENTITY_SLOT__ENTITY_TYPE__ENTITY_TYPE_MEDIA_PLAYER && entity->mqtt_state_topic[0] != '\0') {
+    EntityPage::show(entity->mqtt_state_topic);
+    return;
+  }
+  EntitiesPage::_send_entity_toggle_command_to_manager(page->id, slot);
 }
 
 void EntitiesPage::_send_entity_toggle_command_to_manager(uint32_t entity_page_id, uint32_t entity_slot) {
