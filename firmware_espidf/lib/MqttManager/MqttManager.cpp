@@ -185,6 +185,17 @@ void MqttManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
     xSemaphoreGive(MqttManager::_subscriptions_mutex);
     break;
 
+  case MQTT_EVENT_DATA:
+    // A publish larger than the MQTT buffer is delivered as several MQTT_EVENT_DATA events: the
+    // first carries the topic and data_len < total_data_len, the rest have no topic. No handler
+    // reassembles them, so each one drops the message; log it here once, from the first fragment,
+    // as that is the only one that still knows which topic it was for.
+    if (event->current_data_offset == 0 && event->data_len < event->total_data_len) [[unlikely]] {
+      ESP_LOGE("MqttManager", "Dropping %d byte message on %.*s, larger than the %d byte MQTT buffer.",
+               event->total_data_len, event->topic_len, event->topic, MqttManager::_mqtt_config.buffer.size);
+    }
+    break;
+
   case MQTT_EVENT_DISCONNECTED:
     MqttManager::_connected = false;
     // Stop any online-status retry still running for the connection that just dropped. This
