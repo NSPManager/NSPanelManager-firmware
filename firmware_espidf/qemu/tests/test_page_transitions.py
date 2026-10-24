@@ -2,6 +2,10 @@
 
 import time
 
+import pytest
+
+from nspm_qemu.proto import nspanel as pb
+
 BUTTON_CEILING = 22
 
 
@@ -32,3 +36,38 @@ def test_tapping_screensaver_during_first_load_does_not_deadlock(rig):
     mark = rig.manager.command_mark()
     rig.nextion.press(BUTTON_CEILING)
     rig.manager.wait_for_command(lambda c: c.WhichOneof("CommandData") == "first_page_turn_on", since=mark, timeout=15)
+
+
+# Component ids from lib/Pages/GUI_data.hpp (GUI_ITEMS4_PAGE).
+ITEMS4_SLOT1_BUTTON = 5
+
+
+@pytest.mark.parametrize("gap", [0.1, 1.1])
+def test_waking_twice_to_entities_page_keeps_it_working(rig, gap):
+    """Showing the entities page again before its last unshow has run must not leave it dead.
+
+    With the entities page as the default page, every wake from the screensaver
+    shows it, and the real display can report two wakes for what a person sees
+    as one touch (the Kitchen panel did, 1.1 s apart). Each show() hands the
+    previous page's unshow to another task. When that page is the entities page
+    itself, a late unshow used to remove the handlers the newer show() had just
+    registered and clear the page it was drawing, so the page stayed on screen
+    with every button ignored until the screensaver came back.
+    """
+    rig.manager.config.default_page = pb.NSPanelConfig.ENTITIES
+    rig.boot()
+
+    rig.nextion.wake()
+    time.sleep(gap)
+    rig.nextion.wake()
+
+    rig.nextion.wait_for_page("items4")
+    rig.nextion.wait_for(lambda n: n.get("items4.i2_label.txt") == "   Fan", what="second entity slot drawn")
+    time.sleep(1)  # let both unshows run
+
+    mark = rig.manager.command_mark()
+    rig.nextion.press(ITEMS4_SLOT1_BUTTON)
+    cmd = rig.manager.wait_for_command(lambda c: c.WhichOneof("CommandData") == "toggle_entity_from_entities_page",
+                                       since=mark, timeout=15)
+    assert cmd.toggle_entity_from_entities_page.entity_page_id == 11
+    assert cmd.toggle_entity_from_entities_page.entity_slot == 0
