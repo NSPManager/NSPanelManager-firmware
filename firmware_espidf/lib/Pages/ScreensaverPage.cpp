@@ -67,13 +67,9 @@ void ScreensaverPage::show() {
   ScreensaverPage::_update_displayed_time();
   ScreensaverPage::_update_displayed_temperature();
 
-  std::shared_ptr<NSPanelConfig> config;
-  if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-    if (config->screensaver_mode == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITH_BACKGROUND || config->screensaver_mode == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITHOUT_BACKGROUND) {
-      xTaskCreatePinnedToCore(ScreensaverPage::_task_update_displayed_weather_data, "update_weather_data", 4096, NULL, 2, NULL, 1);
-    }
-  } else {
-    ESP_LOGE("ScreensaverPage", "Failed to get current config while trying to display screensaver page. Will update weather data just in case screensaver mode is with weather data.");
+  // Weather is only rendered while the screensaver is shown, so bring it up to date now.
+  // The minimal (datetime) screensaver shows the outside temperature too.
+  if (ScreensaverPage::_current_screensaver_mode.get() != NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__NO_SCREENSAVER) {
     xTaskCreatePinnedToCore(ScreensaverPage::_task_update_displayed_weather_data, "update_weather_data", 4096, NULL, 2, NULL, 1);
   }
 
@@ -187,8 +183,10 @@ void ScreensaverPage::_mqtt_event_handler(void *arg, esp_event_base_t event_base
           ScreensaverPage::_weather_update_mqtt_data.clear();
           ScreensaverPage::_weather_update_mqtt_data.insert(ScreensaverPage::_weather_update_mqtt_data.end(), event->data, event->data + event->data_len);
           xSemaphoreGive(ScreensaverPage::_weather_update_data_mutex);
-          // New weather data loaded, update display.
-          xTaskCreatePinnedToCore(ScreensaverPage::_task_update_displayed_weather_data, "update_weather_data", 4096, NULL, 2, NULL, 1);
+          // New weather data loaded. Update the display only if the screensaver is shown; otherwise show() renders it.
+          if (ScreensaverPage::showing()) {
+            xTaskCreatePinnedToCore(ScreensaverPage::_task_update_displayed_weather_data, "update_weather_data", 4096, NULL, 2, NULL, 1);
+          }
         } else {
           ESP_LOGW("ScreensaverPage", "Failed to take weather data mutex while processing new data from MQTT. Will wait for next forecast.");
 
@@ -353,31 +351,41 @@ void ScreensaverPage::_update_displayed_temperature() {
 }
 
 void ScreensaverPage::_task_update_displayed_weather_data(void *param) {
-  if (_weather_update_data_mutex != NULL && xSemaphoreTake(ScreensaverPage::_weather_update_data_mutex, pdMS_TO_TICKS(1000)) == pdPASS) [[likely]] {
+  if (!ScreensaverPage::showing()) {
+    // Another page took over before this task ran, e.g. at boot, where the home page follows the screensaver within
+    // 80 ms. The screensaver's labels are not shown, so do not write them. show() renders the weather next time.
+    ESP_LOGD("ScreensaverPage", "Screensaver no longer shown, skipping weather update.");
+  } else if (_weather_update_data_mutex != NULL && xSemaphoreTake(ScreensaverPage::_weather_update_data_mutex, pdMS_TO_TICKS(1000)) == pdPASS) [[likely]] {
     if (ScreensaverPage::_weather_update_mqtt_data.size() > 0) [[likely]] {
       NSPanelWeatherUpdate *new_weather_data = nspanel_weather_update__unpack(NULL, ScreensaverPage::_weather_update_mqtt_data.size(), ScreensaverPage::_weather_update_mqtt_data.data());
       if (new_weather_data != NULL) [[likely]] {
         ESP_LOGD("ScreensaverPage", "Updating screensaver page data.");
         ScreensaverPage::_weather_update_data = std::shared_ptr<NSPanelWeatherUpdate>(new_weather_data, &ScreensaverPage::_shared_ptr_weather_update_cleanup);
-        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_weather_icon_name, ScreensaverPage::_weather_update_data->current_weather_icon, 250);
-        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_temperature_name, ScreensaverPage::_weather_update_data->current_temperature_string, 250);
-        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_screensaver_minimal_current_temperature_name, ScreensaverPage::_weather_update_data->current_temperature_string, 250); // Outside temperature on minimal screensaver.
-        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_wind_name, ScreensaverPage::_weather_update_data->current_wind_string, 250);
-        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_sunrise_name, ScreensaverPage::_weather_update_data->sunrise_string, 250);
-        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_sunset_name, ScreensaverPage::_weather_update_data->sunset_string, 250);
-        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_max_min_temperature_name, ScreensaverPage::_weather_update_data->current_maxmin_temperature, 250);
-        Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_rain_name, ScreensaverPage::_weather_update_data->current_precipitation_string, 250);
+        NSPanelConfig__NSPanelScreensaverMode mode = ScreensaverPage::_current_screensaver_mode.get();
+        if (mode == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__DATETIME_WITH_BACKGROUND || mode == NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__DATETIME_WITHOUT_BACKGROUND) {
+          // The minimal screensaver shows only the outside temperature.
+          Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_screensaver_minimal_current_temperature_name, ScreensaverPage::_weather_update_data->current_temperature_string, 250);
+          ESP_LOGD("ScreensaverPage", "Updated outside temperature on minimal screensaver.");
+        } else {
+          Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_weather_icon_name, ScreensaverPage::_weather_update_data->current_weather_icon, 250);
+          Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_temperature_name, ScreensaverPage::_weather_update_data->current_temperature_string, 250);
+          Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_wind_name, ScreensaverPage::_weather_update_data->current_wind_string, 250);
+          Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_sunrise_name, ScreensaverPage::_weather_update_data->sunrise_string, 250);
+          Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_sunset_name, ScreensaverPage::_weather_update_data->sunset_string, 250);
+          Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_max_min_temperature_name, ScreensaverPage::_weather_update_data->current_maxmin_temperature, 250);
+          Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_current_rain_name, ScreensaverPage::_weather_update_data->current_precipitation_string, 250);
 
-        ESP_LOGD("ScreensaverPage", "Updating forecast. Forecast items: %zu, new weather forecast items: %zu", ScreensaverPage::_weather_update_data->n_forecast_items, new_weather_data->n_forecast_items);
-        for (int i = 0; i < ScreensaverPage::_weather_update_data->n_forecast_items && i < 5; i++) { // Update all available forecasts but no more than 5 as that's how many forecasts are displayed on the page
-          auto item = ScreensaverPage::_weather_update_data->forecast_items[i];
-          Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_names[i], item->display_string, 250);
-          Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_icon_names[i], item->weather_icon, 250);
-          Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_max_min_names[i], item->temperature_maxmin_string, 250);
-          Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_rain_names[i], item->precipitation_string, 250);
-          Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_wind_names[i], item->wind_string, 250);
+          ESP_LOGD("ScreensaverPage", "Updating forecast. Forecast items: %zu, new weather forecast items: %zu", ScreensaverPage::_weather_update_data->n_forecast_items, new_weather_data->n_forecast_items);
+          for (int i = 0; i < ScreensaverPage::_weather_update_data->n_forecast_items && i < 5; i++) { // Update all available forecasts but no more than 5 as that's how many forecasts are displayed on the page
+            auto item = ScreensaverPage::_weather_update_data->forecast_items[i];
+            Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_names[i], item->display_string, 250);
+            Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_icon_names[i], item->weather_icon, 250);
+            Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_max_min_names[i], item->temperature_maxmin_string, 250);
+            Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_rain_names[i], item->precipitation_string, 250);
+            Nextion::set_component_text(GUI_SCREENSAVER_PAGE::label_forecast_day_wind_names[i], item->wind_string, 250);
+          }
+          ESP_LOGD("ScreensaverPage", "Forecast updated. Successfully updated screensaver page with new weather data.");
         }
-        ESP_LOGD("ScreensaverPage", "Forecast updated. Successfully updated screensaver page with new weather data.");
       } else {
         ESP_LOGE("ScreensaverPage", "Got new weather data but failed to decode it into protobuf object.");
       }
