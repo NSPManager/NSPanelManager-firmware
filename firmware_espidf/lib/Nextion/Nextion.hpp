@@ -196,6 +196,8 @@ private:
   // Handle all events from UART
   static void _task_uart_event(void *param);
 
+  // Post each complete frame in pending with _post_received_data, and leave only a trailing partial frame in it
+  static void _post_received_frames(std::vector<char> &pending);
   // Post data read from UART to _uart_data_handler on the UART data event loop
   static void _post_received_data(const std::vector<char> &data);
 
