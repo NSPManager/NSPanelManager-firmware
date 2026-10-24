@@ -23,6 +23,8 @@ static constexpr uint16_t NEXTION_UART_EVENT_LOOP_STACK_SIZE = 3096;
 static constexpr uint16_t NEXTION_UART_EVENT_LOOP_QUEUE_SIZE = 6;
 
 class Nextion {
+  friend class NextionWindow;
+
 public:
   /**
    * Initialize the Nextion display and gather any facts about it.
@@ -211,6 +213,16 @@ public:
    * because it did not answer there or the rate is not one it supports. Empty when there is nothing to report.
    */
   static std::string get_link_baud_warning();
+
+  /**
+   * Power-cycle the display and connect to it again, for when it stopped answering while the link
+   * ran above the communication baud rate. If the display reset by itself it came back at its default
+   * rate, and nothing it sends can be read at the operating rate. Switches to the operating baud rate
+   * again the first time only; after that the link stays at the communication baud rate until the
+   * panel reboots. Writers are turned away while this runs (a few seconds).
+   * Blocks: call from a task of its own, never from an event handler. Takes _uart_write_mutex.
+   */
+  static void recover_link();
 
   /**
    * Restart the Nextion display via GPIO pins (power off and power on. Not a soft reboot via commands!)
