@@ -109,7 +109,7 @@ void EntitiesPage::_update_display(const std::shared_ptr<NSPanelRoomEntitiesPage
     return;
   }
 
-  // Header first: it is a single command with no delay, whereas the slots below are paced at 50 ms each.
+  // Header first: it is a single command, whereas the slots below take several commands each.
   if (std::string(page->header_text).compare(EntitiesPage::_currently_showing_header_text.get()) != 0) {
     Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, page->header_text, 250);
     EntitiesPage::_currently_showing_header_text.set(page->header_text);
@@ -174,7 +174,6 @@ void EntitiesPage::_update_displayed_item_in_slot(NSPanelRoomEntitiesPage__Entit
 
     Nextion::set_component_visibility(page_slot.button_name, true, 250);
     Nextion::set_component_visibility(page_slot.label_name, true, 250);
-    vTaskDelay(pdMS_TO_TICKS(50));
   } else {
     // No entity was found for page slot. Blank page slot.
     Nextion::set_component_visibility(page_slot.button_name, false, 250);
