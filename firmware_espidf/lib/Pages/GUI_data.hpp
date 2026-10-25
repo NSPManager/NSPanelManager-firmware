@@ -420,6 +420,29 @@ struct GUI_THERMOSTAT_OPTIONS_MODE_DATA {
   const char *label_name;
 };
 
+class GUI_COVER_CONTROL_PAGE {
+public:
+  static inline constexpr const uint8_t page_id = 12;
+  static inline constexpr const char *page_name = "cover";
+
+  // Fallback component IDs for a page whose components are added in this order. The firmware
+  // looks the real IDs up by name when the page opens, so the HMI may order them differently.
+  static inline constexpr const uint8_t back_button_id = 1;
+  static inline constexpr const uint8_t position_slider_id = 5;
+  static inline constexpr const uint8_t open_button_id = 6;
+  static inline constexpr const uint8_t stop_button_id = 7;
+  static inline constexpr const uint8_t close_button_id = 8;
+
+  static inline constexpr const char *name_label_name = "current";
+  static inline constexpr const char *state_label_name = "state";
+  static inline constexpr const char *position_label_name = "position_text";
+  static inline constexpr const char *position_slider_name = "position_slider";
+  static inline constexpr const char *back_button_name = "home";
+  static inline constexpr const char *open_button_name = "b_open";
+  static inline constexpr const char *stop_button_name = "b_stop";
+  static inline constexpr const char *close_button_name = "b_close";
+};
+
 class GUI_THERMOSTAT_CONTROL_PAGE {
 public:
   static inline constexpr const uint8_t page_id = 11;

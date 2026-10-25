@@ -62,6 +62,11 @@ private:
   static void _update_display_thermostat();
 
   /*
+   * Update displayed page and value of "Cover" page.
+   */
+  static void _update_display_cover();
+
+  /*
    * Handle Nextion string event.
    */
   static void _handle_string_event_thermostat(const std::shared_ptr<NSPanelEntityState> &state, char *data);
@@ -85,6 +90,7 @@ private:
     LIGHT_COLOR_TEMPERATURE,
     LIGHT_RGB,
     THERMOSTAT,
+    COVER,
   };
   static inline std::atomic<_entity_page_modes> _current_mode;
 

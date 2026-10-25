@@ -748,6 +748,16 @@ esp_err_t Nextion::set_component_visibility(const char *component_id, bool visib
 }
 
 esp_err_t Nextion::get_component_integer_value(const char *component_id, int32_t *result, uint16_t timeout, uint16_t mutex_timeout) {
+  return Nextion::get_component_integer_attribute(component_id, "val", result, timeout, mutex_timeout);
+}
+
+esp_err_t Nextion::get_component_integer_attribute(const char *component_id, const char *attribute, int32_t *result, uint16_t timeout, uint16_t mutex_timeout) {
+  std::string expression = component_id;
+  expression.append(".").append(attribute);
+  return Nextion::get_integer_value(expression.c_str(), result, timeout, mutex_timeout);
+}
+
+esp_err_t Nextion::get_integer_value(const char *expression, int32_t *result, uint16_t timeout, uint16_t mutex_timeout) {
   // Verify that the Nextion state is "running" as we don't want to send data that may interrupt other processes such as updating the GUI
   if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
     if (Nextion::_current_nextion_state != nextion_state_t::RUNNING) {
@@ -774,8 +784,7 @@ esp_err_t Nextion::get_component_integer_value(const char *component_id, int32_t
 
   if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
     uart_write_bytes(UART_NUM_2, "get ", strlen("get "));
-    uart_write_bytes(UART_NUM_2, component_id, strlen(component_id));
-    uart_write_bytes(UART_NUM_2, ".val", strlen(".val"));
+    uart_write_bytes(UART_NUM_2, expression, strlen(expression));
 
     // Send command finished sequence
     uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
