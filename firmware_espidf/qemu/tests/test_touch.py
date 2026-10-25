@@ -1,11 +1,14 @@
-"""Simulated user input on the display, checked against what reaches the manager and the screen."""
+"""Simulated user input on the display, checked against what reaches the manager and the screen.
+
+Touches go through the TFT's own code (nextion_tools.emu runs gui.HMI), so which touch events reach the
+firmware, and when, is whatever the HMI's sendkey settings and scripts decide.
+"""
 
 from nspm_qemu.proto import nspanel as pb
 
 # Component ids from lib/Pages/GUI_data.hpp (GUI_HOME_PAGE).
 BUTTON_CEILING = 22
 BUTTON_TABLE = 21
-BRIGHTNESS_SLIDER = 2
 BUTTON_ROOM_ENTITIES = 5
 BUTTON_NEXT_ROOM = 10
 
@@ -40,7 +43,7 @@ def test_brightness_slider_sends_slider_value(home):
     mark = home.manager.command_mark()
 
     # The panel reads the slider back with `get home.s_brightness.val` on release.
-    home.nextion.slide("home.s_brightness", BRIGHTNESS_SLIDER, 73)
+    assert home.nextion.slide("s_brightness", 73) == 73
 
     cmd = home.manager.wait_for_command(lambda c: c.WhichOneof("CommandData") == "first_page_turn_on", since=mark)
     assert cmd.first_page_turn_on.brightness_slider_value == 73
@@ -48,10 +51,9 @@ def test_brightness_slider_sends_slider_value(home):
 
 
 def test_next_room_button_shows_next_room(home):
-    # HomePage acts on every touch event from this button, press or release,
-    # so the TFT reports only one edge for it. Send exactly one: a full
-    # press() would advance two rooms and, with two rooms, wrap back.
-    home.nextion.touch(BUTTON_NEXT_ROOM, pressed=True)
+    # HomePage acts on every touch event from this button, press or release.
+    # The HMI reports only its release (sendkey 1), so a tap advances one room.
+    home.nextion.press(BUTTON_NEXT_ROOM)
 
     home.nextion.wait_for_value("home.room.txt", "Kitchen")
     home.broker.wait_for_subscription(home.panel.client_id, "nspanel/mqttmanager_10.0.2.2/room/2/state")

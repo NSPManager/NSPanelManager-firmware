@@ -17,6 +17,7 @@ import threading
 import time
 from typing import Callable, List, Optional
 
+from . import hmi
 from .fake_nextion import FakeNextion
 from .image import build_efuse_image, build_flash_image
 
@@ -69,7 +70,7 @@ class QemuPanel:
         self.project_dir = project_dir
         self.mac = mac
         self.panel_config = panel_config
-        self.nextion = FakeNextion()
+        self.nextion = FakeNextion(hmi=hmi.load())
         self.web_port = _free_port()
         self.lines: List[str] = []
         self.crash: Optional[str] = None

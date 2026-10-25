@@ -11,6 +11,7 @@ using the same topics and retained-message conventions as the real manager
   manager -> nspanel/mqttmanager_<addr>/room/<id>/state        NSPanelRoomStatus (retained)
   manager -> nspanel/mqttmanager_<addr>/all_rooms_status       NSPanelRoomStatus (retained)
   manager -> nspanel/mqttmanager_<addr>/entity_pages/<id>/state NSPanelRoomEntitiesPage (retained)
+  manager -> nspanel/mqttmanager_<addr>/status/weather          NSPanelWeatherUpdate (retained)
   panel   -> nspanel/mqttmanager_<addr>/command      NSPanelMQTTManagerCommand
 """
 
@@ -71,6 +72,18 @@ def default_rooms() -> List[Room]:
         Room(1, "Office", entity_page_ids=[11]),
         Room(2, "Kitchen", entity_page_ids=[21]),
     ]
+
+
+def default_weather() -> "pb.NSPanelWeatherUpdate":
+    """Five days of forecast. Icons are characters of the TFT's weather icon fonts."""
+    update = pb.NSPanelWeatherUpdate(
+        current_weather_icon="c", current_temperature_string="21°", current_maxmin_temperature="24°/15°",
+        current_wind_string="12 km/h", sunrise_string="06:41", sunset_string="18:20",
+        current_precipitation_string="10%")
+    for day, icon in zip(["Mon", "Tue", "Wed", "Thu", "Fri"], "abcde"):
+        update.forecast_items.add(display_string=day, weather_icon=icon, precipitation_string="20%",
+                                  temperature_maxmin_string="22°/14°", wind_string="10 km/h")
+    return update
 
 
 def default_entity_pages() -> Dict[int, "pb.NSPanelRoomEntitiesPage"]:
@@ -170,6 +183,13 @@ class FakeManager:
 
     def publish_entity_page(self, page_id: int) -> None:
         self.broker.publish("%s/entity_pages/%d/state" % (self.base, page_id), self.entity_pages[page_id].SerializeToString(), retain=True)
+
+    def publish_weather(self, update: Optional["pb.NSPanelWeatherUpdate"] = None) -> "pb.NSPanelWeatherUpdate":
+        """Weather, as MQTTManagerWeather sends it (retained). Returns what was sent."""
+        if update is None:
+            update = default_weather()
+        self.broker.publish(self.base + "/status/weather", update.SerializeToString(), retain=True)
+        return update
 
     def publish_everything(self) -> None:
         self.publish_online()

@@ -41,6 +41,8 @@ class Rig:
         self.panel = QemuPanel(workdir, build_dir or os.environ.get("NSPM_QEMU_BUILD_DIR", DEFAULT_BUILD_DIR),
                                PROJECT_DIR, mac, panel_config)
         self.nextion = self.panel.nextion
+        # Every page a test waits for, and the screen when it fails (tests/conftest.py).
+        self.nextion.screenshots_dir = os.path.join(workdir, "screens")
         # Any wait on a fake ends as soon as the firmware panics or QEMU exits.
         for fake in (self.broker, self.manager, self.nextion):
             fake.abort_check = self.panel.check_alive
