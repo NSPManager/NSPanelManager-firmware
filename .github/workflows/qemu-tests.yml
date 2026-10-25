@@ -36,6 +36,12 @@ jobs:
           # Each test starts its own broker on a random port; the system service is not used.
           sudo systemctl disable --now mosquitto
 
+      - name: Cache the HMI
+        uses: actions/cache@v4
+        with:
+          path: firmware_espidf/qemu/build/hmi
+          key: nspm-hmi-${{ hashFiles('firmware_espidf/qemu/nspm_qemu/hmi.py') }}
+
       - name: Cache PlatformIO toolchains and QEMU
         uses: actions/cache@v4
         with:

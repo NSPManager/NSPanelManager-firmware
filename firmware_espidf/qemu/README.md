@@ -16,7 +16,18 @@ firmware_espidf/qemu/run_tests.sh -k touch   # extra args go to pytest
 
 CI runs the same script (`.github/workflows/qemu-tests.yml`). The suite takes about 6 minutes,
 because every test boots a fresh panel. Per-test console and mosquitto logs land in
-`qemu/build/test-logs/`, and CI uploads them as an artifact.
+`qemu/build/test-logs/`, and CI uploads them as an artifact. So are the screenshots, in each
+test's `screens/`: one PNG of every page the test waited for (`wait_for_page()`, taken as the page
+appears, so often before the firmware has filled it in), and one of the screen when the test
+ended (`NN-end.png`) or failed (`NN-failure.png`, also named on stderr). Brightness (`dim`) is not
+applied: a screen the firmware has dimmed to 0 is drawn as if lit.
+
+**Using a panel by hand.** `qemu/live.sh` boots one against the fake manager and serves its
+screen in a browser (nextion-tools' viewer): click and drag on it to touch the panel, and the
+script prints each command the panel sends the manager. It takes the same environment as
+`run_tests.sh`, plus `--http PORT`, `--rotation`, and `--weather` for the weather screensaver.
+`tests/test_viewer.py` checks that loop: wake the panel and turn on the lights, through the
+viewer alone.
 
 ## How it is wired
 
@@ -32,7 +43,7 @@ because every test boots a fresh panel. Per-test console and mosquitto logs land
 |---|---|---|
 | `Rig` | `nspm_qemu/rig.py` | One panel and its world. `boot()`, `wake_to_home()`, `http_get()`. |
 | `QemuPanel` | `nspm_qemu/panel.py` | Builds the flash and eFuse images, runs QEMU, gives `wait_for_log()`, detects panics. |
-| `FakeNextion` | `nspm_qemu/fake_nextion.py` | Models the screen from the panel's commands and injects user input. |
+| `FakeNextion` | `nspm_qemu/fake_nextion.py` | The display emulator ([nextion-tools](https://github.com/jamesmulcahy/nextion-tools)' `nextion_tools.emu`, pinned in `requirements.txt`) as the NSPanel Manager TFT: models the screen from the panel's commands and injects user input. |
 | `FakeManager` | `nspm_qemu/fake_manager.py` | Registration handshake, config, room and entity-page state, decoded commands. |
 | `Broker` | `nspm_qemu/broker.py` | A mosquitto per test. A paho client records all traffic, a TCP proxy in front of the panel lets tests cut its connection, and connects and subscriptions are read from mosquitto's log. |
 
@@ -58,19 +69,54 @@ def test_ceiling_button_turns_on_ceiling_lights(home):
     assert cmd.first_page_turn_on.affect_lights == Cmd.CEILING_LIGHTS
 ```
 
-**Simulating input** (`FakeNextion`):
+**Simulating input** (`FakeNextion`). A touch is a finger on the screen, and the TFT's own code
+(from `gui.HMI`) decides what reaches the firmware, as on a panel:
 
-| Call | What the display sends |
+| Call | What happens |
 |---|---|
-| `touch(id, pressed)` | One `0x65` touch event, either the press edge or the release edge. |
-| `press(id, hold=0.1)` | Press, then release. Some handlers act on both edges (see below). |
-| `slide(name, id, value)` | Sets what `get <name>.val` returns, then sends the release event. |
-| `wake()` / `sleep()` | `0x93` / `0x92`. `wake()` is "someone touched the screensaver". |
+| `press(id, hold=0.1)` | A finger down on the component (by id or name, on the current page), then up. It reports the edges its `sendkey` asks for, and runs its own and the page's touch-capture code. On the items and lights pages that code decodes gestures, so `hold` must cover at least one 50 ms tick of the gesture timer. |
+| `touch(id, pressed)` | Only the finger down, or only the lift. |
+| `slide(name, value)` | A finger on the slider at the point for `value`; returns the value it took. |
+| `swipe("down")`, `drag(start, end)`, `tap(x, y)`, `touch_down/move/up(x, y)` | Gestures and raw touches. |
+| `wake()` | A tap in the middle of the screensaver, whose touch capture prints `0x93`. Touches nothing, and returns False, if no screensaver page is shown. |
+| `sleep()` | The current page's `sleep_display` timer runs out now, and its code prints `0x92`. Left alone, it runs out after the screensaver timeout the firmware configures (`home.sleep_display.tim`). |
+| `send_touch_event(id, pressed)`, `send_frame(code, ...)` | A bare frame, whatever the HMI would send. |
 | `send_string(data)` | A `0x99` string event. |
 
-**Observing the screen:** `page`, `page_history`, `components["page.comp.attr"]`, `system["dim"]`,
-`commands` (raw instructions), and the waits `wait_for_page()`, `wait_for_value()`,
-`wait_for_command()` and `wait_for(predicate)`.
+**The display's speed.** By default the fake executes everything the moment it arrives. Set
+`nextion.flow_model = True` to make it behave like the real display, buffer, stalls and lost
+commands included, as measured on Office (see nextion-tools' README). The firmware on this
+branch has no flow control. Even so, waking to the home page loses nothing (16 commands, at most
+237 bytes queued), because the bursts that overflow on a panel (the weather forecast after
+`page screensaver`, the boot sequence) need weather data FakeManager does not send.
+
+**The display knows the TFT.** The fake reads the TFT's Nextion project (`gui.HMI`), fetched from
+NSPanelManager at a pinned commit (`nspm_qemu/hmi.py`; `NSPM_HMI=<path>` to use another, e.g. one
+not pushed yet). It answers as a real display does: a page, component or attribute that does not
+exist where it is used fails with `0x1A`; the label without its page prefix (`forDay1.txt`)
+exists only while its page is shown; ids are the HMI's; `get` returns the HMI's value until one is
+assigned; loading a page resets its local components.
+
+**A rejected instruction fails the test.** On a panel, the firmware runs `bkcmd=0`, so a `0x1A`
+is silent: a label is never drawn, and nothing says why. Here every rejection not listed in
+`nspm_qemu/display_errors.py` fails the test that caused it. List one there only with the reason,
+and remove it when the firmware is fixed. Mark a test `@pytest.mark.display_errors_ok` if it
+sends bad instructions on purpose.
+
+**`tests/test_gui_data.py`** checks `lib/Pages/GUI_data.hpp` against the HMI without booting
+anything: every page and component the firmware names exists, every id it listens for is a
+component that reports touches (itself, or through the page's own `printh 65` code), and every
+picture id is in range. Known mismatches are listed in the test, which also fails once one of
+them is fixed, so the list stays honest.
+
+**Looking at the screen:** `nextion.screenshot(name)` saves a PNG into the test's `screens/`, and
+`nextion.snapshot()` gives the pixels as a numpy array. They draw from the HMI and what the
+firmware assigned, as nextion-tools' renderer does (see its README for what is drawn).
+
+**Observing the screen:** `page`, `page_history`, `components["page.comp.attr"]` (what the firmware
+assigned), `value("page.comp.attr")` (what the display holds, HMI defaults included),
+`system["dim"]`, `commands` (raw instructions), `errors` (rejected instructions), and the waits
+`wait_for_page()`, `wait_for_value()`, `wait_for_command()` and `wait_for(predicate)`.
 
 **Observing MQTT:** `broker.wait_for_message(topic_filter, predicate, since=broker.mark())`,
 `broker.subscriptions(client)`, `broker.wait_for_subscription(...)`, and
@@ -84,11 +130,15 @@ A panic, `abort()`, failed assert or stack overflow on the console fails the tes
 did not wait long enough to see it. `PANIC_PRINT_HALT` is set, so the backtrace is the last thing
 in the log. Decode it with `xtensa-esp32-elf-addr2line -pfiaC -e .pio/build/qemu/firmware.elf <addrs>`.
 
-**Which edges does a button send?** On the real TFT, each component is configured to report its
-press event, its release event, or both. The firmware's handlers reveal the choice: the scenes
-button checks `!pressed`, the ceiling and table buttons handle both, and next-room and next-mode
-act on any event, which means the TFT reports one edge for them. Send what the TFT sends. A full
-`press()` on next-room advances two rooms.
+**Which edges does a button send?** Whatever the HMI says: each component's `sendkey` (bit 0
+release, bit 1 press; see `hmi_tool.py show FILE PAGE --attrs id,sendkey` in NSPanelManager), plus
+any `printh 65 ...` its page's code sends for it. The scenes button reports release only, the
+ceiling and table hotspots both, next-room and next-mode release only. `press()` sends exactly
+that.
+
+**The TFT's timers run in real time,** on the host's clock, not QEMU's. The one that matters is
+`sleep_display`: after the firmware's screensaver timeout (FakeManager: 60 s) with no touch, the
+page prints `0x92` and the panel goes to its screensaver, as a real one would.
 
 ## What differs from hardware
 

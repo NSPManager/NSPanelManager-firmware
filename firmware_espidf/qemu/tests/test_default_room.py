@@ -48,7 +48,7 @@ def test_changing_default_room_leaves_other_rooms_alone(rig):
     rig.manager.config = rig.manager.default_config()
     rig.boot()
     rig.wake_to_home()
-    rig.nextion.touch(BUTTON_NEXT_ROOM, pressed=True)  # one edge only, see test_touch
+    rig.nextion.press(BUTTON_NEXT_ROOM)  # the HMI reports its release only, see test_touch
     rig.nextion.wait_for_value("home.room.txt", "Kitchen")
 
     mark = rig.panel.mark()

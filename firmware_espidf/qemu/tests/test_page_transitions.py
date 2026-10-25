@@ -4,6 +4,7 @@ import time
 
 import pytest
 
+from nspm_qemu.fake_nextion import WAKE
 from nspm_qemu.proto import nspanel as pb
 
 BUTTON_CEILING = 22
@@ -24,9 +25,11 @@ def test_tapping_screensaver_during_first_load_does_not_deadlock(rig):
     rig.manager.wait_for_registration(timeout=180)
     rig.panel.wait_for_log(r"Showing screensaver page", timeout=60)
 
-    # The real display reports one wake per touch of the screensaver.
+    # Each tap on the screensaver makes its code print one wake. Once the home
+    # page is up, the taps stop rather than land on its buttons.
+    rig.nextion.wait_for(lambda n: n.page in ("screensaver", "screensaver2"), what="screensaver shown")
     for _ in range(10):
-        rig.nextion.wake()
+        rig.nextion.wake(wait=0)
         time.sleep(0.1)
 
     rig.nextion.wait_for_page("home")
@@ -57,9 +60,11 @@ def test_waking_twice_to_entities_page_keeps_it_working(rig, gap):
     rig.manager.config.default_page = pb.NSPanelConfig.ENTITIES
     rig.boot()
 
+    # One tap, which the screensaver's code reports as a wake, then the display's
+    # second report of it: by then the page may have changed, so no tap could make it.
     rig.nextion.wake()
     time.sleep(gap)
-    rig.nextion.wake()
+    rig.nextion.send_frame(WAKE)
 
     rig.nextion.wait_for_page("items4")
     rig.nextion.wait_for(lambda n: n.get("items4.i2_label.txt") == "   Fan", what="second entity slot drawn")
