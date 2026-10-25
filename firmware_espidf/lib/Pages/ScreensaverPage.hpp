@@ -112,9 +112,6 @@ private:
   // What brightness show the screensaver show. Default to 50%
   static inline std::atomic<uint8_t> _screensaver_brightness;
 
-  // Is the screensaver page currently show?
-  static inline std::atomic<bool> _currently_shown;
-
   // What screensaver mode is currently active.
   static inline MutexWrapped<NSPanelConfig__NSPanelScreensaverMode> _current_screensaver_mode;
 };

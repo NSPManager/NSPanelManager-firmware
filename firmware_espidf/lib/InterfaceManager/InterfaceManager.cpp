@@ -20,8 +20,10 @@
 
 void InterfaceManager::init() {
   esp_log_level_set("InterfaceManager", ConfigManager::log_level);
-  current_page_unshow_callback.set(NULL);
-  InterfaceManager::_unshow_queue = xQueueCreate(4, sizeof(std::function<void()>));
+  InterfaceManager::_unshow_queue = xQueueCreate(8, sizeof(ShownPage *));
+  xTaskCreatePinnedToCore(InterfaceManager::_task_unshow_page, "unshow_task", 4096, NULL, 6, NULL, 1);
+  // Must exist before any handler below can notify it.
+  xTaskCreatePinnedToCore(InterfaceManager::_task_page_transitions, "page_transitions", 8192, NULL, 6, &InterfaceManager::_page_transitions_task, 1);
   esp_err_t nextion_init_result = Nextion::init();
   if (nextion_init_result != ESP_OK) {
     ESP_LOGE("InterfaceManager", "Failed to initialize Nextion display. Will not continue with InterfaceManager!");
@@ -130,12 +132,46 @@ void InterfaceManager::init() {
   // successfully loaded the event handler for RoomManager will take over and send the Nextion display to the correct page
 }
 
-void InterfaceManager::call_unshow_callback() {
-  auto unshow_handle = InterfaceManager::current_page_unshow_callback.get();
-  if (unshow_handle != nullptr) {
-    xQueueSend(InterfaceManager::_unshow_queue, &unshow_handle, pdMS_TO_TICKS(500));
-    xTaskCreatePinnedToCore(InterfaceManager::_task_unshow_page, "unshow_task", 4096, NULL, 6, NULL, 1);
+std::shared_ptr<PageHandlers> InterfaceManager::begin_page(void (*unshow)()) {
+  ShownPage next;
+  next.unshow = unshow;
+  next.handlers = std::make_shared<PageHandlers>();
+  ShownPage *previous = new ShownPage();
+
+  // Only reference counts change in here: the old record stays referenced by
+  // *previous, so nothing is freed inside the critical section.
+  portENTER_CRITICAL(&InterfaceManager::_current_page_lock);
+  *previous = InterfaceManager::_current_page;
+  InterfaceManager::_current_page = next;
+  portEXIT_CRITICAL(&InterfaceManager::_current_page_lock);
+
+  if (previous->unshow == nullptr) {
+    delete previous; // First page since boot
+  } else if (xQueueSend(InterfaceManager::_unshow_queue, &previous, 0) != pdTRUE) {
+    // Never block the caller, which is usually an event handler.
+    ESP_LOGW("InterfaceManager", "Unshow queue full, unshowing previous page inline.");
+    InterfaceManager::_finish_unshow(previous);
   }
+  return next.handlers;
+}
+
+bool InterfaceManager::is_current_page(void (*unshow)()) {
+  portENTER_CRITICAL(&InterfaceManager::_current_page_lock);
+  bool current = InterfaceManager::_current_page.unshow == unshow;
+  portEXIT_CRITICAL(&InterfaceManager::_current_page_lock);
+  return current;
+}
+
+void InterfaceManager::_finish_unshow(ShownPage *page) {
+  // Always safe: removes only the registrations that page's show() made.
+  page->handlers->retire();
+
+  if (InterfaceManager::is_current_page(page->unshow)) {
+    ESP_LOGD("InterfaceManager", "Page was shown again before its unshow ran; keeping its state.");
+  } else {
+    page->unshow();
+  }
+  delete page;
 }
 
 void InterfaceManager::show_default_page() {
@@ -168,12 +204,77 @@ void InterfaceManager::show_default_page() {
   }
 }
 
-void InterfaceManager::_task_unshow_page(void *param) {
-  std::function<void()> unshow_handle;
-  while (xQueueReceive(InterfaceManager::_unshow_queue, &unshow_handle, pdMS_TO_TICKS(250)) == pdPASS) {
-    unshow_handle();
+void InterfaceManager::request_show_home_page() {
+  InterfaceManager::_request_page(PageRequest::HOME);
+}
+
+void InterfaceManager::_request_page(PageRequest page) {
+  InterfaceManager::_requested_page = page;
+  xTaskNotify(InterfaceManager::_page_transitions_task, PAGE_TRANSITION_SHOW_PAGE, eSetBits);
+}
+
+void InterfaceManager::_task_page_transitions(void *param) {
+  for (;;) {
+    uint32_t requested = 0;
+    xTaskNotifyWait(0, UINT32_MAX, &requested, portMAX_DELAY);
+    if (requested & PAGE_TRANSITION_ASSOCIATE) {
+      InterfaceManager::_associate_with_manager_if_ready();
+    }
+    if (requested & PAGE_TRANSITION_SHOW_PAGE) {
+      switch (InterfaceManager::_requested_page.exchange(PageRequest::NONE)) {
+      case PageRequest::HOME:
+        HomePage::show();
+        break;
+
+      case PageRequest::SCREEN_ON: {
+        std::shared_ptr<NSPanelConfig> config;
+        if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+          Nextion::set_brightness_level(config->screen_dim_level, 1000);
+          InterfaceManager::show_default_page();
+        } else {
+          ESP_LOGE("InterfaceManager", "Failed to get config while trying to turn screen on.");
+        }
+        break;
+      }
+
+      case PageRequest::SCREENSAVER:
+        ScreensaverPage::show();
+        break;
+
+      case PageRequest::NONE:
+        break; // Already handled by an earlier wake-up
+      }
+    }
   }
-  vTaskDelete(NULL);
+}
+
+void InterfaceManager::_associate_with_manager_if_ready() {
+  // First time both the home page status and the config are loaded: leave the
+  // loading page for the default page. Re-checked here because several
+  // notifications can be coalesced into one wake-up.
+  if (InterfaceManager::_home_page_status_loaded && InterfaceManager::_nspm_config_loaded && LoadingPage::showing() && !InterfaceManager::_has_been_associated_with_manager) {
+    if (!ConfigManager::has_updated) [[likely]] {
+      ESP_LOGI("InterfaceManager", "Home page status and base config loaded. Will go to home page on default room.");
+      RoomManager::go_to_default_room();
+      RoomManager::go_to_first_entities_page(); // Also select the first entities page for default room as this is the first time and no room is currently selected.
+      InterfaceManager::show_default_page();
+
+      // Initialize Screensaver page so that it's ready when it's time to show it.
+      ScreensaverPage::init();
+      InterfaceManager::_has_been_associated_with_manager = true;
+    } else {
+      LoadingPage::set_loading_text("Updated checksums, rebooting.");
+    }
+  }
+}
+
+void InterfaceManager::_task_unshow_page(void *param) {
+  ShownPage *page;
+  for (;;) {
+    if (xQueueReceive(InterfaceManager::_unshow_queue, &page, portMAX_DELAY) == pdTRUE) {
+      InterfaceManager::_finish_unshow(page);
+    }
+  }
 }
 
 void InterfaceManager::_nextion_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -281,20 +382,7 @@ void InterfaceManager::_nspm_configmanager_event_handler(void *arg, esp_event_ba
   switch (event_id) {
   case nspm_configmanager_event::CONFIG_LOADED: {
     InterfaceManager::_nspm_config_loaded = true;
-    if (InterfaceManager::_home_page_status_loaded && InterfaceManager::_nspm_config_loaded && LoadingPage::showing() && !InterfaceManager::_has_been_associated_with_manager) {
-      if (!ConfigManager::has_updated) [[likely]] {
-        ESP_LOGI("InterfaceManager", "Home page status and base config loaded. Will go to home page on default room.");
-        RoomManager::go_to_default_room();
-        RoomManager::go_to_first_entities_page(); // Also select the first entities page for default room as this is the first time and no room is currently selected.
-        InterfaceManager::show_default_page();
-
-        // Initialize Screensaver page so that it's ready when it's time to show it.
-        ScreensaverPage::init();
-        InterfaceManager::_has_been_associated_with_manager = true;
-      } else {
-        LoadingPage::set_loading_text("Updated checksums, rebooting.");
-      }
-    }
+    xTaskNotify(InterfaceManager::_page_transitions_task, PAGE_TRANSITION_ASSOCIATE, eSetBits);
 
     std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
@@ -385,20 +473,8 @@ void InterfaceManager::_room_manager_event_handler(void *arg, esp_event_base_t e
   // This should only happen on first boot of panel, force navigate to default page.
   if (event_id == roommanager_event_t::HOME_PAGE_UPDATED) {
     InterfaceManager::_home_page_status_loaded = true;
-    if (InterfaceManager::_home_page_status_loaded && InterfaceManager::_nspm_config_loaded && LoadingPage::showing() && !InterfaceManager::_has_been_associated_with_manager) {
-      if (!ConfigManager::has_updated) [[likely]] {
-        ESP_LOGI("InterfaceManager", "Home page status and base config loaded. Will go to home page.");
-        RoomManager::go_to_default_room();
-        RoomManager::go_to_first_entities_page(); // Also select the first entities page for default room as this is the first time and no room is currently selected.
-        InterfaceManager::show_default_page();
-
-        // Initialize Screensaver page so that it's ready when it's time to show it.
-        ScreensaverPage::init();
-        InterfaceManager::_has_been_associated_with_manager = true;
-      } else {
-        LoadingPage::set_loading_text("Updated checksums, rebooting.");
-      }
-    }
+    // Never switch pages here, on the RoomManager loop: see _task_page_transitions.
+    xTaskNotify(InterfaceManager::_page_transitions_task, PAGE_TRANSITION_ASSOCIATE, eSetBits);
   }
 }
 
@@ -450,20 +526,15 @@ void InterfaceManager::_mqtt_event_handler(void *arg, esp_event_base_t event_bas
           ESP_LOGE("InterfaceManager", "Failed to get mutable config while trying to process config update data from MQTT topic %s.", topic_string.c_str());
         }
       } else if (topic_string.compare(InterfaceManager::_screen_on_off_command_topic) == 0) {
-        std::shared_ptr<NSPanelConfig> config;
-        if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
-          if (data.compare("0") == 0) {
-            ScreensaverPage::show();
-            MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "0", strlen("0"), true);
-          } else if (data.compare("1") == 0) {
-            Nextion::set_brightness_level(config->screen_dim_level, 1000);
-            InterfaceManager::show_default_page();
-            MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "1", strlen("1"), true);
-          } else {
-            ESP_LOGE("InterfaceManager", "Got request to turn screen on/off but got unknown data: '%s'. Valid data is 0 or 1", data.c_str());
-          }
+        // Never switch pages here, on the MQTT client task: see _task_page_transitions.
+        if (data.compare("0") == 0) {
+          InterfaceManager::_request_page(PageRequest::SCREENSAVER);
+          MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "0", strlen("0"), true);
+        } else if (data.compare("1") == 0) {
+          InterfaceManager::_request_page(PageRequest::SCREEN_ON);
+          MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "1", strlen("1"), true);
         } else {
-          ESP_LOGE("InterfaceManager", "Failed to get config while trying to turn screen on or off.");
+          ESP_LOGE("InterfaceManager", "Got request to turn screen on/off but got unknown data: '%s'. Valid data is 0 or 1", data.c_str());
         }
       } else if (topic_string.compare(InterfaceManager::_screensaver_mode_command_topic) == 0) {
         std::shared_ptr<NSPanelConfig> mutable_config;
