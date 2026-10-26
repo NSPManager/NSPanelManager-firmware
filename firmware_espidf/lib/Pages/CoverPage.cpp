@@ -65,7 +65,13 @@ void CoverPage::update_display(const NSPanelEntityState__Cover *cover, bool page
   }
 
   Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::name_label_name, cover->name, 500);
-  Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::state_label_name, CoverPage::_state_text(cover->state), 250);
+  if (page_just_opened) {
+    // The page fits the screensaver2 slot exactly, so the button labels are set at runtime
+    // rather than stored in the HMI.
+    Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::open_button_name, "Open", 250);
+    Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::stop_button_name, "Stop", 250);
+    Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::close_button_name, "Close", 250);
+  }
 
   // Drop a pending position once the cover reports it, or once the request has had time to be
   // carried out. The panel then follows the controller again.
@@ -78,24 +84,23 @@ void CoverPage::update_display(const NSPanelEntityState__Cover *cover, bool page
     }
   }
 
+  // The page has one state label instead of separate state and position labels, so combine them.
+  const char *state_text = CoverPage::_state_text(cover->state);
+  char combined_text[40];
   if (cover->can_set_position) {
     CoverPage::_set_visible(GUI_COVER_CONTROL_PAGE::position_slider_name, true);
-    CoverPage::_set_visible(GUI_COVER_CONTROL_PAGE::position_label_name, true);
-
     int32_t shown_position = pending >= 0 ? pending : (cover->has_position ? cover->position : 0);
     Nextion::set_component_value(GUI_COVER_CONTROL_PAGE::position_slider_name, shown_position, 250);
-
-    char position_text[8];
     if (pending >= 0 || cover->has_position) {
-      snprintf(position_text, sizeof(position_text), "%d%%", static_cast<int>(shown_position));
+      snprintf(combined_text, sizeof(combined_text), "%s %d%%", state_text, static_cast<int>(shown_position));
     } else {
-      snprintf(position_text, sizeof(position_text), "--");
+      snprintf(combined_text, sizeof(combined_text), "%s", state_text);
     }
-    Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::position_label_name, position_text, 250);
   } else {
     CoverPage::_set_visible(GUI_COVER_CONTROL_PAGE::position_slider_name, false);
-    CoverPage::_set_visible(GUI_COVER_CONTROL_PAGE::position_label_name, false);
+    snprintf(combined_text, sizeof(combined_text), "%s", state_text);
   }
+  Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::state_label_name, combined_text, 250);
 
   CoverPage::_set_visible(GUI_COVER_CONTROL_PAGE::open_button_name, cover->can_open);
   CoverPage::_set_visible(GUI_COVER_CONTROL_PAGE::stop_button_name, cover->can_stop);

@@ -1,25 +1,24 @@
 # Cover page HMI requirements
 
 The firmware supports a dedicated `cover` page for Home Assistant and OpenHAB covers. This file
-describes the page the HMI/TFT must provide. The page is not in the stock TFT yet, so on a stock
-panel the firmware logs a navigation failure and returns to the entities page.
+describes the page in the HMI/TFT. On a stock panel without the page the firmware logs a navigation
+failure and returns to the entities page.
 
 ## Page
 
-- Page name: `cover`
-- Append it after the existing pages. Do not insert it before an existing page, because page IDs
-  are positional in the HMI and TFT.
+- Page name: `cover`, page ID 4.
+- The page reuses the unused `screensaver2` slot in the stock HMI. Keep the slot size and component
+  count unchanged; the HMI build fills the remaining slot bytes without adding runtime controls.
 - Add the page to both the EU and US HMIs, then build every theme TFT and the mirrored variants.
-- Use the usual sub-page back button named `home`, and the usual screensaver timer.
+- Use the usual sub-page back button named `home`.
 
 ## Components
 
 | Name | Type | Purpose |
 | --- | --- | --- |
 | `current` | text | Cover name |
-| `state` | text | Open / Closed / Opening / Closing / Unavailable / Unknown |
-| `position_text` | text | Position, for example `50%` |
-| `position_slider` | slider, 0–100 | Target position, 0 = closed, 100 = open |
+| `state` | text | Open / Closed / Opening / Closing / Unavailable / Unknown, followed by the position when known |
+| `pos` | slider, 0–100 | Target position, 0 = closed, 100 = open |
 | `b_open` | button | Open (label it “Open”) |
 | `b_stop` | button | Stop (label it “Stop”) |
 | `b_close` | button | Close (label it “Close”) |
@@ -36,12 +35,13 @@ order the components differently as long as the names match.
 ## Behaviour
 
 - The open/stop/close buttons are hidden when the cover does not report that capability.
-- The slider and `position_text` are hidden when the cover does not support setting a position.
+- The slider is hidden when the cover does not support setting a position.
 - A position requested from the slider is shown until the cover reports it or until the request
   times out, so the slider does not jump back while the motor starts.
 - Tilt is not part of this version of the page.
 
 ## Building
 
-The HMI page still has to be compiled once in the Nextion Editor per region. After that, use the
-TFT build tooling in the manager repository to produce every theme, and run its build checks.
+The page is already present in both region HMIs and all 12 shipped TFTs in the manager repository.
+If the HMI is edited again, compile the template TFT once in the Nextion Editor per region, swap
+the theme picture records, and validate the 12 TFT checksums/orientations.
