@@ -10,8 +10,7 @@
 void MediaSourcePage::show(std::string media_player_state_topic, bool source_player, const NSPanelEntityState__MediaPlayer__SourceSelection *sources) {
   esp_log_level_set("MediaSourcePage", ConfigManager::log_level);
 
-  InterfaceManager::call_unshow_callback();
-  InterfaceManager::current_page_unshow_callback.set(MediaSourcePage::unshow);
+  std::shared_ptr<PageHandlers> handlers = InterfaceManager::begin_page(MediaSourcePage::unshow);
 
   MediaSourcePage::_media_player_state_topic = media_player_state_topic;
   MediaSourcePage::_showing_source_player = source_player;
@@ -23,12 +22,12 @@ void MediaSourcePage::show(std::string media_player_state_topic, bool source_pla
   // More than eight sources page through items8 instead.
   MediaSourcePage::_page_type = MediaSourcePage::_sources.size() <= 4 ? 4 : 8;
 
-  esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, &MediaSourcePage::_handle_nextion_event, NULL);
+  handlers->add(NEXTION_EVENT, ESP_EVENT_ANY_ID, &MediaSourcePage::_handle_nextion_event);
   MediaSourcePage::_update_display();
 }
 
 void MediaSourcePage::unshow() {
-  esp_event_handler_unregister(NEXTION_EVENT, ESP_EVENT_ANY_ID, &MediaSourcePage::_handle_nextion_event);
+  // The Nextion handler is removed by InterfaceManager (PageHandlers::retire()).
   MediaSourcePage::_page_type = 0;
 }
 
