@@ -335,7 +335,9 @@ esp_err_t RoomManager::go_to_entities_page_id(uint32_t page_id) {
         // first request posts the event when it does, and posting now would show missing or another page's data.
         bool have_state = RoomManager::_entities_page != nullptr && RoomManager::_entities_page->id == page_id;
         if (xSemaphoreGive(RoomManager::_entities_page_mutex) != pdTRUE) [[unlikely]] {
-          ESP_LOGE("RoomManager", "Failed to give back _entities_page_mutex!");
+          ESP_LOGE("RoomManager", "Failed to give back _entities_page_mutex! Will restart panel!");
+          vTaskDelay(pdMS_TO_TICKS(2000)); // Give time for log message to get to manager then reboot.
+          esp_restart();
         }
 
         if (!have_state) {
