@@ -146,6 +146,8 @@ void Nextion::_task_uart_event(void *param) {
   std::vector<char> uart_buffer;
   bool read_nextion_jump_instruction = false;
   std::vector<uint8_t> uart_pattern_buffer(3);
+  // Bytes read but not yet part of a complete frame, kept for the next read.
+  std::vector<char> pending_frames;
   // std::vector<uint8_t> uart_read_buffer(NEXTION_UART_BUFFER_SIZE);
   for (;;) {
     // Wait for UART data, while waiting pause task
@@ -201,11 +203,39 @@ void Nextion::_task_uart_event(void *param) {
         break;
 
       case UART_PATTERN_DET: {
+        bool updating = false;
+        if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+          updating = Nextion::_current_nextion_state == nextion_state_t::INITIALIZING_UPDATE || Nextion::_current_nextion_state == nextion_state_t::UPDATING;
+          xSemaphoreGive(Nextion::_nextion_state_mutex);
+        }
+
+        if (!updating) [[likely]] {
+          // Don't trust the pattern positions. The driver keeps only 8, and when the display sends frames faster
+          // than this task pops them, it drops positions without saying so: the frames then arrive joined, and
+          // once the events outnumber the positions, popping one fails. Read everything buffered instead and
+          // split it into frames here, keeping a partial frame for the next read. Reading also discards the
+          // positions of everything read, so the driver's queue drains.
+          size_t buffered = 0;
+          if (uart_get_buffered_data_len(UART_NUM_2, &buffered) == ESP_OK) [[likely]] {
+            if (buffered > 0) {
+              size_t kept = pending_frames.size();
+              pending_frames.resize(kept + buffered);
+              int read = uart_read_bytes(UART_NUM_2, pending_frames.data() + kept, buffered, pdMS_TO_TICKS(64));
+              pending_frames.resize(kept + (read > 0 ? read : 0));
+            }
+            Nextion::_post_received_frames(pending_frames);
+          } else [[unlikely]] {
+            ESP_LOGE("Nextion", "Failed to get UART data buffered size!");
+          }
+          break;
+        }
+
+        // A GUI update reads its replies on UART_DATA, so take only the bytes up to this pattern.
         size_t uart_buffered_data_size;
         if (uart_get_buffered_data_len(UART_NUM_2, &uart_buffered_data_size) == ESP_OK) {
           int pattern_position = uart_pattern_pop_pos(UART_NUM_2);
           if (pattern_position == -1) [[unlikely]] {
-            ESP_LOGE("Nextion", "Pattern position queue is full. Will clear buffers and queue, all data will be lost!");
+            ESP_LOGE("Nextion", "No pattern position recorded for a pattern event. Will clear buffers and queue, all data will be lost!");
             uart_flush(UART_NUM_2);
           } else {
             uart_buffer.resize(pattern_position);
@@ -225,6 +255,29 @@ void Nextion::_task_uart_event(void *param) {
         break;
       }
     }
+  }
+}
+
+void Nextion::_post_received_frames(std::vector<char> &pending) {
+  // Every message from the display ends in FF FF FF, except that a number reply carries 4 raw bytes, which may
+  // themselves be 0xFF, before its terminator.
+  size_t start = 0;
+  for (size_t i = 0; i + 2 < pending.size(); i++) {
+    if ((uint8_t)pending[start] == NEX_RET_NUMBER_HEAD && i < start + 5) {
+      continue;
+    }
+    if ((uint8_t)pending[i] == 0xFF && (uint8_t)pending[i + 1] == 0xFF && (uint8_t)pending[i + 2] == 0xFF) {
+      Nextion::_post_received_data(std::vector<char>(pending.begin() + start, pending.begin() + i));
+      i += 2;
+      start = i + 1;
+    }
+  }
+  pending.erase(pending.begin(), pending.begin() + start);
+
+  if (pending.size() > NEXTION_UART_BUFFER_SIZE) [[unlikely]] {
+    // No terminator in all that: not a frame, or not one that can be recovered.
+    ESP_LOGW("Nextion", "Dropping %zu bytes from the display that never ended a frame.", pending.size());
+    pending.clear();
   }
 }
 
