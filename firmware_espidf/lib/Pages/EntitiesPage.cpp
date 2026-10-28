@@ -120,6 +120,7 @@ void EntitiesPage::_update_display(const std::shared_ptr<NSPanelRoomEntitiesPage
 
 bool EntitiesPage::_render_is_stale(const std::shared_ptr<NSPanelRoomEntitiesPage> &page) {
   if (EntitiesPage::_currently_showing_page_type == 0) {
+    ESP_LOGD("EntitiesPage", "Page was unshown mid-render.");
     return true; // unshow() ran, we have left the page.
   }
 
@@ -129,14 +130,18 @@ bool EntitiesPage::_render_is_stale(const std::shared_ptr<NSPanelRoomEntitiesPag
   }
   // RoomManager swaps in a new object for every state publish and then posts ROOM_ENTITIES_PAGE_UPDATED, which is
   // queued behind this render on the same loop. A different object means that event will redraw the page anyway.
-  return latest != page;
+  if (latest != page) {
+    ESP_LOGD("EntitiesPage", "Newer entities page data available.");
+    return true;
+  }
+  return false;
 }
 
 void EntitiesPage::_update_displayed_items(const std::shared_ptr<NSPanelRoomEntitiesPage> &page) {
   for (int i = 0; i < page->page_type; i++) {
     // Every render redraws every slot, so abandoning this one part-way leaves nothing behind once the next completes.
     if (EntitiesPage::_render_is_stale(page)) {
-      ESP_LOGD("EntitiesPage", "Newer entities page data available, abandoning render at slot %d.", i);
+      ESP_LOGD("EntitiesPage", "Abandoning render at slot %d.", i);
       return;
     }
 
