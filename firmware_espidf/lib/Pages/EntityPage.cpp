@@ -422,10 +422,8 @@ void EntityPage::_update_display_cover() {
       return;
     }
 
-    InterfaceManager::call_unshow_callback();
-    InterfaceManager::current_page_unshow_callback.set(EntityPage::unshow);
-
-    esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event, NULL);
+    std::shared_ptr<PageHandlers> handlers = InterfaceManager::begin_page(EntityPage::unshow);
+    handlers->add(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event);
     page_just_opened = true;
   }
 
