@@ -92,43 +92,43 @@ public:
   static inline constexpr const char *label_screensaver_minimal_am_pm_name_raw = "screensaver2.curAMPM";
 
   static inline constexpr const char *label_forecast_day_names[] = {
-      "forDay1",
-      "forDay2",
-      "forDay3",
-      "forDay4",
-      "forDay5",
+      "screensaver.forDay1",
+      "screensaver.forDay2",
+      "screensaver.forDay3",
+      "screensaver.forDay4",
+      "screensaver.forDay5",
   };
 
   static inline constexpr const char *label_forecast_day_icon_names[] = {
-      "forIcon1",
-      "forIcon2",
-      "forIcon3",
-      "forIcon4",
-      "forIcon5",
+      "screensaver.forIcon1",
+      "screensaver.forIcon2",
+      "screensaver.forIcon3",
+      "screensaver.forIcon4",
+      "screensaver.forIcon5",
   };
 
   static inline constexpr const char *label_forecast_day_max_min_names[] = {
-      "forMaxmin1",
-      "forMaxmin2",
-      "forMaxmin3",
-      "forMaxmin4",
-      "forMaxmin5",
+      "screensaver.forMaxmin1",
+      "screensaver.forMaxmin2",
+      "screensaver.forMaxmin3",
+      "screensaver.forMaxmin4",
+      "screensaver.forMaxmin5",
   };
 
   static inline constexpr const char *label_forecast_day_rain_names[] = {
-      "forRain1",
-      "forRain2",
-      "forRain3",
-      "forRain4",
-      "forRain5",
+      "screensaver.forRain1",
+      "screensaver.forRain2",
+      "screensaver.forRain3",
+      "screensaver.forRain4",
+      "screensaver.forRain5",
   };
 
   static inline constexpr const char *label_forecast_day_wind_names[] = {
-      "forWind1",
-      "forWind2",
-      "forWind3",
-      "forWind4",
-      "forWind5",
+      "screensaver.forWind1",
+      "screensaver.forWind2",
+      "screensaver.forWind3",
+      "screensaver.forWind4",
+      "screensaver.forWind5",
   };
 };
 
