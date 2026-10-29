@@ -6,9 +6,10 @@ failure and returns to the entities page.
 
 ## Page
 
-- Page name: `cover`, page ID 4.
-- The page reuses the unused `screensaver2` slot in the stock HMI. Keep the slot size and component
-  count unchanged; the HMI build fills the remaining slot bytes without adding runtime controls.
+- Page name: `cover`, on its own page slot in the HMI. It does not share a page with any other
+  feature: `screensaver2` stays the "screensaver without weather" page.
+- Keep the page small and the component count low; the HMI is close to the Nextion page-RAM limit,
+  so the button labels are written by the firmware when the page opens instead of being stored.
 - Add the page to both the EU and US HMIs, then build every theme TFT and the mirrored variants.
 - Use the usual sub-page back button named `home`.
 
