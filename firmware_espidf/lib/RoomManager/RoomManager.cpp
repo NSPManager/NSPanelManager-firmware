@@ -330,11 +330,22 @@ esp_err_t RoomManager::go_to_entities_page_id(uint32_t page_id) {
       ESP_LOGD("RoomManager", "Request to navigate to entities page ID %lu", page_id);
 
       if (new_mqtt_entities_page_status_topic.compare(current_topic) == 0) {
-        ESP_LOGD("RoomManager", "Already on correct topic, send event.");
-        // We are navigating to the same already selected page, simply trigger the event.
+        // We are navigating to the same already selected page, simply trigger the event. Unless its state has not
+        // arrived yet (the page held is still null or from the previous topic): then the subscription made by the
+        // first request posts the event when it does, and posting now would show missing or another page's data.
+        bool have_state = RoomManager::_entities_page != nullptr && RoomManager::_entities_page->id == page_id;
         if (xSemaphoreGive(RoomManager::_entities_page_mutex) != pdTRUE) [[unlikely]] {
-          ESP_LOGE("RoomManager", "Failed to give back _entities_page_mutex!");
+          ESP_LOGE("RoomManager", "Failed to give back _entities_page_mutex! Will restart panel!");
+          vTaskDelay(pdMS_TO_TICKS(2000)); // Give time for log message to get to manager then reboot.
+          esp_restart();
         }
+
+        if (!have_state) {
+          ESP_LOGD("RoomManager", "Already on correct topic, state not received yet. Event will follow when it is.");
+          RoomManager::_current_entities_page_id = page_id;
+          return ESP_OK;
+        }
+        ESP_LOGD("RoomManager", "Already on correct topic, send event.");
 
         vTaskDelay(pdMS_TO_TICKS(25)); // Wait 25ms for semaphore to actually give way and reset as this seems to be the cause of a race-condition otherwise.
         if (esp_event_post_to(RoomManager::_local_event_loop, ROOMMANAGER_EVENT, roommanager_event_t::ROOM_ENTITIES_PAGE_UPDATED, NULL, 0, pdMS_TO_TICKS(250)) != ESP_OK) [[unlikely]] {

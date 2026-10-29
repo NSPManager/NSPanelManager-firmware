@@ -27,9 +27,4 @@ public:
    * Set the second row of text on the loading page
    */
   static void set_secondary_text(std::string text);
-
-private:
-  // Vars
-  // Is the loading page the currently showing page
-  static inline bool _currently_showing = false;
 };
