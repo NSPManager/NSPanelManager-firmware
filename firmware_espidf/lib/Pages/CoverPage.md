@@ -8,6 +8,9 @@ failure and returns to the entities page.
 
 - Page name: `cover`, on its own page slot in the HMI. It does not share a page with any other
   feature: `screensaver2` stays the "screensaver without weather" page.
+- Button labels are written by the firmware as glyphs: U+25B2 (▲) on `b_open`, U+25A0 (■) on
+  `b_stop`, U+25BC (▼) on `b_close`. Generate the button font with the single range
+  U+25A0-U+25BC so all three glyphs are present.
 - Keep the page small and the component count low; the HMI is close to the Nextion page-RAM limit,
   so the button labels are written by the firmware when the page opens instead of being stored.
 - Add the page to both the EU and US HMIs, then build every theme TFT and the mirrored variants.

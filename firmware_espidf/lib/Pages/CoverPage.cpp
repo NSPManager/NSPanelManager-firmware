@@ -66,11 +66,11 @@ void CoverPage::update_display(const NSPanelEntityState__Cover *cover, bool page
 
   Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::name_label_name, cover->name, 500);
   if (page_just_opened) {
-    // The page fits the screensaver2 slot exactly, so the button labels are set at runtime
-    // rather than stored in the HMI.
-    Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::open_button_name, "Open", 250);
-    Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::stop_button_name, "Stop", 250);
-    Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::close_button_name, "Close", 250);
+    // Button labels are set at runtime rather than stored in the HMI, and they are glyphs rather
+    // than words so a single up/stop/down set reads the same for blinds, shutters and awnings.
+    Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::open_button_name, GUI_COVER_CONTROL_PAGE::open_button_text, 250);
+    Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::stop_button_name, GUI_COVER_CONTROL_PAGE::stop_button_text, 250);
+    Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::close_button_name, GUI_COVER_CONTROL_PAGE::close_button_text, 250);
   }
 
   // Drop a pending position once the cover reports it, or once the request has had time to be

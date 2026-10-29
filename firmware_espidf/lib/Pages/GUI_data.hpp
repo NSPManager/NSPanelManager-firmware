@@ -437,6 +437,12 @@ public:
   static inline constexpr const char *state_label_name = "state";
   static inline constexpr const char *position_slider_name = "pos";
   static inline constexpr const char *back_button_name = "home";
+  // Button labels are written by the firmware when the page opens, so the HMI only has to carry
+  // the glyphs below in the button font: one range, U+25A0 to U+25BC, covers all three.
+  static inline constexpr const char *open_button_text = "\u25B2";  // U+25B2 black up-pointing triangle
+  static inline constexpr const char *stop_button_text = "\u25A0";  // U+25A0 black square
+  static inline constexpr const char *close_button_text = "\u25BC"; // U+25BC black down-pointing triangle
+
   static inline constexpr const char *open_button_name = "b_open";
   static inline constexpr const char *stop_button_name = "b_stop";
   static inline constexpr const char *close_button_name = "b_close";
