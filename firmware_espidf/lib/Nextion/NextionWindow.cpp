@@ -4,6 +4,7 @@
 #include <Nextion_constans.hpp>
 #include <driver/uart.h>
 #include <esp_log.h>
+#include <algorithm>
 #include <esp_timer.h>
 #include <freertos/task.h>
 #include <stdio.h>
@@ -43,9 +44,32 @@ void NextionWindow::init() {
   xTaskCreatePinnedToCore(NextionWindow::_task_monitor, "nextion_window", 3072, NULL, 3, NULL, 1);
 }
 
+uint32_t NextionWindow::_wire_ms(uint32_t bytes, uint32_t baud) {
+  // 8N1: ten bits on the wire per byte.
+  return (uint32_t)(((uint64_t)bytes * 10 * 1000 + baud - 1) / baud);
+}
+
+void NextionWindow::_configure_for_baud(uint32_t baud) {
+  if (baud == 0) {
+    baud = MEASURED_BAUD;
+  }
+  uint32_t window = (uint32_t)((uint64_t)MEASURED_WINDOW_BYTES * baud / MEASURED_BAUD);
+  window = std::clamp(window, MIN_WINDOW_BYTES, MAX_WINDOW_BYTES);
+  // Waits and stalls cover a redraw plus the time to drain what is queued ahead of it, with room to spare.
+  uint32_t drain_ms = 2 * NextionWindow::_wire_ms(window, baud);
+  uint32_t stall_ms = std::max(MEASURED_STALL_MS, REDRAW_MS + drain_ms);
+  NextionWindow::_window_bytes = window;
+  NextionWindow::_max_wait_ms = std::max(MEASURED_MAX_WAIT_MS, REDRAW_MS + drain_ms);
+  NextionWindow::_stall_ms = stall_ms;
+  NextionWindow::_probe_timeout_ms = std::max(MEASURED_PROBE_TIMEOUT_MS, stall_ms + NextionWindow::_wire_ms(MARKER_INTERVAL, baud));
+  ESP_LOGI("NextionWindow", "Write window for %lu baud: %lu B, max wait %lu ms, stall %lu ms, probe timeout %lu ms.",
+           baud, window, NextionWindow::_max_wait_ms.load(), stall_ms, NextionWindow::_probe_timeout_ms.load());
+}
+
 void NextionWindow::start_locked() {
   NextionWindow::_accounting = false;
   NextionWindow::_reset_locked();
+  NextionWindow::_configure_for_baud(Nextion::get_link_baud());
 
   uart_write_bytes(UART_NUM_2, "bkcmd=3", strlen("bkcmd=3"));
   uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
@@ -89,10 +113,10 @@ void NextionWindow::wait_for_room() {
     taskENTER_CRITICAL(&NextionWindow::_lock);
     uint32_t inflight = NextionWindow::_inflight_bytes;
     taskEXIT_CRITICAL(&NextionWindow::_lock);
-    if (inflight <= WINDOW_BYTES || !NextionWindow::_accounting) {
+    if (inflight <= NextionWindow::_window_bytes || !NextionWindow::_accounting) {
       break;
     }
-    if (esp_timer_get_time() - start >= (int64_t)MAX_WAIT_MS * 1000) {
+    if (esp_timer_get_time() - start >= (int64_t)NextionWindow::_max_wait_ms * 1000) {
       // Go ahead anyway. The display may still have room; if not, it reports 0x24 and the count resyncs.
       taskENTER_CRITICAL(&NextionWindow::_lock);
       NextionWindow::_stats.wait_timeouts++;
@@ -309,12 +333,12 @@ void NextionWindow::_task_monitor(void *param) {
     int64_t now = esp_timer_get_time();
     taskENTER_CRITICAL(&NextionWindow::_lock);
     bool restart = NextionWindow::_restart_requested;
-    bool probe_timed_out = NextionWindow::_probe_seq >= 0 && now - NextionWindow::_probe_sent_us > (int64_t)PROBE_TIMEOUT_MS * 1000;
+    bool probe_timed_out = NextionWindow::_probe_seq >= 0 && now - NextionWindow::_probe_sent_us > (int64_t)NextionWindow::_probe_timeout_ms * 1000;
     int64_t quiet_since = NextionWindow::_last_reply_us;
     if (NextionWindow::_fifo_count > 0 && NextionWindow::_fifo[NextionWindow::_fifo_head].sent_us > quiet_since) {
       quiet_since = NextionWindow::_fifo[NextionWindow::_fifo_head].sent_us;
     }
-    bool stalled = NextionWindow::_fifo_count > 0 && NextionWindow::_probe_seq < 0 && now - quiet_since > (int64_t)STALL_MS * 1000;
+    bool stalled = NextionWindow::_fifo_count > 0 && NextionWindow::_probe_seq < 0 && now - quiet_since > (int64_t)NextionWindow::_stall_ms * 1000;
     bool resync = NextionWindow::_resync_requested;
     taskEXIT_CRITICAL(&NextionWindow::_lock);
 
@@ -328,7 +352,7 @@ void NextionWindow::_task_monitor(void *param) {
           failed_starts = (probe_timed_out && never_echoed) ? failed_starts + 1 : 0;
         }
         if (failed_starts >= MAX_FAILED_STARTS) {
-          // A display that never echoes would otherwise make every write wait MAX_WAIT_MS.
+          // A display that never echoes would otherwise make every write wait the maximum wait.
           ESP_LOGE("NextionWindow", "Display never echoed a marker after %lu starts. Writes to it will not be paced.", MAX_FAILED_STARTS);
           NextionWindow::stop_locked();
           // Nothing consumes replies any more, so stop the display sending them.
