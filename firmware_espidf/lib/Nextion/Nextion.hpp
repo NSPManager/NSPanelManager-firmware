@@ -171,6 +171,8 @@ public:
 
   /**
    * Restart the Nextion display via GPIO pins (power off and power on. Not a soft reboot via commands!)
+   * The display comes back at its stored default baud rate, so the UART is set back to
+   * ConfigManager::communication_baud_rate as well.
    */
   static void restart();
 
@@ -218,6 +220,26 @@ private:
    *  @brief When waiting for events, this is the function that will handle and trigger the event is done.
    */
   static void _wait_for_event_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
+  /**
+   * @brief Wait for the display to boot after a restart() and connect to it at its default baud rate.
+   */
+  static void _connect_at_default_baud();
+
+  /**
+   * @brief Move the display and the UART to ConfigManager::operating_baud_rate, if one is set.
+   * Uses `baud=`, which lasts only until the display is next power-cycled, never `bauds=`, which
+   * would change the display's stored default. If the display does not answer at the new rate,
+   * it is power-cycled back to its default and the UART follows.
+   * @return ESP_OK if running at the operating baud rate or none is set, otherwise ESP_FAIL.
+   */
+  static esp_err_t _switch_to_operating_baud();
+
+  /**
+   * @brief Drop anything received so far, including queued pattern positions that would no longer
+   * match the bytes in the buffer.
+   */
+  static void _flush_uart_input();
 
   /**
    * @brief Will attempt to write data onto serial.
