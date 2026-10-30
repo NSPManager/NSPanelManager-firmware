@@ -191,5 +191,8 @@ extern "C" void app_main() {
   // We have been accepted, update internal stored checksum of installed software if needed
   UpdateManager::update_internal_firmware_checksum();
 
+  // Nextion::init() logged how the display link came up before panel logs reached MQTT; repeat it now.
+  Nextion::log_link_baud();
+
   ESP_LOGI("Main", "Task setup OK. Exiting main.");
 }

@@ -139,6 +139,10 @@ esp_err_t ConfigManager::load_config() {
     ConfigManager::communication_baud_rate = config_data["comms_baud"].get<int32_t>();
   }
 
+  if (config_data.contains("operating_baud") && config_data["operating_baud"].is_number_integer()) {
+    ConfigManager::operating_baud_rate = config_data["operating_baud"].get<int32_t>();
+  }
+
   // Handle thermostat modes
   if (config_data.contains("relay1_is_thermostat_heat_mode") && config_data["relay1_is_thermostat_heat_mode"].is_boolean()) {
     ConfigManager::relay1_thermostat_heat_mode = config_data["relay1_is_thermostat_heat_mode"].get<bool>();
@@ -203,6 +207,7 @@ void ConfigManager::create_default() {
   ConfigManager::use_latest_nextion_upload_protocol = true;
   ConfigManager::nextion_upload_baudrate = 115200;
   ConfigManager::communication_baud_rate = 115200;
+  ConfigManager::operating_baud_rate = 0;
   ConfigManager::log_level = ESP_LOG_WARN;
 }
 
@@ -243,6 +248,7 @@ esp_err_t ConfigManager::save_config() {
 
   json["upload_baud"] = ConfigManager::nextion_upload_baudrate;
   json["comms_baud"] = ConfigManager::communication_baud_rate;
+  json["operating_baud"] = ConfigManager::operating_baud_rate;
 
   std::string json_string = json.dump();
   size_t bytes_written = fwrite(json_string.c_str(), sizeof(char), json_string.length(), f);

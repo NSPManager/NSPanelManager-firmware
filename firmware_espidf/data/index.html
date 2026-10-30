@@ -183,6 +183,8 @@
         }
         document.getElementById("upload_baud_rate").value = data.nextion_upload_baudrate;
         document.getElementById("communication_baud_rate").value = data.communication_baud_rate;
+        document.getElementById("operating_baud_rate").value = data.operating_baud_rate;
+        document.getElementById("nextion_link_baud").innerText = data.nextion_link_baud;
         document.getElementById("block_access_wait_for_data_modal").classList.add("hidden");
       }).catch(error => {
         alert('There was a problem with the fetch operation:', error);
@@ -658,7 +660,7 @@
         </div>
 
         <div class="bg-gray-50 rounded-md p-4 mt-4">
-          <h5 class="text-xl">GUI upload</h5>
+          <h5 class="text-xl">GUI Settings</h5>
 
 
           <div class="mt-4">
@@ -737,8 +739,7 @@
 
           <div class="mt-4">
             <label for="communication_baud_rate" class="block mb-2 text-sm font-medium text-gray-900">Communication baud
-              rate
-              rate</label>
+              rate (display default)</label>
             <div class="flex">
               <span
                 class="inline-flex items-center px-3 text-sm text-gray-900 bg-gray-200 border rounded-e-0 border-gray-300 rounded-s-md   ">
@@ -788,6 +789,31 @@
                 allow the ESP32 firmware to update the GUI. When the GUI update is complete you need to change this back
                 to 115200 manually in order to get the panel working correctly again.
               </p>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <label for="operating_baud_rate" class="block mb-2 text-sm font-medium text-gray-900">Operating baud
+              rate (experimental)</label>
+            <div class="flex">
+              <select name="operating_baud_rate" id="operating_baud_rate" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-md focus:ring-blue-500
+                focus:border-blue-500 block w-full p-2.5">
+                <option value="0">Off (stay at the communication baud rate)</option>
+                <option value="230400">230400</option>
+                <option value="250000">250000</option>
+                <option value="256000">256000</option>
+                <option value="512000">512000</option>
+                <option value="921600">921600</option>
+              </select>
+            </div>
+
+            <div class="bg-blue-300 rounded-md p-4 is-warning mt-2">
+              <div class="text-lg font-medium">Info.</div>
+              After connecting at the communication baud rate, the panel moves the display to this rate for as long
+              as it stays powered on. The display's stored default is never changed: it returns to it whenever it is
+              restarted. If the display does not answer at the new rate, the panel restarts the display and carries
+              on at the communication baud rate.
+              <p class="mt-2">The display is running at <span id="nextion_link_baud" class="font-bold">?</span> baud.</p>
             </div>
           </div>
         </div>
