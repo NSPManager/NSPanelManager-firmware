@@ -1,0 +1,88 @@
+name: Build firmware
+
+# Builds the firmware and LittleFS image for both boards and keeps the images
+# as a downloadable artifact on the run: firmware.bin and littlefs.bin for an
+# OTA update through the manager, plus the bootloader, partition table and OTA
+# data for a full serial flash, and firmware.elf for decoding backtraces.
+
+on:
+  push:
+    paths:
+      - "firmware_espidf/**"
+      - ".github/workflows/build.yml"
+  pull_request:
+    paths:
+      - "firmware_espidf/**"
+      - ".github/workflows/build.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # One job per board, each in its own checkout: dependencies.lock records a
+        # single target, and a build for the other target rewrites it.
+        environment: [original_sonoff, custom_pcb]
+    defaults:
+      run:
+        working-directory: firmware_espidf
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache PlatformIO toolchains
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: build-${{ matrix.environment }}-${{ runner.os }}-${{ hashFiles('firmware_espidf/platformio.ini') }}
+
+      - name: Install PlatformIO
+        run: pip install platformio==6.1.19
+
+      - name: Build firmware
+        run: pio run --environment ${{ matrix.environment }}
+
+      - name: Build LittleFS image
+        run: pio run --target buildfs --environment ${{ matrix.environment }}
+
+      - name: Collect images
+        id: collect
+        run: |
+          build=.pio/build/${{ matrix.environment }}
+          dist=${{ github.workspace }}/dist
+          mkdir -p "$dist"
+          cp "$build"/firmware.bin "$build"/littlefs.bin "$build"/firmware.elf \
+             "$build"/bootloader.bin "$build"/partitions.bin "$build"/ota_data_initial.bin "$dist"/
+          # Panels report builds by md5 only, so record them next to the images.
+          (cd "$dist" && md5sum *.bin > md5sums.txt)
+          echo "short_sha=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### ${{ matrix.environment }}"
+            echo
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              # A pull_request run builds GitHub's merge of the PR into its base, not the PR head.
+              echo "Built from \`${GITHUB_SHA::8}\`, the merge of PR #${{ github.event.number }} into \`${{ github.base_ref }}\`."
+            else
+              echo "Built from \`${GITHUB_SHA::8}\`."
+            fi
+            echo
+            echo "| Image | Size | MD5 |"
+            echo "|---|---:|---|"
+            for f in firmware.bin littlefs.bin; do
+              echo "| \`$f\` | $(stat -c %s "$dist/$f") | \`$(md5sum "$dist/$f" | cut -d' ' -f1)\` |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload images
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.environment }}-${{ steps.collect.outputs.short_sha }}
+          path: dist/
+          if-no-files-found: error
