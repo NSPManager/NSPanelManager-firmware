@@ -1,6 +1,7 @@
 #include <ConfigManager.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
+#include <Nextion.hpp>
 #include <NSPM_version.hpp>
 #include <WebManager.hpp>
 #include <WiFiManager.hpp>
@@ -49,6 +50,7 @@ esp_err_t WebManager::_handle_uri_config_data(httpd_req_t *req) {
   json["nextion_upload_baudrate"] = ConfigManager::nextion_upload_baudrate;
   json["communication_baud_rate"] = ConfigManager::communication_baud_rate;
   json["operating_baud_rate"] = ConfigManager::operating_baud_rate;
+  json["nextion_link_baud"] = Nextion::get_link_baud();
 
   if (httpd_resp_set_type(req, "application/json") != ESP_OK) {
     ESP_LOGE("Web", "Failed to set content type for response!");

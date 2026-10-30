@@ -154,6 +154,7 @@ esp_err_t Nextion::_switch_to_operating_baud() {
   const uint32_t target_baud = ConfigManager::operating_baud_rate;
   if (target_baud == 0 || target_baud == default_baud) {
     ESP_LOGI("Nextion", "No operating baud rate set, staying at %lu baud.", default_baud);
+    Nextion::_link_baud_result = link_baud_result_t::NOT_REQUESTED;
     return ESP_OK;
   }
 
@@ -161,6 +162,7 @@ esp_err_t Nextion::_switch_to_operating_baud() {
   static constexpr uint32_t supported_bauds[] = {2400, 4800, 9600, 19200, 31250, 38400, 57600, 115200, 230400, 250000, 256000, 512000, 921600};
   if (std::find(std::begin(supported_bauds), std::end(supported_bauds), target_baud) == std::end(supported_bauds)) {
     ESP_LOGE("Nextion", "Operating baud rate %lu is not one the display supports, staying at %lu baud.", target_baud, default_baud);
+    Nextion::_link_baud_result = link_baud_result_t::UNSUPPORTED;
     return ESP_FAIL;
   }
 
@@ -172,6 +174,7 @@ esp_err_t Nextion::_switch_to_operating_baud() {
   uart_wait_tx_done(UART_NUM_2, pdMS_TO_TICKS(500)); // The command must leave at the old rate.
   vTaskDelay(pdMS_TO_TICKS(100));                    // Give the display time to switch.
   uart_set_baudrate(UART_NUM_2, target_baud);
+  Nextion::_link_baud = target_baud;
   vTaskDelay(pdMS_TO_TICKS(20));
   Nextion::_flush_uart_input(); // Drop anything that arrived garbled during the switch.
 
@@ -192,6 +195,7 @@ esp_err_t Nextion::_switch_to_operating_baud() {
 
   if (passed == checks) {
     ESP_LOGI("Nextion", "Display answered all %d checks, running at %lu baud.", checks, target_baud);
+    Nextion::_link_baud_result = link_baud_result_t::SWITCHED;
     return ESP_OK;
   }
 
@@ -200,7 +204,30 @@ esp_err_t Nextion::_switch_to_operating_baud() {
   ESP_LOGW("Nextion", "Display did not answer %d checks in a row at %lu baud. Power-cycling it back to %lu baud.", checks, target_baud, default_baud);
   Nextion::restart();
   Nextion::_connect_at_default_baud();
+  Nextion::_link_baud_result = link_baud_result_t::FELL_BACK;
   return ESP_FAIL;
+}
+
+uint32_t Nextion::get_link_baud() {
+  return Nextion::_link_baud;
+}
+
+void Nextion::log_link_baud() {
+  uint32_t link_baud = Nextion::_link_baud;
+  switch (Nextion::_link_baud_result.load()) {
+  case link_baud_result_t::NOT_REQUESTED:
+    ESP_LOGI("Nextion", "Display link at %lu baud, no operating baud rate set.", link_baud);
+    break;
+  case link_baud_result_t::SWITCHED:
+    ESP_LOGI("Nextion", "Display link at %lu baud, the operating baud rate (default %lu).", link_baud, ConfigManager::communication_baud_rate);
+    break;
+  case link_baud_result_t::FELL_BACK:
+    ESP_LOGW("Nextion", "Display link at %lu baud: it did not answer at the operating baud rate %lu, so it was power-cycled back to its default.", link_baud, ConfigManager::operating_baud_rate);
+    break;
+  case link_baud_result_t::UNSUPPORTED:
+    ESP_LOGE("Nextion", "Display link at %lu baud: the operating baud rate %lu is not one the display supports.", link_baud, ConfigManager::operating_baud_rate);
+    break;
+  }
 }
 
 void Nextion::_task_uart_event(void *param) {
@@ -960,6 +987,7 @@ void Nextion::restart() {
   if (uart_set_baudrate(UART_NUM_2, ConfigManager::communication_baud_rate) != ESP_OK) {
     ESP_LOGE("Nextion", "Failed to set UART back to %lu baud while restarting the display.", ConfigManager::communication_baud_rate);
   }
+  Nextion::_link_baud = ConfigManager::communication_baud_rate;
   gpio_set_level(NEXTION_ON_OFF_GPIO, 0); // Turn on power to the display
 }
 
@@ -1013,6 +1041,7 @@ esp_err_t Nextion::start_update(uint32_t upload_baudrate, bool use_new_upload_pr
     if (uart_set_baudrate(UART_NUM_2, upload_baudrate) != ESP_OK) {
       ESP_LOGE("Nextion", "Failed to set UART baudrate %lu when initializing Nextion update!", upload_baudrate);
     }
+    Nextion::_link_baud = upload_baudrate;
 
     xSemaphoreGive(Nextion::_uart_write_mutex);
     return ESP_OK;

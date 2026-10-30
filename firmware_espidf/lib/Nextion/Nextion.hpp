@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <cstdint>
 #include <driver/gpio.h>
 #include <driver/uart.h>
@@ -170,6 +171,18 @@ public:
   static nextion_state_t get_current_state();
 
   /**
+   * The baud rate the display and the UART are running at right now: the operating baud rate if the
+   * switch to it succeeded, otherwise the communication baud rate. Not the configured operating rate.
+   */
+  static uint32_t get_link_baud();
+
+  /**
+   * Log the link baud rate and how it was reached. Nextion::init() runs before panel logs reach MQTT,
+   * so its own lines are usually lost; call this once they do.
+   */
+  static void log_link_baud();
+
+  /**
    * Restart the Nextion display via GPIO pins (power off and power on. Not a soft reboot via commands!)
    * The display comes back at its stored default baud rate, so the UART is set back to
    * ConfigManager::communication_baud_rate as well.
@@ -303,6 +316,17 @@ private:
 
   // When starting the Nextion display, did we receive the "NSPM" flag indicating that our NSPanel Manager firmware is running on the Nextion display?
   static inline bool _has_received_nspm_flag;
+
+  // How the link reached _link_baud.
+  enum class link_baud_result_t : uint8_t {
+    NOT_REQUESTED, // No operating baud rate set.
+    SWITCHED,      // Running at the operating baud rate.
+    FELL_BACK,     // The display did not answer at the operating baud rate; back at the default.
+    UNSUPPORTED,   // The operating baud rate is not one the display accepts.
+  };
+
+  static inline std::atomic<uint32_t> _link_baud = 0;
+  static inline std::atomic<link_baud_result_t> _link_baud_result = link_baud_result_t::NOT_REQUESTED;
 
   // Buffer overflow protection, used in nextion_write_end
   static inline SemaphoreHandle_t _cmd_finished_bin_sem;

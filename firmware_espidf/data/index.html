@@ -184,6 +184,7 @@
         document.getElementById("upload_baud_rate").value = data.nextion_upload_baudrate;
         document.getElementById("communication_baud_rate").value = data.communication_baud_rate;
         document.getElementById("operating_baud_rate").value = data.operating_baud_rate;
+        document.getElementById("nextion_link_baud").innerText = data.nextion_link_baud;
         document.getElementById("block_access_wait_for_data_modal").classList.add("hidden");
       }).catch(error => {
         alert('There was a problem with the fetch operation:', error);
@@ -812,6 +813,7 @@
               as it stays powered on. The display's stored default is never changed: it returns to it whenever it is
               restarted. If the display does not answer at the new rate, the panel restarts the display and carries
               on at the communication baud rate.
+              <p class="mt-2">The display is running at <span id="nextion_link_baud" class="font-bold">?</span> baud.</p>
             </div>
           </div>
         </div>
