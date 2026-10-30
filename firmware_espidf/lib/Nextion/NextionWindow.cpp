@@ -342,11 +342,15 @@ void NextionWindow::_task_monitor(void *param) {
     }
     bool stalled = NextionWindow::_fifo_count > 0 && NextionWindow::_probe_seq < 0 && now - quiet_since > (int64_t)NextionWindow::_stall_ms * 1000;
     bool resync = NextionWindow::_resync_requested;
+    // No marker echoed since the window last started.
+    bool settling = NextionWindow::_settling;
     taskEXIT_CRITICAL(&NextionWindow::_lock);
 
-    if (probe_timed_out && Nextion::get_link_baud() != ConfigManager::communication_baud_rate) {
+    if (probe_timed_out && settling && Nextion::get_link_baud() != ConfigManager::communication_baud_rate) {
       // Above the default rate, a display that reset by itself comes back at its default and its
-      // restart frames arrive garbled, so a silent display is the only sign. Bring the link up again.
+      // restart frames arrive garbled, so a silent display is the only sign. A marker lost in an
+      // overflow looks the same at first, so this comes only after starting over at this rate
+      // has also gone unanswered (settling): then bring the link up again.
       Nextion::recover_link();
       failed_starts = 0;
       NextionWindow::_post_display_restarted();
