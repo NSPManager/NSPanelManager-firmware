@@ -1,7 +1,9 @@
 #include <ConfigManager.hpp>
 #include <Nextion.hpp>
+#include <NextionWindow.hpp>
 #include <Nextion_constans.hpp>
 #include <Nextion_event.hpp>
+#include <algorithm>
 #include <esp_event.h>
 #include <esp_log.h>
 #include <memory.h>
@@ -21,9 +23,8 @@ esp_err_t Nextion::init() {
   Nextion::_uart_write_mutex = xSemaphoreCreateMutex();
   Nextion::_event_wait_mutex = xSemaphoreCreateMutex();
   Nextion::_event_wait_integer_mutex = xSemaphoreCreateMutex();
-  Nextion::_cmd_finished_bin_sem = xSemaphoreCreateBinary();
+  Nextion::_get_integer_mutex = xSemaphoreCreateMutex();
 
-  Nextion::_nextion_buffer_out = 0;
   Nextion::_current_nextion_state = nextion_state_t::INITIALIZING;
 
   // Start custom event loop that handles messages from UART -> data handler
@@ -102,7 +103,25 @@ esp_err_t Nextion::init() {
   ESP_LOGD("Nextion", "Turning Nextion display off and on again.");
   gpio_set_direction(NEXTION_ON_OFF_GPIO, GPIO_MODE_OUTPUT);
   Nextion::restart();
+  Nextion::_connect_at_default_baud();
+  Nextion::_switch_to_operating_baud();
 
+  Nextion::_current_nextion_state = nextion_state_t::RUNNING;
+
+  // From here on the display answers every command, and writers share its input buffer through the window.
+  NextionWindow::init();
+  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+    NextionWindow::start_locked();
+    xSemaphoreGive(Nextion::_uart_write_mutex);
+  } else {
+    ESP_LOGE("Nextion", "Failed to take _uart_write_mutex to start the write window. Writes to the display will not be paced.");
+  }
+  ESP_LOGI("Nextion", "Nextion init complete.");
+
+  return ESP_OK;
+}
+
+void Nextion::_connect_at_default_baud() {
   // Wait for 'NSPM' flag, if we receive it.
   if (Nextion::_wait_for_event(NEXTION_EVENT, nextion_event_t::RECEIVED_NSPM_FLAG, 2500, 250) == ESP_OK) {
     ESP_LOGI("Nextion", "Received 'NSPM'-flag. You are running the NSPanel Manager GUI/TFT.");
@@ -114,7 +133,7 @@ esp_err_t Nextion::init() {
   ESP_LOGI("Nextion", "Trying to connect to Nextion display.");
   Nextion::_write_command("DRAKJHSUYDGBNCJHGJKSHBDN"); // Send a bunch of jibberish to "reset" the Nextion display from any state it is in currently.
   vTaskDelay(pdMS_TO_TICKS(250));                      // Wait for panel to process
-  uart_flush(UART_NUM_2);                              // Clear UART buffers
+  Nextion::_flush_uart_input();                        // Clear UART buffers
 
   ESP_LOGD("Nextion", "Sending connect command to panel.");
   if (Nextion::_write_command("connect") != ESP_OK) {
@@ -128,15 +147,130 @@ esp_err_t Nextion::init() {
   }
 
   // Set initial values in Nextion display:
-  Nextion::_write_command("bkcmd=0");
   Nextion::_write_command("sleep=0");
-  Nextion::_write_command("bkcmd=0");
   Nextion::_write_command("sleep=0");
+}
 
-  Nextion::_current_nextion_state = nextion_state_t::RUNNING;
-  ESP_LOGI("Nextion", "Nextion init complete.");
+void Nextion::_flush_uart_input() {
+  uart_flush_input(UART_NUM_2);
+  uart_pattern_queue_reset(UART_NUM_2, 8);
+}
 
-  return ESP_OK;
+esp_err_t Nextion::_switch_to_operating_baud() {
+  const uint32_t default_baud = ConfigManager::communication_baud_rate;
+  const uint32_t target_baud = ConfigManager::operating_baud_rate;
+  if (target_baud == 0 || target_baud == default_baud) {
+    ESP_LOGI("Nextion", "No operating baud rate set, staying at %lu baud.", default_baud);
+    Nextion::_link_baud_result = link_baud_result_t::NOT_REQUESTED;
+    return ESP_OK;
+  }
+
+  // Rates the Nextion instruction set accepts for baud=.
+  static constexpr uint32_t supported_bauds[] = {2400, 4800, 9600, 19200, 31250, 38400, 57600, 115200, 230400, 250000, 256000, 512000, 921600};
+  if (std::find(std::begin(supported_bauds), std::end(supported_bauds), target_baud) == std::end(supported_bauds)) {
+    ESP_LOGE("Nextion", "Operating baud rate %lu is not one the display supports, staying at %lu baud.", target_baud, default_baud);
+    Nextion::_link_baud_result = link_baud_result_t::UNSUPPORTED;
+    return ESP_FAIL;
+  }
+
+  ESP_LOGI("Nextion", "Switching display from %lu to %lu baud until it is next power-cycled.", default_baud, target_baud);
+  // baud=, never bauds=: bauds= is saved in the display and would change its default.
+  std::string baud_command = "baud=";
+  baud_command.append(std::to_string(target_baud));
+  Nextion::_write_command(baud_command.c_str());
+  uart_wait_tx_done(UART_NUM_2, pdMS_TO_TICKS(500)); // The command must leave at the old rate.
+  vTaskDelay(pdMS_TO_TICKS(100));                    // Give the display time to switch.
+  uart_set_baudrate(UART_NUM_2, target_baud);
+  Nextion::_link_baud = target_baud;
+  vTaskDelay(pdMS_TO_TICKS(20));
+  Nextion::_flush_uart_input(); // Drop anything that arrived garbled during the switch.
+
+  // A single comok could be luck on a marginal line, so ask for several in a row. Allow a couple of
+  // spare attempts: stray bytes from the switch can sit in the UART task's partial frame and garble
+  // the first reply, but they leave with that frame.
+  static constexpr int checks = 3;
+  static constexpr int max_attempts = checks + 2;
+  int passed = 0;
+  for (int attempt = 0; attempt < max_attempts && passed < checks; attempt++) {
+    Nextion::_write_command("connect");
+    if (Nextion::_wait_for_event(NEXTION_EVENT, nextion_event_t::CONNECTED, 500, 32) == ESP_OK) {
+      passed++;
+    } else {
+      passed = 0;
+    }
+  }
+
+  if (passed == checks) {
+    ESP_LOGI("Nextion", "Display answered all %d checks, running at %lu baud.", checks, target_baud);
+    Nextion::_link_baud_result = link_baud_result_t::SWITCHED;
+    return ESP_OK;
+  }
+
+  // Do not try to send baud= back over a link that may not work. Power-cycling the display
+  // returns it to its stored default for certain, and restart() moves the UART back with it.
+  ESP_LOGW("Nextion", "Display did not answer %d checks in a row at %lu baud. Power-cycling it back to %lu baud.", checks, target_baud, default_baud);
+  Nextion::restart();
+  Nextion::_connect_at_default_baud();
+  Nextion::_link_baud_result = link_baud_result_t::FELL_BACK;
+  return ESP_FAIL;
+}
+
+void Nextion::recover_link() {
+  static bool recovered_before = false;
+  ESP_LOGW("Nextion", "Display stopped answering at %lu baud. Power-cycling it and connecting again.", Nextion::_link_baud.load());
+
+  // Turn writers away while the display is down; they check the state before writing.
+  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+    Nextion::_current_nextion_state = nextion_state_t::INITIALIZING;
+    xSemaphoreGive(Nextion::_nextion_state_mutex);
+  }
+  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+    NextionWindow::stop_locked();
+    xSemaphoreGive(Nextion::_uart_write_mutex);
+  }
+
+  Nextion::restart();
+  Nextion::_connect_at_default_baud();
+  if (!recovered_before) {
+    Nextion::_switch_to_operating_baud();
+  } else {
+    ESP_LOGW("Nextion", "Display already needed recovering once since boot, staying at %lu baud.", Nextion::_link_baud.load());
+  }
+  recovered_before = true;
+
+  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+    Nextion::_current_nextion_state = nextion_state_t::RUNNING;
+    xSemaphoreGive(Nextion::_nextion_state_mutex);
+  }
+  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+    NextionWindow::start_locked();
+    xSemaphoreGive(Nextion::_uart_write_mutex);
+  } else {
+    ESP_LOGE("Nextion", "Failed to take _uart_write_mutex to restart the write window. Writes to the display will not be paced.");
+  }
+  Nextion::log_link_baud();
+}
+
+uint32_t Nextion::get_link_baud() {
+  return Nextion::_link_baud;
+}
+
+void Nextion::log_link_baud() {
+  uint32_t link_baud = Nextion::_link_baud;
+  switch (Nextion::_link_baud_result.load()) {
+  case link_baud_result_t::NOT_REQUESTED:
+    ESP_LOGI("Nextion", "Display link at %lu baud, no operating baud rate set.", link_baud);
+    break;
+  case link_baud_result_t::SWITCHED:
+    ESP_LOGI("Nextion", "Display link at %lu baud, the operating baud rate (default %lu).", link_baud, ConfigManager::communication_baud_rate);
+    break;
+  case link_baud_result_t::FELL_BACK:
+    ESP_LOGW("Nextion", "Display link at %lu baud: it did not answer at the operating baud rate %lu, so it was power-cycled back to its default.", link_baud, ConfigManager::operating_baud_rate);
+    break;
+  case link_baud_result_t::UNSUPPORTED:
+    ESP_LOGE("Nextion", "Display link at %lu baud: the operating baud rate %lu is not one the display supports.", link_baud, ConfigManager::operating_baud_rate);
+    break;
+  }
 }
 
 void Nextion::_task_uart_event(void *param) {
@@ -267,7 +401,9 @@ void Nextion::_post_received_frames(std::vector<char> &pending) {
       continue;
     }
     if ((uint8_t)pending[i] == 0xFF && (uint8_t)pending[i + 1] == 0xFF && (uint8_t)pending[i + 2] == 0xFF) {
-      Nextion::_post_received_data(std::vector<char>(pending.begin() + start, pending.begin() + i));
+      if (!NextionWindow::on_frame((const uint8_t *)pending.data() + start, i - start)) {
+        Nextion::_post_received_data(std::vector<char>(pending.begin() + start, pending.begin() + i));
+      }
       i += 2;
       start = i + 1;
     }
@@ -378,7 +514,7 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
   } else if (data->data()[0] == NEX_OUT_SLEEP) {
     esp_event_post(NEXTION_EVENT, nextion_event_t::SLEEP_EVENT, NULL, 0, pdMS_TO_TICKS(5000));
   } else if (data->data()[0] == NEX_RET_CMD_FINISHED) {
-    xSemaphoreGive(Nextion::_cmd_finished_bin_sem);
+    // A reply to a command. NextionWindow consumes these while it is running; nothing else waits for one.
   } else if (data->data()[0] == NEX_OUT_WAKE) {
     esp_event_post(NEXTION_EVENT, nextion_event_t::WAKE_EVENT, NULL, 0, pdMS_TO_TICKS(5000));
   } else if (data->size() >= strlen("NSPM") && strncmp(data->data() + data->size() - strlen("NSPM"), "NSPM", strlen("NSPM")) == 0) { // TODO: Compare last bytes of message instead of first as there may be garbage data output from the panel before sending NSPM-flag
@@ -453,319 +589,95 @@ void Nextion::_wait_for_event_event_handler(void *arg, esp_event_base_t event_ba
   }
 }
 
-esp_err_t Nextion::write_command(const char *data) {
+esp_err_t Nextion::_write_command(const char *data) {
   if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(32)) == pdTRUE) {
-    int len = Nextion::nextion_write(data, strlen(data));
-    Nextion::nextion_write_end();
+    Nextion::_write_locked(data);
     xSemaphoreGive(Nextion::_uart_write_mutex);
-    if (len == strlen(data)) {
-      return ESP_OK;
-    }
+    return ESP_OK;
   }
   return ESP_ERR_NOT_FINISHED;
 }
 
-esp_err_t Nextion::_write_command(const char *data) {
-  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(32)) == pdTRUE) {
-    int len = uart_write_bytes(UART_NUM_2, data, strlen(data));
-    // Send command finished sequence
-    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
-    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
+void Nextion::_write_locked(const std::string &command) {
+  NextionWindow::write_locked(command);
+}
 
-    // Give back semaphore
-    xSemaphoreGive(Nextion::_uart_write_mutex);
-    if (len == strlen(data)) {
-      return ESP_OK;
+esp_err_t Nextion::_send_command(const std::string &command, uint16_t mutex_timeout) {
+  // Verify that the Nextion state is "running" as we don't want to send data that may interrupt other processes such as updating the GUI
+  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
+    if (Nextion::_current_nextion_state != nextion_state_t::RUNNING) {
+      xSemaphoreGive(Nextion::_nextion_state_mutex);
+      return ESP_ERR_TIMEOUT;
     }
+    xSemaphoreGive(Nextion::_nextion_state_mutex);
   }
-  return ESP_ERR_NOT_FINISHED;
+
+  // Wait before taking the mutex, so other writers can still queue behind it meanwhile.
+  NextionWindow::wait_for_room();
+  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
+    Nextion::_write_locked(command);
+    xSemaphoreGive(Nextion::_uart_write_mutex);
+    return ESP_OK;
+  }
+  return ESP_ERR_TIMEOUT;
 }
 
 esp_err_t Nextion::go_to_page(const char *page, uint16_t mutex_timeout) {
-  // Verify that the Nextion state is "running" as we don't want to send data that may interrupt other processes such as updating the GUI
-  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    if (Nextion::_current_nextion_state != nextion_state_t::RUNNING) {
-      xSemaphoreGive(Nextion::_nextion_state_mutex);
-      return ESP_ERR_TIMEOUT;
-    }
-    xSemaphoreGive(Nextion::_nextion_state_mutex);
-  }
-
-  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    uart_write_bytes(UART_NUM_2, "page ", strlen("page "));
-    uart_write_bytes(UART_NUM_2, page, strlen(page));
-
-    // Send command finished sequence
-    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
-    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
-
-    xSemaphoreGive(Nextion::_uart_write_mutex);
-    return ESP_OK;
-  }
-  return ESP_ERR_TIMEOUT;
+  return Nextion::_send_command(std::string("page ") + page, mutex_timeout);
 }
 
 esp_err_t Nextion::send_raw_command(const char *command, uint16_t mutex_timeout) {
-  // Verify that the Nextion state is "running" as we don't want to send data that may interrupt other processes such as updating the GUI
-  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    if (Nextion::_current_nextion_state != nextion_state_t::RUNNING) {
-      xSemaphoreGive(Nextion::_nextion_state_mutex);
-      return ESP_ERR_TIMEOUT;
-    }
-    xSemaphoreGive(Nextion::_nextion_state_mutex);
-  }
-
-  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    uart_write_bytes(UART_NUM_2, command, strlen(command));
-
-    // Send command finished sequence
-    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
-    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
-
-    xSemaphoreGive(Nextion::_uart_write_mutex);
-    return ESP_OK;
-  }
-  return ESP_ERR_TIMEOUT;
+  return Nextion::_send_command(command, mutex_timeout);
 }
 
 esp_err_t Nextion::fill(const uint32_t x, const uint32_t y, const uint32_t width, const uint32_t height, const uint16_t color, uint16_t mutex_timeout) {
-  // Verify that the Nextion state is "running" as we don't want to send data that may interrupt other processes such as updating the GUI
-  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    if (Nextion::_current_nextion_state != nextion_state_t::RUNNING) {
-      xSemaphoreGive(Nextion::_nextion_state_mutex);
-      return ESP_ERR_TIMEOUT;
-    }
-    xSemaphoreGive(Nextion::_nextion_state_mutex);
-  }
-
-  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    uart_write_bytes(UART_NUM_2, "fill ", strlen("fill "));
-    uart_write_bytes(UART_NUM_2, std::to_string(x).c_str(), std::to_string(x).length());
-    uart_write_bytes(UART_NUM_2, ",", strlen(","));
-    uart_write_bytes(UART_NUM_2, std::to_string(y).c_str(), std::to_string(y).length());
-    uart_write_bytes(UART_NUM_2, ",", strlen(","));
-    uart_write_bytes(UART_NUM_2, std::to_string(width).c_str(), std::to_string(width).length());
-    uart_write_bytes(UART_NUM_2, ",", strlen(","));
-    uart_write_bytes(UART_NUM_2, std::to_string(height).c_str(), std::to_string(height).length());
-    uart_write_bytes(UART_NUM_2, ",", strlen(","));
-    uart_write_bytes(UART_NUM_2, std::to_string(color).c_str(), std::to_string(color).length());
-
-    // Send command finished sequence
-    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
-    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
-
-    xSemaphoreGive(Nextion::_uart_write_mutex);
-    return ESP_OK;
-  }
-  return ESP_ERR_TIMEOUT;
+  std::string command = "fill ";
+  command.append(std::to_string(x));
+  command.append(",");
+  command.append(std::to_string(y));
+  command.append(",");
+  command.append(std::to_string(width));
+  command.append(",");
+  command.append(std::to_string(height));
+  command.append(",");
+  command.append(std::to_string(color));
+  return Nextion::_send_command(command, mutex_timeout);
 }
 
 esp_err_t Nextion::set_component_text(const char *component_id, const char *text, uint16_t mutex_timeout) {
-  // Verify that the Nextion state is "running" as we don't want to send data that may interrupt other processes such as updating the GUI
-  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    if (Nextion::_current_nextion_state != nextion_state_t::RUNNING) {
-      xSemaphoreGive(Nextion::_nextion_state_mutex);
-      return ESP_ERR_TIMEOUT;
-    }
-    xSemaphoreGive(Nextion::_nextion_state_mutex);
-  }
-
-  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    uart_write_bytes(UART_NUM_2, component_id, strlen(component_id));
-    uart_write_bytes(UART_NUM_2, ".txt=\"", strlen(".txt=\""));
-    uart_write_bytes(UART_NUM_2, text, strlen(text));
-    uart_write_bytes(UART_NUM_2, "\"", strlen("\""));
-
-    // Send command finished sequence
-    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
-    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
-
-    xSemaphoreGive(Nextion::_uart_write_mutex);
-    return ESP_OK;
-  }
-  return ESP_ERR_TIMEOUT;
+  std::string command = component_id;
+  command.append(".txt=\"");
+  command.append(text);
+  command.append("\"");
+  return Nextion::_send_command(command, mutex_timeout);
 }
 
 esp_err_t Nextion::set_component_value(const char *component_id, int16_t value, uint16_t mutex_timeout) {
-  // Verify that the Nextion state is "running" as we don't want to send data that may interrupt other processes such as updating the GUI
-  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    if (Nextion::_current_nextion_state != nextion_state_t::RUNNING) {
-      xSemaphoreGive(Nextion::_nextion_state_mutex);
-      return ESP_ERR_TIMEOUT;
-    }
-    xSemaphoreGive(Nextion::_nextion_state_mutex);
-  }
-
-  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    uart_write_bytes(UART_NUM_2, component_id, strlen(component_id));
-    uart_write_bytes(UART_NUM_2, ".val=", strlen(".val="));
-    std::string value_string = std::to_string(value);
-    uart_write_bytes(UART_NUM_2, value_string.c_str(), value_string.length());
-
-    // Send command finished sequence
-    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
-    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
-
-    xSemaphoreGive(Nextion::_uart_write_mutex);
-    return ESP_OK;
-  }
-  return ESP_ERR_TIMEOUT;
+  return Nextion::_send_command(std::string(component_id) + ".val=" + std::to_string(value), mutex_timeout);
 }
 
 esp_err_t Nextion::set_timer_value(const char *component_id, uint16_t value, uint16_t mutex_timeout) {
-  // Verify that the Nextion state is "running" as we don't want to send data that may interrupt other processes such as updating the GUI
-  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    if (Nextion::_current_nextion_state != nextion_state_t::RUNNING) {
-      xSemaphoreGive(Nextion::_nextion_state_mutex);
-      return ESP_ERR_TIMEOUT;
-    }
-    xSemaphoreGive(Nextion::_nextion_state_mutex);
-  }
-
-  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    uart_write_bytes(UART_NUM_2, component_id, strlen(component_id));
-    uart_write_bytes(UART_NUM_2, ".tim=", strlen(".tim="));
-    std::string value_string = std::to_string(value);
-    uart_write_bytes(UART_NUM_2, value_string.c_str(), value_string.length());
-
-    // Send command finished sequence
-    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
-    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
-
-    xSemaphoreGive(Nextion::_uart_write_mutex);
-    return ESP_OK;
-  }
-  return ESP_ERR_TIMEOUT;
+  return Nextion::_send_command(std::string(component_id) + ".tim=" + std::to_string(value), mutex_timeout);
 }
 
 esp_err_t Nextion::set_component_pic(const char *component_id, uint8_t value, uint16_t mutex_timeout) {
-  // Verify that the Nextion state is "running" as we don't want to send data that may interrupt other processes such as updating the GUI
-  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    if (Nextion::_current_nextion_state != nextion_state_t::RUNNING) {
-      xSemaphoreGive(Nextion::_nextion_state_mutex);
-      return ESP_ERR_TIMEOUT;
-    }
-    xSemaphoreGive(Nextion::_nextion_state_mutex);
-  }
-
-  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    uart_write_bytes(UART_NUM_2, component_id, strlen(component_id));
-    uart_write_bytes(UART_NUM_2, ".pic=", strlen(".pic="));
-    std::string value_string = std::to_string(value);
-    uart_write_bytes(UART_NUM_2, value_string.c_str(), value_string.length());
-
-    // Send command finished sequence
-    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
-    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
-
-    xSemaphoreGive(Nextion::_uart_write_mutex);
-    return ESP_OK;
-  }
-  return ESP_ERR_TIMEOUT;
+  return Nextion::_send_command(std::string(component_id) + ".pic=" + std::to_string(value), mutex_timeout);
 }
 
 esp_err_t Nextion::set_component_pic1(const char *component_id, uint8_t value, uint16_t mutex_timeout) {
-  // Verify that the Nextion state is "running" as we don't want to send data that may interrupt other processes such as updating the GUI
-  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    if (Nextion::_current_nextion_state != nextion_state_t::RUNNING) {
-      xSemaphoreGive(Nextion::_nextion_state_mutex);
-      return ESP_ERR_TIMEOUT;
-    }
-    xSemaphoreGive(Nextion::_nextion_state_mutex);
-  }
-
-  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    uart_write_bytes(UART_NUM_2, component_id, strlen(component_id));
-    uart_write_bytes(UART_NUM_2, ".pic1=", strlen(".pic1="));
-    std::string value_string = std::to_string(value);
-    uart_write_bytes(UART_NUM_2, value_string.c_str(), value_string.length());
-
-    // Send command finished sequence
-    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
-    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
-
-    xSemaphoreGive(Nextion::_uart_write_mutex);
-    return ESP_OK;
-  }
-  return ESP_ERR_TIMEOUT;
+  return Nextion::_send_command(std::string(component_id) + ".pic1=" + std::to_string(value), mutex_timeout);
 }
 
 esp_err_t Nextion::set_component_pic2(const char *component_id, uint8_t value, uint16_t mutex_timeout) {
-  // Verify that the Nextion state is "running" as we don't want to send data that may interrupt other processes such as updating the GUI
-  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    if (Nextion::_current_nextion_state != nextion_state_t::RUNNING) {
-      xSemaphoreGive(Nextion::_nextion_state_mutex);
-      return ESP_ERR_TIMEOUT;
-    }
-    xSemaphoreGive(Nextion::_nextion_state_mutex);
-  }
-
-  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    uart_write_bytes(UART_NUM_2, component_id, strlen(component_id));
-    uart_write_bytes(UART_NUM_2, ".pic2=", strlen(".pic2="));
-    std::string value_string = std::to_string(value);
-    uart_write_bytes(UART_NUM_2, value_string.c_str(), value_string.length());
-
-    // Send command finished sequence
-    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
-    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
-
-    xSemaphoreGive(Nextion::_uart_write_mutex);
-    return ESP_OK;
-  }
-  return ESP_ERR_TIMEOUT;
+  return Nextion::_send_command(std::string(component_id) + ".pic2=" + std::to_string(value), mutex_timeout);
 }
 
 esp_err_t Nextion::set_component_foreground(const char *component_id, uint16_t color, uint16_t mutex_timeout) {
-  // Verify that the Nextion state is "running" as we don't want to send data that may interrupt other processes such as updating the GUI
-  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    if (Nextion::_current_nextion_state != nextion_state_t::RUNNING) {
-      xSemaphoreGive(Nextion::_nextion_state_mutex);
-      return ESP_ERR_TIMEOUT;
-    }
-    xSemaphoreGive(Nextion::_nextion_state_mutex);
-  }
-
-  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    uart_write_bytes(UART_NUM_2, component_id, strlen(component_id));
-    uart_write_bytes(UART_NUM_2, ".pco=", strlen(".pco="));
-    std::string value_string = std::to_string(color);
-    uart_write_bytes(UART_NUM_2, value_string.c_str(), value_string.length());
-
-    // Send command finished sequence
-    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
-    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
-
-    xSemaphoreGive(Nextion::_uart_write_mutex);
-    return ESP_OK;
-  }
-  return ESP_ERR_TIMEOUT;
+  return Nextion::_send_command(std::string(component_id) + ".pco=" + std::to_string(color), mutex_timeout);
 }
 
 esp_err_t Nextion::set_component_pco2(const char *component_id, uint16_t color, uint16_t mutex_timeout) {
-  // Verify that the Nextion state is "running" as we don't want to send data that may interrupt other processes such as updating the GUI
-  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    if (Nextion::_current_nextion_state != nextion_state_t::RUNNING) {
-      xSemaphoreGive(Nextion::_nextion_state_mutex);
-      return ESP_ERR_TIMEOUT;
-    }
-    xSemaphoreGive(Nextion::_nextion_state_mutex);
-  }
-
-  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    uart_write_bytes(UART_NUM_2, component_id, strlen(component_id));
-    uart_write_bytes(UART_NUM_2, ".pco2=", strlen(".pco2="));
-    std::string value_string = std::to_string(color);
-    uart_write_bytes(UART_NUM_2, value_string.c_str(), value_string.length());
-
-    // Send command finished sequence
-    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
-    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
-
-    xSemaphoreGive(Nextion::_uart_write_mutex);
-    return ESP_OK;
-  }
-  return ESP_ERR_TIMEOUT;
+  return Nextion::_send_command(std::string(component_id) + ".pco2=" + std::to_string(color), mutex_timeout);
 }
 
 esp_err_t Nextion::set_component_visibility(const char *component_id, bool visibility, uint16_t mutex_timeout) {
@@ -775,29 +687,7 @@ esp_err_t Nextion::set_component_visibility(const char *component_id, bool visib
   if (dot_position != std::string::npos && dot_position + 1 < raw_component_name.length()) { // A dot was found, remove page name.
     raw_component_name = raw_component_name.substr(dot_position + 1);
   }
-
-  // Verify that the Nextion state is "running" as we don't want to send data that may interrupt other processes such as updating the GUI
-  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    if (Nextion::_current_nextion_state != nextion_state_t::RUNNING) {
-      xSemaphoreGive(Nextion::_nextion_state_mutex);
-      return ESP_ERR_TIMEOUT;
-    }
-    xSemaphoreGive(Nextion::_nextion_state_mutex);
-  }
-
-  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    uart_write_bytes(UART_NUM_2, "vis ", strlen("vis "));
-    uart_write_bytes(UART_NUM_2, raw_component_name.c_str(), raw_component_name.length());
-    uart_write_bytes(UART_NUM_2, visibility ? ",1" : ",0", strlen(visibility ? ",1" : ",0"));
-
-    // Send command finished sequence
-    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
-    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
-
-    xSemaphoreGive(Nextion::_uart_write_mutex);
-    return ESP_OK;
-  }
-  return ESP_ERR_TIMEOUT;
+  return Nextion::_send_command("vis " + raw_component_name + (visibility ? ",1" : ",0"), mutex_timeout);
 }
 
 esp_err_t Nextion::get_component_integer_value(const char *component_id, int32_t *result, uint16_t timeout, uint16_t mutex_timeout) {
@@ -810,6 +700,17 @@ esp_err_t Nextion::get_component_integer_value(const char *component_id, int32_t
     xSemaphoreGive(Nextion::_nextion_state_mutex);
   }
 
+  // There is one slot for the task waiting on a value, so a second caller waits its turn instead of failing.
+  if (xSemaphoreTake(Nextion::_get_integer_mutex, pdMS_TO_TICKS(mutex_timeout)) != pdTRUE) {
+    ESP_LOGE("Nextion", "Timed out waiting for another integer fetch to finish.");
+    return ESP_ERR_TIMEOUT;
+  }
+  esp_err_t fetch_result = Nextion::_get_component_integer_value(component_id, result, timeout, mutex_timeout);
+  xSemaphoreGive(Nextion::_get_integer_mutex);
+  return fetch_result;
+}
+
+esp_err_t Nextion::_get_component_integer_value(const char *component_id, int32_t *result, uint16_t timeout, uint16_t mutex_timeout) {
   if (xSemaphoreTake(Nextion::_event_wait_integer_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
     if (Nextion::_event_wait_integer == NULL) {
       Nextion::_event_wait_integer = xTaskGetCurrentTaskHandle();
@@ -825,17 +726,9 @@ esp_err_t Nextion::get_component_integer_value(const char *component_id, int32_t
     return ESP_ERR_TIMEOUT;
   }
 
+  NextionWindow::wait_for_room();
   if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    uart_write_bytes(UART_NUM_2, "get ", strlen("get "));
-    uart_write_bytes(UART_NUM_2, component_id, strlen(component_id));
-    uart_write_bytes(UART_NUM_2, ".val", strlen(".val"));
-
-    // Send command finished sequence
-    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
-    if (uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence)) != 3) {
-      ESP_LOGE("Nextion", "Failed to write all the command end bytes to UART when fetching integer value.");
-    }
-
+    Nextion::_write_locked(std::string("get ") + component_id + ".val");
     xSemaphoreGive(Nextion::_uart_write_mutex);
   } else {
     ESP_LOGE("Nextion", "Failed to take _uart_write_mutex while fetching integer value.");
@@ -861,28 +754,7 @@ esp_err_t Nextion::get_component_integer_value(const char *component_id, int32_t
 }
 
 esp_err_t Nextion::set_brightness_level(uint8_t brightness, uint16_t mutex_timeout) {
-  // Verify that the Nextion state is "running" as we don't want to send data that may interrupt other processes such as updating the GUI
-  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    if (Nextion::_current_nextion_state != nextion_state_t::RUNNING) {
-      xSemaphoreGive(Nextion::_nextion_state_mutex);
-      return ESP_ERR_TIMEOUT;
-    }
-    xSemaphoreGive(Nextion::_nextion_state_mutex);
-  }
-
-  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
-    uart_write_bytes(UART_NUM_2, "dim=", strlen("dim="));
-    std::string value_string = std::to_string(brightness);
-    uart_write_bytes(UART_NUM_2, value_string.c_str(), value_string.length());
-
-    // Send command finished sequence
-    uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
-    uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
-
-    xSemaphoreGive(Nextion::_uart_write_mutex);
-    return ESP_OK;
-  }
-  return ESP_ERR_TIMEOUT;
+  return Nextion::_send_command("dim=" + std::to_string(brightness), mutex_timeout);
 }
 
 nextion_state_t Nextion::get_current_state() {
@@ -892,6 +764,11 @@ nextion_state_t Nextion::get_current_state() {
 void Nextion::restart() {
   gpio_set_level(NEXTION_ON_OFF_GPIO, 1); // Turn off power to the display
   vTaskDelay(pdMS_TO_TICKS(250));         // Wait for screen to turn off
+  // The display will come back at its stored default, whatever baud= set before.
+  if (uart_set_baudrate(UART_NUM_2, ConfigManager::communication_baud_rate) != ESP_OK) {
+    ESP_LOGE("Nextion", "Failed to set UART back to %lu baud while restarting the display.", ConfigManager::communication_baud_rate);
+  }
+  Nextion::_link_baud = ConfigManager::communication_baud_rate;
   gpio_set_level(NEXTION_ON_OFF_GPIO, 0); // Turn on power to the display
 }
 
@@ -899,6 +776,7 @@ esp_err_t Nextion::start_update(uint32_t upload_baudrate, bool use_new_upload_pr
   if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(10000)) == pdTRUE) {
     if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(10000)) == pdTRUE) {
       Nextion::_current_nextion_state = nextion_state_t::UPDATING; // Set state to updating so that other functions won't write to the UART.
+      NextionWindow::stop_locked();                                // The update protocol has replies of its own.
       xSemaphoreGive(Nextion::_nextion_state_mutex);
     } else {
       ESP_LOGE("Nextion", "Failed to take _nextion_state_mutex while processing request to start update!");
@@ -945,6 +823,7 @@ esp_err_t Nextion::start_update(uint32_t upload_baudrate, bool use_new_upload_pr
     if (uart_set_baudrate(UART_NUM_2, upload_baudrate) != ESP_OK) {
       ESP_LOGE("Nextion", "Failed to set UART baudrate %lu when initializing Nextion update!", upload_baudrate);
     }
+    Nextion::_link_baud = upload_baudrate;
 
     xSemaphoreGive(Nextion::_uart_write_mutex);
     return ESP_OK;
@@ -965,30 +844,4 @@ esp_err_t Nextion::write_update_bytes(uint8_t *data, uint16_t size) {
     ESP_LOGE("Nextion", "Failed to take _uart_write_mutex while trying to start update to panel.");
   }
   return ESP_ERR_NOT_FINISHED;
-}
-
-int Nextion::nextion_write(const void *src, size_t size) {
-  Nextion::_nextion_buffer_out += size;
-  return uart_write_bytes(UART_NUM_2, src, size);
-}
-
-void Nextion::nextion_write_end() {
-  uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
-  uart_write_bytes(UART_NUM_2, command_end_sequence, sizeof(command_end_sequence));
-  if (Nextion::_nextion_buffer_out > 800) {
-    char command_bk3[] = "bkcmd=3"
-                         "\xff"
-                         "\xff"
-                         "\xff";
-    char command_bk0[] = "bkcmd=0"
-                         "\xff"
-                         "\xff"
-                         "\xff";
-    // bkcmd=3, will return success, lets wait for it
-    uart_write_bytes(UART_NUM_2, command_bk3, strlen(command_bk3));
-    xSemaphoreTake(Nextion::_cmd_finished_bin_sem, pdMS_TO_TICKS(200));
-    // bkcmd=0, will return nothing, no need to wait again.
-    uart_write_bytes(UART_NUM_2, command_bk0, strlen(command_bk0));
-    Nextion::_nextion_buffer_out = 0;
-  }
 }

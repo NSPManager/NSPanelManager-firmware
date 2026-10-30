@@ -1,6 +1,7 @@
 #include <ConfigManager.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
+#include <Nextion.hpp>
 #include <NSPM_version.hpp>
 #include <WebManager.hpp>
 #include <WiFiManager.hpp>
@@ -48,6 +49,8 @@ esp_err_t WebManager::_handle_uri_config_data(httpd_req_t *req) {
   json["use_latest_nextion_upload_protocol"] = ConfigManager::use_latest_nextion_upload_protocol;
   json["nextion_upload_baudrate"] = ConfigManager::nextion_upload_baudrate;
   json["communication_baud_rate"] = ConfigManager::communication_baud_rate;
+  json["operating_baud_rate"] = ConfigManager::operating_baud_rate;
+  json["nextion_link_baud"] = Nextion::get_link_baud();
 
   if (httpd_resp_set_type(req, "application/json") != ESP_OK) {
     ESP_LOGE("Web", "Failed to set content type for response!");
@@ -148,6 +151,12 @@ esp_err_t WebManager::_handle_uri_save_config(httpd_req_t *req) {
     ConfigManager::communication_baud_rate = atoi(result["communication_baud_rate"].c_str());
   } else {
     ESP_LOGE("WebManager", "Could not find field name 'communication_baud_rate' while saving config from web post request!");
+  }
+
+  if (result.find("operating_baud_rate") != result.end()) {
+    ConfigManager::operating_baud_rate = atoi(result["operating_baud_rate"].c_str());
+  } else {
+    ESP_LOGE("WebManager", "Could not find field name 'operating_baud_rate' while saving config from web post request!");
   }
 
   httpd_resp_set_status(req, "302 Found");  // Set the status code

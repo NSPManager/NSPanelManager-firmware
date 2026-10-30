@@ -1,10 +1,12 @@
 #pragma once
+#include <atomic>
 #include <cstdint>
 #include <driver/gpio.h>
 #include <driver/uart.h>
 #include <esp_err.h>
 #include <esp_event.h>
 #include <freertos/semphr.h>
+#include <string>
 #include <vector>
 
 /**
@@ -21,6 +23,8 @@ static constexpr uint16_t NEXTION_UART_EVENT_LOOP_STACK_SIZE = 3096;
 static constexpr uint16_t NEXTION_UART_EVENT_LOOP_QUEUE_SIZE = 6;
 
 class Nextion {
+  friend class NextionWindow;
+
 public:
   /**
    * Initialize the Nextion display and gather any facts about it.
@@ -170,7 +174,31 @@ public:
   static nextion_state_t get_current_state();
 
   /**
+   * The baud rate the display and the UART are running at right now: the operating baud rate if the
+   * switch to it succeeded, otherwise the communication baud rate. Not the configured operating rate.
+   */
+  static uint32_t get_link_baud();
+
+  /**
+   * Log the link baud rate and how it was reached. Nextion::init() runs before panel logs reach MQTT,
+   * so its own lines are usually lost; call this once they do.
+   */
+  static void log_link_baud();
+
+  /**
+   * Power-cycle the display and connect to it again, for when it stopped answering while the link
+   * ran above the communication baud rate. If the display reset by itself it came back at its default
+   * rate, and nothing it sends can be read at the operating rate. Switches to the operating baud rate
+   * again the first time only; after that the link stays at the communication baud rate until the
+   * panel reboots. Writers are turned away while this runs (a few seconds).
+   * Blocks: call from a task of its own, never from an event handler. Takes _uart_write_mutex.
+   */
+  static void recover_link();
+
+  /**
    * Restart the Nextion display via GPIO pins (power off and power on. Not a soft reboot via commands!)
+   * The display comes back at its stored default baud rate, so the UART is set back to
+   * ConfigManager::communication_baud_rate as well.
    */
   static void restart();
 
@@ -220,26 +248,48 @@ private:
   static void _wait_for_event_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
   /**
+   * @brief Wait for the display to boot after a restart() and connect to it at its default baud rate.
+   */
+  static void _connect_at_default_baud();
+
+  /**
+   * @brief Move the display and the UART to ConfigManager::operating_baud_rate, if one is set.
+   * Uses `baud=`, which lasts only until the display is next power-cycled, never `bauds=`, which
+   * would change the display's stored default. If the display does not answer at the new rate,
+   * it is power-cycled back to its default and the UART follows.
+   * @return ESP_OK if running at the operating baud rate or none is set, otherwise ESP_FAIL.
+   */
+  static esp_err_t _switch_to_operating_baud();
+
+  /**
+   * @brief Drop anything received so far, including queued pattern positions that would no longer
+   * match the bytes in the buffer.
+   */
+  static void _flush_uart_input();
+
+  /**
    * @brief Will attempt to write data onto serial.
    * @return ESP_OK on success, otherwise return ESP_ERR_NOT_FINISHED.
    */
   static esp_err_t _write_command(const char *data);
 
   /**
-   * @brief Write data to Nextion display
+   * @brief Send one command, if the display is running. Every public command goes through here.
+   * @param command: The command, without its 0xFF 0xFF 0xFF terminator.
+   * @param mutex_timeout: Timeout (in ms) of how long to wait for UART mutex
+   * @return ESP_OK or ESP_ERR_TIMEOUT
    */
-  static int nextion_write(const void *src, size_t size);
+  static esp_err_t _send_command(const std::string &command, uint16_t mutex_timeout);
 
   /**
-   * @brief write end 0xff,0xff,0xff to Nextion display
+   * @brief Write one command and its terminator. The caller holds _uart_write_mutex.
    */
-  static void nextion_write_end();
+  static void _write_locked(const std::string &command);
 
-public:
   /**
-   * @brief works in the same way as _write_command, but handles buffer overflow,
+   * @brief get_component_integer_value() for one caller at a time. The caller holds _get_integer_mutex.
    */
-  static esp_err_t write_command(const char *data);
+  static esp_err_t _get_component_integer_value(const char *component_id, int32_t *result, uint16_t timeout, uint16_t mutex_timeout);
 
 private:
   // VARIABLES:
@@ -260,6 +310,9 @@ private:
 
   // Mutex to only allow one task at the time to access the variables for "event_wait_integer"
   static inline SemaphoreHandle_t _event_wait_integer_mutex;
+
+  // Held for the whole of an integer fetch, so only one runs at a time
+  static inline SemaphoreHandle_t _get_integer_mutex;
 
   // The task that requested an integer value from the Nextion display and is currently waiting
   static inline TaskHandle_t _event_wait_integer;
@@ -282,9 +335,14 @@ private:
   // When starting the Nextion display, did we receive the "NSPM" flag indicating that our NSPanel Manager firmware is running on the Nextion display?
   static inline bool _has_received_nspm_flag;
 
-  // Buffer overflow protection, used in nextion_write_end
-  static inline SemaphoreHandle_t _cmd_finished_bin_sem;
+  // How the link reached _link_baud.
+  enum class link_baud_result_t : uint8_t {
+    NOT_REQUESTED, // No operating baud rate set.
+    SWITCHED,      // Running at the operating baud rate.
+    FELL_BACK,     // The display did not answer at the operating baud rate; back at the default.
+    UNSUPPORTED,   // The operating baud rate is not one the display accepts.
+  };
 
-  // buffer overlow protection, keep track of how many bytes currently waiting.
-  static inline int _nextion_buffer_out;
+  static inline std::atomic<uint32_t> _link_baud = 0;
+  static inline std::atomic<link_baud_result_t> _link_baud_result = link_baud_result_t::NOT_REQUESTED;
 };
