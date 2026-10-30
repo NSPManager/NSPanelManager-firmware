@@ -2,6 +2,7 @@
 #include <Nextion.hpp>
 #include <NextionWindow.hpp>
 #include <Nextion_constans.hpp>
+#include <Nextion_event.hpp>
 #include <driver/uart.h>
 #include <esp_log.h>
 #include <algorithm>
@@ -41,7 +42,8 @@ static const uint8_t command_end_sequence[3] = {0xFF, 0xFF, 0xFF};
 void NextionWindow::init() {
   esp_log_level_set("NextionWindow", ConfigManager::log_level);
   NextionWindow::_room_sem = xSemaphoreCreateBinary();
-  xTaskCreatePinnedToCore(NextionWindow::_task_monitor, "nextion_window", 3072, NULL, 3, NULL, 1);
+  // 4 KB: besides accounting, it runs Nextion::recover_link() when the display goes silent.
+  xTaskCreatePinnedToCore(NextionWindow::_task_monitor, "nextion_window", 4096, NULL, 3, NULL, 1);
 }
 
 uint32_t NextionWindow::_wire_ms(uint32_t bytes, uint32_t baud) {
@@ -342,7 +344,13 @@ void NextionWindow::_task_monitor(void *param) {
     bool resync = NextionWindow::_resync_requested;
     taskEXIT_CRITICAL(&NextionWindow::_lock);
 
-    if (restart || probe_timed_out) {
+    if (probe_timed_out && Nextion::get_link_baud() != ConfigManager::communication_baud_rate) {
+      // Above the default rate, a display that reset by itself comes back at its default and its
+      // restart frames arrive garbled, so a silent display is the only sign. Bring the link up again.
+      Nextion::recover_link();
+      failed_starts = 0;
+      NextionWindow::_post_display_restarted();
+    } else if (restart || probe_timed_out) {
       if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(250)) == pdTRUE) {
         if (NextionWindow::_accounting) {
           taskENTER_CRITICAL(&NextionWindow::_lock);
@@ -366,6 +374,9 @@ void NextionWindow::_task_monitor(void *param) {
           taskEXIT_CRITICAL(&NextionWindow::_lock);
         }
         xSemaphoreGive(Nextion::_uart_write_mutex);
+        if (restart) {
+          NextionWindow::_post_display_restarted();
+        }
       }
     } else if ((resync || stalled) && NextionWindow::_probe_seq < 0) {
       if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
@@ -395,6 +406,18 @@ void NextionWindow::_task_monitor(void *param) {
       last_log_us = now;
     }
   }
+}
+
+void NextionWindow::_post_display_restarted() {
+  // The display is back on its startup page with its default brightness. Post with no timeout, so
+  // this task never waits on the default event loop's queue ahead of Wi-Fi, and back off here instead.
+  for (int attempt = 0; attempt < 10; attempt++) {
+    if (esp_event_post(NEXTION_EVENT, nextion_event_t::DISPLAY_RESTARTED, NULL, 0, 0) == ESP_OK) {
+      return;
+    }
+    vTaskDelay(pdMS_TO_TICKS(500));
+  }
+  ESP_LOGW("NextionWindow", "Could not post DISPLAY_RESTARTED; the display stays on its startup page until the next page change.");
 }
 
 void NextionWindow::_log_stats(bool anomaly) {

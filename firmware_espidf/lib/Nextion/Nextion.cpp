@@ -215,6 +215,42 @@ esp_err_t Nextion::_switch_to_operating_baud() {
   return ESP_FAIL;
 }
 
+void Nextion::recover_link() {
+  static bool recovered_before = false;
+  ESP_LOGW("Nextion", "Display stopped answering at %lu baud. Power-cycling it and connecting again.", Nextion::_link_baud.load());
+
+  // Turn writers away while the display is down; they check the state before writing.
+  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+    Nextion::_current_nextion_state = nextion_state_t::INITIALIZING;
+    xSemaphoreGive(Nextion::_nextion_state_mutex);
+  }
+  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+    NextionWindow::stop_locked();
+    xSemaphoreGive(Nextion::_uart_write_mutex);
+  }
+
+  Nextion::restart();
+  Nextion::_connect_at_default_baud();
+  if (!recovered_before) {
+    Nextion::_switch_to_operating_baud();
+  } else {
+    ESP_LOGW("Nextion", "Display already needed recovering once since boot, staying at %lu baud.", Nextion::_link_baud.load());
+  }
+  recovered_before = true;
+
+  if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+    Nextion::_current_nextion_state = nextion_state_t::RUNNING;
+    xSemaphoreGive(Nextion::_nextion_state_mutex);
+  }
+  if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+    NextionWindow::start_locked();
+    xSemaphoreGive(Nextion::_uart_write_mutex);
+  } else {
+    ESP_LOGE("Nextion", "Failed to take _uart_write_mutex to restart the write window. Writes to the display will not be paced.");
+  }
+  Nextion::log_link_baud();
+}
+
 uint32_t Nextion::get_link_baud() {
   return Nextion::_link_baud;
 }

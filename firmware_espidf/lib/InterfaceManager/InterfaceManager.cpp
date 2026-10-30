@@ -301,6 +301,14 @@ void InterfaceManager::_nextion_event_handler(void *arg, esp_event_base_t event_
     break;
   }
 
+  case nextion_event_t::DISPLAY_RESTARTED: {
+    // The display is back on its startup page at its default brightness. Restore both through the
+    // page-transition task, which may switch pages; this handler must not.
+    ESP_LOGW("InterfaceManager", "Display restarted, showing the default page again.");
+    InterfaceManager::_request_page(PageRequest::SCREEN_ON);
+    break;
+  }
+
   default:
     break;
   }

@@ -186,6 +186,16 @@ public:
   static void log_link_baud();
 
   /**
+   * Power-cycle the display and connect to it again, for when it stopped answering while the link
+   * ran above the communication baud rate. If the display reset by itself it came back at its default
+   * rate, and nothing it sends can be read at the operating rate. Switches to the operating baud rate
+   * again the first time only; after that the link stays at the communication baud rate until the
+   * panel reboots. Writers are turned away while this runs (a few seconds).
+   * Blocks: call from a task of its own, never from an event handler. Takes _uart_write_mutex.
+   */
+  static void recover_link();
+
+  /**
    * Restart the Nextion display via GPIO pins (power off and power on. Not a soft reboot via commands!)
    * The display comes back at its stored default baud rate, so the UART is set back to
    * ConfigManager::communication_baud_rate as well.

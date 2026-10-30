@@ -96,6 +96,7 @@ private:
   static void _on_marker_echo(uint8_t seq, int64_t now);
   static void _log_stats(bool anomaly);
   static void _configure_for_baud(uint32_t baud);
+  static void _post_display_restarted();
   static uint32_t _wire_ms(uint32_t bytes, uint32_t baud);
 
   // These were measured on Office at 115200 baud. _configure_for_baud() scales them to the link's rate.
