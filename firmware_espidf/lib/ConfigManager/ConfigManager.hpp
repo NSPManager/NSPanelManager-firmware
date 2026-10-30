@@ -52,6 +52,10 @@ public:
   // What baudrate should be used to communicate (send/receive commands) to the Nextion display.
   static inline uint32_t communication_baud_rate = 115200;
 
+  // Baud rate to move the display to with baud= once connected, or 0 to stay at communication_baud_rate.
+  // Lasts only until the display is next power-cycled, so the display's stored default never changes.
+  static inline uint32_t operating_baud_rate = 0;
+
   // MD5 checksum for installed firmware, used to check if new firmware update is available in manager
   static inline std::string md5_firmware;
 
