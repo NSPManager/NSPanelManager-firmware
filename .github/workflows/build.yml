@@ -30,14 +30,14 @@ jobs:
       run:
         working-directory: firmware_espidf
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       - name: Cache PlatformIO toolchains
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.platformio
           key: build-${{ matrix.environment }}-${{ runner.os }}-${{ hashFiles('firmware_espidf/platformio.ini') }}
@@ -81,7 +81,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload images
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: firmware-${{ matrix.environment }}-${{ steps.collect.outputs.short_sha }}
           path: dist/
