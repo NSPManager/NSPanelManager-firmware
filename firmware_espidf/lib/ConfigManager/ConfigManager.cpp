@@ -57,6 +57,14 @@ esp_err_t ConfigManager::load_config() {
     ESP_LOGE("ConfigManager", "Log level is not of type int!");
   }
 
+  // Absent from configs saved by older firmware, which then keeps the AUTO default.
+  if (config_data.contains("serial_log") && config_data["serial_log"].is_number_integer()) {
+    int32_t serial_log = config_data["serial_log"].get<int32_t>();
+    if (serial_log >= 0 && serial_log <= static_cast<int32_t>(ConfigManager::SerialLogMode::NEVER)) {
+      ConfigManager::serial_log = static_cast<ConfigManager::SerialLogMode>(serial_log);
+    }
+  }
+
   // Handle WiFi settings
   if (config_data.contains("wifi_hostname") && config_data["wifi_hostname"].is_string()) {
     ConfigManager::wifi_hostname = config_data["wifi_hostname"].get<std::string>();
@@ -204,6 +212,7 @@ void ConfigManager::create_default() {
   ConfigManager::nextion_upload_baudrate = 115200;
   ConfigManager::communication_baud_rate = 115200;
   ConfigManager::log_level = ESP_LOG_WARN;
+  ConfigManager::serial_log = ConfigManager::SerialLogMode::AUTO;
 }
 
 esp_err_t ConfigManager::save_config() {
@@ -215,6 +224,7 @@ esp_err_t ConfigManager::save_config() {
 
   nlohmann::json json = nlohmann::json::object();
   json["log_level"] = static_cast<int>(ConfigManager::log_level);
+  json["serial_log"] = static_cast<int>(ConfigManager::serial_log);
   json["wifi_hostname"] = ConfigManager::wifi_hostname;
   json["wifi_ssid"] = ConfigManager::wifi_ssid;
   json["wifi_psk"] = ConfigManager::wifi_psk;

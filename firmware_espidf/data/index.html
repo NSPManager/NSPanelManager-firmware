@@ -170,6 +170,7 @@
         document.getElementById("version_badge").innerText = data.version;
         document.getElementById("wifi_hostname").value = data.wifi_hostname;
         document.getElementById("log_level").value = data.log_level;
+        document.getElementById("serial_log").value = (data.serial_log === undefined) ? 0 : data.serial_log;
         document.getElementById("wifi_ssid").value = data.wifi_ssid;
         document.getElementById("mqtt_server").value = data.mqtt_server;
         document.getElementById("mqtt_port").value = data.mqtt_port;
@@ -486,6 +487,28 @@
                 <option value="2">Warning</option>
                 <option value="3">Info</option>
                 <option value="4">Debug</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <label for="serial_log" class="block mb-2 text-sm font-medium text-gray-900">Serial log</label>
+            <div class="flex">
+              <span
+                class="inline-flex items-center px-3 text-sm text-gray-900 bg-gray-200 border rounded-e-0 border-gray-300 rounded-s-md">
+                <svg class="w-4 h-4 text-gray-500" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"
+                  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                  <title>Serial log</title>
+                  <path
+                    d="M13 11H11V5H13M13 15H11V13H13M20 2H4C2.9 2 2 2.9 2 4V22L6 18H20C21.1 18 22 17.1 22 16V4C22 2.9 21.1 2 20 2Z" />
+                </svg>
+              </span>
+
+              <select name="serial_log" id="serial_log"
+                class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-e-md focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                <option value="0">Auto (only while not connected to MQTT)</option>
+                <option value="1">Always</option>
+                <option value="2">Never</option>
               </select>
             </div>
           </div>
