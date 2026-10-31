@@ -157,13 +157,15 @@ esp_err_t RoomManager::go_to_room_id(uint32_t room_id) {
     new_mqtt_room_topic.append("/room/");
     new_mqtt_room_topic.append(std::to_string(room_id));
     new_mqtt_room_topic.append("/state");
+    // Store the topic before subscribing: the MQTT handler drops data for any topic that is not
+    // the current one, so a retained value arriving first would be lost.
+    RoomManager::_current_room_id = room_id;
+    RoomManager::_current_home_page_status_topic.set(new_mqtt_room_topic);
+
     ESP_LOGD("RoomManager", "Subscribing to room topic %s.", new_mqtt_room_topic.c_str());
     if (MqttManager::subscribe(new_mqtt_room_topic) != ESP_OK) {
       ESP_LOGE("RoomManager", "Failed to subscribe to room state topic %s.", new_mqtt_room_topic.c_str());
     }
-
-    RoomManager::_current_room_id = room_id;
-    RoomManager::_current_home_page_status_topic.set(new_mqtt_room_topic);
     return ESP_OK;
   }
   return ESP_ERR_NOT_FINISHED;
@@ -708,7 +710,7 @@ void RoomManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
       } else {
         ESP_LOGE("RoomManager", "Got new status for entities page but failed to unpack it.");
       }
-    } else if (topic_string.compare(RoomManager::_all_rooms_state_topic) == 0) {
+    } else if (topic_string.compare(RoomManager::_all_rooms_state_topic.get()) == 0) {
       NSPanelRoomStatus *all_room_status = nspanel_room_status__unpack(NULL, event->data_len, (const uint8_t *)event->data);
       if (all_room_status != NULL) {
         if (xSemaphoreTake(RoomManager::_home_page_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
@@ -734,14 +736,15 @@ void RoomManager::_mqtt_event_handler_connected(void *arg, esp_event_base_t even
   // ESP_LOGI("RoomManager", "MQTT connected. Subscribing to room status topics.");
 }
 
-bool RoomManager::_move_topic(std::string *current_topic, std::string new_topic) {
-  if (new_topic.compare(*current_topic) == 0) {
+bool RoomManager::_move_topic(MutexWrapped<std::string> *current_topic, std::string new_topic) {
+  std::string old_topic = current_topic->get();
+  if (new_topic.compare(old_topic) == 0) {
     return false;
   }
-  if (!current_topic->empty()) {
-    MqttManager::unsubscribe(*current_topic);
+  if (!old_topic.empty()) {
+    MqttManager::unsubscribe(old_topic);
   }
-  *current_topic = new_topic;
+  current_topic->set(new_topic);
   if (MqttManager::subscribe(new_topic) != ESP_OK) {
     ESP_LOGE("RoomManager", "Failed to subscribe to state topic %s.", new_topic.c_str());
   }
@@ -778,14 +781,10 @@ void RoomManager::_event_handler(void *arg, esp_event_base_t event_base, int32_t
     return;
   }
 
-  std::string room_topic = RoomManager::_current_home_page_status_topic.get();
-  if (RoomManager::_move_topic(&room_topic, topic_prefix + "/room/" + std::to_string(RoomManager::_current_room_id) + "/state")) {
-    RoomManager::_current_home_page_status_topic.set(room_topic);
-  }
+  RoomManager::_move_topic(&RoomManager::_current_home_page_status_topic, topic_prefix + "/room/" + std::to_string(RoomManager::_current_room_id) + "/state");
 
-  std::string entities_topic = RoomManager::_current_entities_page_status_topic.get();
-  if (!entities_topic.empty() && RoomManager::_move_topic(&entities_topic, topic_prefix + "/entity_pages/" + std::to_string(RoomManager::_current_entities_page_id) + "/state")) {
-    RoomManager::_current_entities_page_status_topic.set(entities_topic);
+  if (!RoomManager::_current_entities_page_status_topic.get().empty()) {
+    RoomManager::_move_topic(&RoomManager::_current_entities_page_status_topic, topic_prefix + "/entity_pages/" + std::to_string(RoomManager::_current_entities_page_id) + "/state");
   }
 }
 
