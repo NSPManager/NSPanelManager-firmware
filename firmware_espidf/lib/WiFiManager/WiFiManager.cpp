@@ -66,6 +66,11 @@ void WiFiManager::start_client(std::string *ssid, std::string *psk, std::string 
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &WiFiManager::_config));
   ESP_ERROR_CHECK(esp_wifi_start());
 
+  // The panel boots awake (loading page, then the default page), and registering with the manager
+  // and loading the config is all request/response traffic, so start with the radio awake.
+  // InterfaceManager switches to power saving whenever the screensaver is shown.
+  WiFiManager::set_low_latency(true);
+
   // Start fallback timer and start an AP if we have not connected to WiFi within threshold
   ESP_LOGI("WiFiManager", "Starting fallback WiFi AP timeout.");
   WiFiManager::_fallback_timer = xTimerCreate("wifi_fallback", pdMS_TO_TICKS(WIFI_TIMEOUT_MS), pdFALSE, NULL, WiFiManager::_fallback_timer_callback);
@@ -215,6 +220,22 @@ void WiFiManager::_fallback_timer_callback(TimerHandle_t timer) {
       },
                   "start_ap_fallback", 6000, NULL, 1, NULL) != ESP_OK) {
     ESP_LOGE("WiFiManager", "Failed to start task to start fallback SoftAP as we've failed to connect to WiFi.");
+  }
+}
+
+void WiFiManager::set_low_latency(bool low_latency) {
+  int8_t wanted = low_latency ? 1 : 0;
+  if (WiFiManager::_low_latency.exchange(wanted) == wanted) {
+    return;
+  }
+  // The power save type is a global setting of the Wi-Fi driver: it is kept across disconnects,
+  // reconnects and mode changes, so it only needs setting when it changes.
+  esp_err_t result = esp_wifi_set_ps(low_latency ? WIFI_PS_NONE : WIFI_PS_MIN_MODEM);
+  if (result == ESP_OK) {
+    ESP_LOGD("WiFiManager", "Wi-Fi power save set to %s.", low_latency ? "none (low latency)" : "modem sleep (power saving)");
+  } else {
+    WiFiManager::_low_latency = -1; // Try again on the next call.
+    ESP_LOGW("WiFiManager", "Failed to set Wi-Fi power save to %s: %s", low_latency ? "none" : "modem sleep", esp_err_to_name(result));
   }
 }
 
