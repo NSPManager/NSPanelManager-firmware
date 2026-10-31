@@ -38,6 +38,7 @@ esp_err_t WebManager::_handle_uri_config_data(httpd_req_t *req) {
   nlohmann::json json;
   json["version"] = NSPM_VERSION;
   json["log_level"] = static_cast<int>(ConfigManager::log_level);
+  json["serial_log"] = static_cast<int>(ConfigManager::serial_log);
   json["wifi_hostname"] = ConfigManager::wifi_hostname.c_str();
   json["wifi_ssid"] = ConfigManager::wifi_ssid.c_str();
   json["wifi_psk_set"] = !ConfigManager::wifi_psk.empty();
@@ -82,6 +83,18 @@ esp_err_t WebManager::_handle_uri_save_config(httpd_req_t *req) {
     ConfigManager::log_level = static_cast<esp_log_level_t>(atoi(result["log_level"].c_str()));
   } else {
     ESP_LOGE("WebManager", "Could not find field name 'log_level' while saving config from web post request!");
+  }
+
+  // Missing when the LittleFS image (and so index.html) predates the setting. Keep the current value then.
+  if (result.find("serial_log") != result.end()) {
+    int serial_log = atoi(result["serial_log"].c_str());
+    if (serial_log >= 0 && serial_log <= static_cast<int>(ConfigManager::SerialLogMode::NEVER)) {
+      ConfigManager::serial_log = static_cast<ConfigManager::SerialLogMode>(serial_log);
+    } else {
+      ESP_LOGW("WebManager", "Ignoring invalid serial_log value '%s' from web post request.", result["serial_log"].c_str());
+    }
+  } else {
+    ESP_LOGD("WebManager", "No 'serial_log' field in web post request, keeping current setting.");
   }
 
   if (result.find("wifi_ssid") != result.end()) {
