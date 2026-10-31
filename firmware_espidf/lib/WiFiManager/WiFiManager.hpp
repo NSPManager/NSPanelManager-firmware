@@ -58,6 +58,16 @@ public:
    */
   static const char *mac_string();
 
+  /**
+   * @brief Choose between low latency and power saving for the Wi-Fi radio.
+   * With the IDF default (WIFI_PS_MIN_MODEM) the radio sleeps between the AP's beacons and the AP
+   * holds every packet for the panel until the next one, which adds up to a few hundred ms to each
+   * incoming packet. Low latency (WIFI_PS_NONE) keeps the radio awake, at the cost of power and heat.
+   * Does nothing if the mode is already the one asked for. Never blocks.
+   * @param low_latency: True for WIFI_PS_NONE, false for WIFI_PS_MIN_MODEM.
+   */
+  static void set_low_latency(bool low_latency);
+
 private:
   static void _event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
@@ -94,4 +104,6 @@ private:
 
   // MAC address of ESP32 WiFi
   static inline char _mac_address[18];
+  // Power save mode last applied by set_low_latency(): 1 low latency, 0 power saving, -1 not set (or the last attempt failed).
+  static inline std::atomic<int8_t> _low_latency = -1;
 };
