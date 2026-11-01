@@ -10,6 +10,7 @@
 #define min(a, b) ((a) < (b) ? (a) : (b))
 
 void WiFiManager::init() {
+  WiFiManager::_power_save_mutex = xSemaphoreCreateMutex();
   esp_netif_init();
   esp_netif_create_default_wifi_sta();
 
@@ -224,19 +225,38 @@ void WiFiManager::_fallback_timer_callback(TimerHandle_t timer) {
 }
 
 void WiFiManager::set_low_latency(bool low_latency) {
-  int8_t wanted = low_latency ? 1 : 0;
-  if (WiFiManager::_low_latency.exchange(wanted) == wanted) {
+  WiFiManager::_page_wants_low_latency = low_latency;
+  WiFiManager::_apply_power_save();
+}
+
+void WiFiManager::set_update_in_progress(bool in_progress) {
+  WiFiManager::_update_in_progress = in_progress;
+  ESP_LOGD("WiFiManager", "%s", in_progress ? "Update in progress, keeping the radio awake." : "Update ended, Wi-Fi power save follows the shown page again.");
+  WiFiManager::_apply_power_save();
+}
+
+void WiFiManager::_apply_power_save() {
+  // Both inputs are written before this runs and read under the lock, so whichever caller applies
+  // last applies the newest combination: interleaved calls can't leave a stale mode behind.
+  if (WiFiManager::_power_save_mutex == NULL || xSemaphoreTake(WiFiManager::_power_save_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+    ESP_LOGW("WiFiManager", "Failed to take power save mutex. Will apply on the next change.");
     return;
   }
-  // The power save type is a global setting of the Wi-Fi driver: it is kept across disconnects,
-  // reconnects and mode changes, so it only needs setting when it changes.
-  esp_err_t result = esp_wifi_set_ps(low_latency ? WIFI_PS_NONE : WIFI_PS_MIN_MODEM);
-  if (result == ESP_OK) {
-    ESP_LOGD("WiFiManager", "Wi-Fi power save set to %s.", low_latency ? "none (low latency)" : "modem sleep (power saving)");
-  } else {
-    WiFiManager::_low_latency = -1; // Try again on the next call.
-    ESP_LOGW("WiFiManager", "Failed to set Wi-Fi power save to %s: %s", low_latency ? "none" : "modem sleep", esp_err_to_name(result));
+  bool low_latency = WiFiManager::_page_wants_low_latency || WiFiManager::_update_in_progress;
+  int8_t wanted = low_latency ? 1 : 0;
+  if (WiFiManager::_applied_low_latency != wanted) {
+    // The power save type is a global setting of the Wi-Fi driver: it is kept across disconnects,
+    // reconnects and mode changes, so it only needs setting when it changes.
+    esp_err_t result = esp_wifi_set_ps(low_latency ? WIFI_PS_NONE : WIFI_PS_MIN_MODEM);
+    if (result == ESP_OK) {
+      WiFiManager::_applied_low_latency = wanted;
+      ESP_LOGD("WiFiManager", "Wi-Fi power save set to %s.", low_latency ? "none (low latency)" : "modem sleep (power saving)");
+    } else {
+      WiFiManager::_applied_low_latency = -1; // Try again on the next call.
+      ESP_LOGW("WiFiManager", "Failed to set Wi-Fi power save to %s: %s", low_latency ? "none" : "modem sleep", esp_err_to_name(result));
+    }
   }
+  xSemaphoreGive(WiFiManager::_power_save_mutex);
 }
 
 std::vector<wifi_ap_record_t> WiFiManager::search_available_networks() {
