@@ -47,7 +47,9 @@
  *
  * The art is drawn straight over whatever page is displayed. fill() uses absolute screen
  * coordinates and does not touch component definitions, so touch keeps working and navigating
- * away clears it.
+ * away clears it. The display draws a fill on whatever page it is showing, so every render asks
+ * the page it is for whether it is still shown, and stops as soon as it isn't. That doesn't wait for
+ * the page's unshow(), which runs late on the unshow task and can be held up indefinitely.
  */
 class AlbumArt {
 public:
@@ -66,8 +68,12 @@ public:
    *             appended per pass, so this should not already carry w/h.
    * @param x: Left edge of the draw_size x draw_size square, in absolute screen coordinates.
    * @param y: Top edge of the square.
+   * @param still_shown: Whether the page the art is for is still the one displayed. Answer from
+   *                     InterfaceManager::is_current_page(), not from a flag cleared in unshow(). Called
+   *                     before every fill, from the render task, so it must be cheap and must not block.
+   *                     Nothing is drawn unless it returns true, and the render stops once it returns false.
    */
-  static void render(const std::string &url, uint16_t x, uint16_t y);
+  static void render(const std::string &url, uint16_t x, uint16_t y, bool (*still_shown)());
 
   /**
    * @brief Ask an in-progress render to stop.
@@ -92,7 +98,13 @@ private:
   /**
    * @brief Spawn the render task. Called with _request_mutex held and _rendering set.
    */
-  static void _start_render(const std::string &url, uint16_t x, uint16_t y);
+  static void _start_render(const std::string &url, uint16_t x, uint16_t y, bool (*still_shown)());
+
+  /**
+   * @brief Whether the page the current render belongs to is still the one shown. If not, cancels
+   *        the render, so that callers can just stop.
+   */
+  static bool _page_still_shown();
 
   /**
    * @brief Task body. Takes ownership of a heap allocated std::string holding the base URL.
@@ -152,6 +164,7 @@ private:
     std::string url;
     uint16_t x;
     uint16_t y;
+    bool (*still_shown)();
   };
   static inline std::optional<_request_t> _next_request;
   // Set by clear() while a render runs, so that its task clears the display when it stops.
@@ -165,6 +178,8 @@ private:
   // task reads a stable value.
   static inline uint16_t _draw_origin_x = 0;
   static inline uint16_t _draw_origin_y = 0;
+  // Whether the page the art is drawn for is still shown, as given to render(). Written like the origin.
+  static inline bool (*_still_shown)() = nullptr;
 
   // Passes, coarsest first, ending at one block per pixel. Block sizes: 20, 10, 5, 2, 1.
   static constexpr uint16_t passes[5] = {draw_size / 20, draw_size / 10, draw_size / 5, draw_size / 2, draw_size};

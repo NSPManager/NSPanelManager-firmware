@@ -2,6 +2,7 @@
 #include <EntitiesPage.hpp>
 #include <EntityPage.hpp>
 #include <GUI_data.hpp>
+#include <InterfaceManager.hpp>
 #include <MediaPlayerPage.hpp>
 #include <MediaSourcePage.hpp>
 #include <MqttManager.hpp>
@@ -42,8 +43,13 @@ void MediaPlayerPage::unshow() {
   AlbumArt::cancel();
 }
 
+bool MediaPlayerPage::_on_screen() {
+  // The media player is shown as an entity page, so its page is recorded as EntityPage's.
+  return MediaPlayerPage::_showing && InterfaceManager::is_current_page(EntityPage::unshow);
+}
+
 void MediaPlayerPage::_redraw() {
-  if (!MediaPlayerPage::_showing) {
+  if (!MediaPlayerPage::_on_screen()) {
     return;
   }
   std::shared_ptr<NSPanelEntityState> state = EntityPage::get_current_state();
@@ -96,6 +102,13 @@ void MediaPlayerPage::_log_state(const NSPanelEntityState__MediaPlayer *media_pl
 }
 
 void MediaPlayerPage::update_display(const NSPanelEntityState__MediaPlayer *media_player, bool page_just_opened) {
+  if (!InterfaceManager::is_current_page(EntityPage::unshow)) {
+    // Another page has been shown, but EntityPage still receives state until its unshow() runs.
+    // Every write would land on the other page, the album art included.
+    ESP_LOGD("MediaPlayerPage", "Not updating the display: the media player page is no longer shown.");
+    return;
+  }
+
   if (page_just_opened) {
     MediaPlayerPage::_showing = true;
     MediaPlayerPage::_resolve_component_ids();
@@ -124,7 +137,7 @@ void MediaPlayerPage::update_display(const NSPanelEntityState__MediaPlayer *medi
     if (page_just_opened || album_art_url != MediaPlayerPage::_album_art_url) {
       MediaPlayerPage::_album_art_url = album_art_url;
       if (!album_art_url.empty()) {
-        AlbumArt::render(album_art_url, MediaPlayerPage::_album_art_x, MediaPlayerPage::_album_art_y);
+        AlbumArt::render(album_art_url, MediaPlayerPage::_album_art_x, MediaPlayerPage::_album_art_y, MediaPlayerPage::_on_screen);
       } else if (page_just_opened) {
         AlbumArt::cancel(); // Nothing drawn on this page yet.
       } else {
@@ -219,7 +232,7 @@ void MediaPlayerPage::_update_position_bar(const NSPanelEntityState__MediaPlayer
 void MediaPlayerPage::_task_position(void *param) {
   for (;;) {
     bool playing = false;
-    if (MediaPlayerPage::_showing) {
+    if (MediaPlayerPage::_on_screen()) {
       std::shared_ptr<NSPanelEntityState> state = EntityPage::get_current_state();
       if (state != nullptr && state->entity_case == NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER) {
         playing = state->media_player->state == NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__PLAYING;

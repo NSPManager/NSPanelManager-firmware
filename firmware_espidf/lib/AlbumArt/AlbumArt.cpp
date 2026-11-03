@@ -6,11 +6,17 @@
 #include <esp_timer.h>
 #include <string.h>
 
-void AlbumArt::render(const std::string &url, uint16_t x, uint16_t y) {
+void AlbumArt::render(const std::string &url, uint16_t x, uint16_t y, bool (*still_shown)()) {
   esp_log_level_set("AlbumArt", ConfigManager::log_level);
 
   if (url.empty()) [[unlikely]] {
     ESP_LOGD("AlbumArt", "No album art URL, nothing to render.");
+    return;
+  }
+
+  if (!still_shown()) {
+    // The page was left while its state was being handled. Drawing now would paint over the next page.
+    ESP_LOGD("AlbumArt", "Not rendering: the page the art is for is no longer shown.");
     return;
   }
 
@@ -21,13 +27,13 @@ void AlbumArt::render(const std::string &url, uint16_t x, uint16_t y) {
     // Only the newest art matters, for example after skipping a track. Replace any request already
     // waiting, and stop the running render so its task starts this one when it finishes.
     ESP_LOGD("AlbumArt", "A render is already in progress, will start this one when it stops.");
-    AlbumArt::_next_request = _request_t{.url = url, .x = x, .y = y};
+    AlbumArt::_next_request = _request_t{.url = url, .x = x, .y = y, .still_shown = still_shown};
     AlbumArt::_cancelled = true;
     return;
   }
 
   AlbumArt::_rendering = true;
-  AlbumArt::_start_render(url, x, y);
+  AlbumArt::_start_render(url, x, y, still_shown);
 }
 
 void AlbumArt::cancel() {
@@ -52,6 +58,16 @@ void AlbumArt::clear() {
   AlbumArt::_clear_display();
 }
 
+bool AlbumArt::_page_still_shown() {
+  if (AlbumArt::_still_shown()) [[likely]] {
+    return true;
+  }
+  if (!AlbumArt::_cancelled.exchange(true)) {
+    ESP_LOGD("AlbumArt", "The page the art is for is no longer shown, stopping the render.");
+  }
+  return false;
+}
+
 void AlbumArt::_clear_display() {
   ESP_LOGD("AlbumArt", "Clearing the album art.");
   // Sent after every fill, so the display redraws the page only once it has drawn them.
@@ -60,10 +76,11 @@ void AlbumArt::_clear_display() {
   }
 }
 
-void AlbumArt::_start_render(const std::string &url, uint16_t x, uint16_t y) {
+void AlbumArt::_start_render(const std::string &url, uint16_t x, uint16_t y, bool (*still_shown)()) {
   AlbumArt::_cancelled = false;
   AlbumArt::_draw_origin_x = x;
   AlbumArt::_draw_origin_y = y;
+  AlbumArt::_still_shown = still_shown;
 
   // The task owns this and deletes it when done.
   std::string *url_copy = new std::string(url);
@@ -122,13 +139,18 @@ void AlbumArt::_task_render(void *param) {
   bool clear_display = false;
   {
     std::lock_guard<std::mutex> lock_guard(AlbumArt::_request_mutex);
+    if (AlbumArt::_next_request.has_value() && !AlbumArt::_next_request->still_shown()) {
+      ESP_LOGD("AlbumArt", "Dropping the waiting render: the page it is for is no longer shown.");
+      AlbumArt::_next_request.reset();
+    }
     if (AlbumArt::_next_request.has_value()) {
       // render() was asked for newer art while this one ran. Start it, still marked as rendering.
       _request_t next = std::move(AlbumArt::_next_request.value());
       AlbumArt::_next_request.reset();
-      AlbumArt::_start_render(next.url, next.x, next.y);
+      AlbumArt::_start_render(next.url, next.x, next.y, next.still_shown);
     } else {
-      clear_display = AlbumArt::_clear_when_stopped;
+      // ref 0 redraws whatever page is shown, so only clear art from the page that it was drawn on.
+      clear_display = AlbumArt::_clear_when_stopped && AlbumArt::_still_shown();
       AlbumArt::_clear_when_stopped = false;
       AlbumArt::_cancelled = false;
       AlbumArt::_rendering = false;
@@ -271,6 +293,10 @@ uint32_t AlbumArt::_draw_row(const uint8_t *row, uint16_t grid, uint16_t row_ind
     }
 
     if (run_changed) {
+      // Checked before every fill rather than every row: a row of the final pass is up to 180 fills.
+      if (!AlbumArt::_page_still_shown()) {
+        return fills;
+      }
       if (Nextion::fill(AlbumArt::_draw_origin_x + (uint32_t)run_start * block_size, y,
                         (uint32_t)(col - run_start) * block_size, block_size, run_color, 250) != ESP_OK) {
         // The display is not in a state to be drawn on -- updating, most likely. Stop rather

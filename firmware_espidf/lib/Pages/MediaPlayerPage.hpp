@@ -141,9 +141,13 @@ private:
   // Send a command for the currently displayed media player to the manager. Fills in the media player ID.
   static void _send_command(NSPanelMQTTManagerCommand__MediaPlayerCommand *command);
 
-  // Whether the page is showing: set when it opens, and cleared when it closes so that the position
-  // task stops writing to the display.
+  // Whether the entity page last opened as this media player: set when it opens and cleared by
+  // unshow(). unshow() runs late on the unshow task, and not at all while that is held up, so this
+  // alone doesn't say the page is on screen. Use _on_screen() for that.
   static inline std::atomic<bool> _showing = false;
+
+  // Whether this page is what the display shows now, as InterfaceManager records it.
+  static bool _on_screen();
 
   // Whether the volume controls act on the source feeding the player rather than the player itself.
   // Reset to the player whenever the page opens.
