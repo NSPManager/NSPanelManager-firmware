@@ -50,6 +50,12 @@ private:
   static void _mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
   /**
+   * Carries out the "reboot" command. It shows a page and waits for the status report to go out, so
+   * it runs on its own task rather than in the MQTT handler that received the command.
+   */
+  static void _task_reboot(void *param);
+
+  /**
    * @brief Handle events triggered from Nextion display.
    */
   static void _nextion_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
