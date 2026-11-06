@@ -316,6 +316,9 @@ void NSPM_ConfigManager::_task_send_register_request(void *arg) {
   json["md5_data_file"] = ConfigManager::md5_data_file.c_str();
   json["md5_tft_file"] = ConfigManager::md5_gui.c_str();
   json["address"] = ip_address_str;
+  // WebManager serves GET /metrics (Prometheus text) on this port. The manager lists only panels
+  // that send this in its Prometheus service discovery.
+  json["metrics_port"] = 80;
 #if defined(BOARD_SONOFF)
   json["model"] = "sonoff";
 #elif defined(BOARD_CUSTOM)
