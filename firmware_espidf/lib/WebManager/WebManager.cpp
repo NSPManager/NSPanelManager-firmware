@@ -14,6 +14,7 @@
 void WebManager::start() {
   if (WebManager::_server == NULL) {
     WebManager::_config = HTTPD_DEFAULT_CONFIG();
+    WebManager::_config.server_port = WebManager::HTTP_PORT;
     WebManager::_config.max_uri_handlers = 12;
     // The stock config keeps an idle client connection open forever: the 5 s timeouts only cover
     // reading/sending a request. When Wi-Fi drops while a client (e.g. a periodic scraper) has a
