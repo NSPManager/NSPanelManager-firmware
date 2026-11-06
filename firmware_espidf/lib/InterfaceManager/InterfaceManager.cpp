@@ -6,6 +6,7 @@
 #include <InterfaceManager.hpp>
 #include <LoadingPage.hpp>
 #include <MqttManager.hpp>
+#include <PanelMetrics.hpp>
 #include <NSPM_ConfigManager.hpp>
 #include <NSPM_ConfigManager_event.hpp>
 #include <Nextion.hpp>
@@ -65,7 +66,7 @@ void InterfaceManager::init() {
   if (RoomManager::event_loop() != NULL) {
     esp_event_handler_register_with(RoomManager::event_loop(), ROOMMANAGER_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_page_event_dispatcher, RoomManager::event_loop());
   }
-  MqttManager::register_handler(MQTT_EVENT_ANY, &InterfaceManager::_mqtt_event_handler, NULL);
+  MqttManager::register_handler<&InterfaceManager::_mqtt_event_handler, PanelMetrics::HANDLER_INTERFACE_MANAGER>(MQTT_EVENT_ANY, NULL);
   RoomManager::register_handler(ESP_EVENT_ANY_ID, InterfaceManager::_room_manager_event_handler, NULL);
 
   // Show boot page
