@@ -129,23 +129,6 @@ void MediaPlayerPage::update_display(const NSPanelEntityState__MediaPlayer *medi
     taskEXIT_CRITICAL(&MediaPlayerPage::_spinlock);
   }
 
-  // Draw the art when the page opens and whenever it changes, for example on the next track. A new
-  // render replaces one still in progress, and unshow() cancels one that outlives the page.
-  {
-    std::string album_art_url = media_player->album_art_url != NULL ? media_player->album_art_url : "";
-    std::lock_guard<std::mutex> lock_guard(MediaPlayerPage::_album_art_url_mutex);
-    if (page_just_opened || album_art_url != MediaPlayerPage::_album_art_url) {
-      MediaPlayerPage::_album_art_url = album_art_url;
-      if (!album_art_url.empty()) {
-        AlbumArt::render(album_art_url, MediaPlayerPage::_album_art_x, MediaPlayerPage::_album_art_y, MediaPlayerPage::_on_screen);
-      } else if (page_just_opened) {
-        AlbumArt::cancel(); // Nothing drawn on this page yet.
-      } else {
-        AlbumArt::clear(); // Remove the last track's art, or what was drawn of it.
-      }
-    }
-  }
-
   bool is_playing = media_player->state == NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__PLAYING ||
                     media_player->state == NSPANEL_ENTITY_STATE__MEDIA_PLAYER__PLAYBACK_STATE__BUFFERING;
   // Fall back to the player if the source has gone away while it was selected.
@@ -185,6 +168,25 @@ void MediaPlayerPage::update_display(const NSPanelEntityState__MediaPlayer *medi
   // The task advances the bar while playing, and sleeps otherwise, so let it look at the new state.
   if (MediaPlayerPage::_position_task_handle != NULL) {
     xTaskNotifyGive(MediaPlayerPage::_position_task_handle);
+  }
+
+  // Draw the art when the page opens and whenever it changes, for example on the next track. A new
+  // render replaces one still in progress, and unshow() cancels one that outlives the page.
+  // Start it last: a render streams thousands of fills, and the writes above, made on the MQTT task,
+  // would otherwise wait their turn behind them on every track change.
+  {
+    std::string album_art_url = media_player->album_art_url != NULL ? media_player->album_art_url : "";
+    std::lock_guard<std::mutex> lock_guard(MediaPlayerPage::_album_art_url_mutex);
+    if (page_just_opened || album_art_url != MediaPlayerPage::_album_art_url) {
+      MediaPlayerPage::_album_art_url = album_art_url;
+      if (!album_art_url.empty()) {
+        AlbumArt::render(album_art_url, MediaPlayerPage::_album_art_x, MediaPlayerPage::_album_art_y, MediaPlayerPage::_on_screen);
+      } else if (page_just_opened) {
+        AlbumArt::cancel(); // Nothing drawn on this page yet.
+      } else {
+        AlbumArt::clear(); // Remove the last track's art, or what was drawn of it.
+      }
+    }
   }
 }
 
