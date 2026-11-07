@@ -130,6 +130,10 @@ private:
   static inline std::atomic<PageRequest> _requested_page = PageRequest::NONE;
   static constexpr uint32_t PAGE_TRANSITION_ASSOCIATE = 1 << 0;
   static constexpr uint32_t PAGE_TRANSITION_SHOW_PAGE = 1 << 1;
+  // The shown page changed: pick the Wi-Fi power save mode for it (see WiFiManager::set_low_latency()).
+  // Done on this task so that every caller of begin_page() stays non-blocking and the mode is always
+  // decided from the page that is current when it runs, however the transitions interleave.
+  static constexpr uint32_t PAGE_TRANSITION_WIFI_POWER_SAVE = 1 << 2;
 
   // Vars
   // Queue of unshow function pointer to call from _task_unshow_page

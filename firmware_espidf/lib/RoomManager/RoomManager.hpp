@@ -192,12 +192,13 @@ private:
 
   /**
    * @brief Point a stored state topic at @param new_topic, unsubscribing from whatever it
-   * held before. Does nothing if the topic is unchanged.
+   * held before. Does nothing if the topic is unchanged. The new topic is stored before it is
+   * subscribed to, so the MQTT handler already recognises its retained value when it arrives.
    * @param current_topic: The stored topic to update in place.
    * @param new_topic: The topic to subscribe to instead.
    * @return True if the topic was moved, false if it was already correct.
    */
-  static bool _move_topic(std::string *current_topic, std::string new_topic);
+  static bool _move_topic(MutexWrapped<std::string> *current_topic, std::string new_topic);
 
   /**
    * Function used when shared_ptr goes out of scope. Used to delete the underlying object
@@ -222,7 +223,7 @@ private:
   static inline std::atomic<uint32_t> _current_room_id;
 
   // The MQTT topic for the "All roms" mode state topic.
-  static inline std::string _all_rooms_state_topic;
+  static inline MutexWrapped<std::string> _all_rooms_state_topic;
 
   // Status of home page for all rooms
   static inline std::shared_ptr<NSPanelRoomStatus> _home_page_all_rooms = nullptr;

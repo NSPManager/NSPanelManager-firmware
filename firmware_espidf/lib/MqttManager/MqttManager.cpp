@@ -1,3 +1,4 @@
+#include <PanelRestart.hpp>
 #include <ConfigManager.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
@@ -6,6 +7,8 @@
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <esp_timer.h>
+#include <esp_transport.h>
+#include <lwip/sockets.h>
 
 // SUBSCRIBEs allowed to be awaiting a SUBACK at once. esp_mqtt_client_subscribe_single() holds
 // esp-mqtt's internal API lock across its socket write, and the MQTT client task needs that same
@@ -103,7 +106,7 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
   MqttManager::_mqtt_client = esp_mqtt_client_init(&MqttManager::_mqtt_config);
   if (MqttManager::_mqtt_client == NULL) {
     ESP_LOGE("MqttManager", "Failed to create MQTT client!");
-    esp_restart();
+    PanelRestart::restart();
     return;
   }
 
@@ -112,12 +115,12 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
   switch (result) {
   case ESP_ERR_NO_MEM:
     ESP_LOGE("MqttManager", "Failed to allocate MQTT event handler!");
-    esp_restart();
+    PanelRestart::restart();
     break;
 
   case ESP_ERR_INVALID_ARG:
     ESP_LOGE("MqttManager", "Failed to initialize MQTT event handler!");
-    esp_restart();
+    PanelRestart::restart();
     break;
 
   case ESP_OK:
@@ -134,7 +137,7 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
   switch (result) {
   case ESP_ERR_INVALID_ARG:
     ESP_LOGE("MqttManager", "Failed to start MQTT client!");
-    esp_restart();
+    PanelRestart::restart();
     break;
 
   case ESP_OK:
@@ -154,6 +157,21 @@ void MqttManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, in
   switch ((esp_mqtt_event_id_t)event_id) {
   case MQTT_EVENT_CONNECTED:
     MqttManager::_connected = true;
+    {
+      // Turn off Nagle's algorithm on the broker connection. With it on, a small packet such as a
+      // SUBSCRIBE is held back until everything sent before it has been acknowledged, and the panel
+      // is almost always sending something (log lines, status). The broker host delays its ACKs by
+      // 40ms or more, so every page switch waited that long for its SUBACK, and often much longer.
+      // The socket is new on every connect, so this has to be done each time.
+      esp_transport_handle_t transport = esp_mqtt_client_get_transport(MqttManager::_mqtt_client, (char *)"mqtt");
+      int sock = transport != NULL ? esp_transport_get_socket(transport) : -1;
+      int nodelay = 1;
+      if (sock >= 0 && setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) == 0) {
+        ESP_LOGD("MqttManager", "Set TCP_NODELAY on MQTT socket %d.", sock);
+      } else {
+        ESP_LOGW("MqttManager", "Failed to set TCP_NODELAY on MQTT socket %d: errno %d.", sock, errno);
+      }
+    }
     // Supersede any retry still running for an earlier connection, then wake the task to
     // publish the retained "online" status for this one.
     MqttManager::_online_update_generation++;

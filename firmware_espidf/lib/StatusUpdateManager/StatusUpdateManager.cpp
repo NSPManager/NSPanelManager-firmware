@@ -1,3 +1,4 @@
+#include <PanelRestart.hpp>
 #include <ConfigManager.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
@@ -129,7 +130,7 @@ void StatusUpdateManager::reboot() {
   StatusUpdateManager::_send_status_update(NULL);
 
   vTaskDelay(pdMS_TO_TICKS(2000)); // Wait two seconds to message to be sent then reboot
-  esp_restart();
+  PanelRestart::restart();
 }
 
 void StatusUpdateManager::_send_status_update(void *arg) {

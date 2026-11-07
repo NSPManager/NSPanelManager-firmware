@@ -1,3 +1,4 @@
+#include <PanelRestart.hpp>
 #include <ConfigManager.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
@@ -155,7 +156,7 @@ esp_err_t WebManager::_handle_uri_save_config(httpd_req_t *req) {
   httpd_resp_send(req, NULL, 0);            // Send the response
 
   ConfigManager::save_config();
-  esp_restart();
+  PanelRestart::restart();
   return ESP_OK;
 }
 
@@ -167,7 +168,7 @@ esp_err_t WebManager::_handle_uri_reboot(httpd_req_t *req) {
   httpd_resp_send(req, NULL, 0);            // Send the response
 
   vTaskDelay(pdMS_TO_TICKS(250));
-  esp_restart();
+  PanelRestart::restart();
   return ESP_OK;
 }
 
@@ -177,7 +178,7 @@ esp_err_t WebManager::_handle_uri_factory_reset(httpd_req_t *req) {
 
   ConfigManager::create_default();
   ConfigManager::save_config();
-  esp_restart();
+  PanelRestart::restart();
   return ESP_OK;
 }
 

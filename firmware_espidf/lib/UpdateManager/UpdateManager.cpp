@@ -1,3 +1,4 @@
+#include <PanelRestart.hpp>
 #include <ConfigManager.hpp>
 #include <LittleFS.hpp>
 #include <LoadingPage.hpp>
@@ -31,6 +32,8 @@ void UpdateManager::init() {
 }
 
 void UpdateManager::update_gui(void *param) {
+  // Keep the radio awake for the whole update, even if a reconnect brings the screensaver back.
+  WiFiManager::set_update_in_progress(true);
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
     esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, UpdateManager::_nextion_event_handler, NULL);
@@ -255,12 +258,15 @@ void UpdateManager::update_gui(void *param) {
     ESP_LOGE("UpdateManager", "Failed to get NSPanelConfig when trying to update GUI.");
   }
 
+  WiFiManager::set_update_in_progress(false); // The update ended without a reboot.
   UpdateManager::_current_update_task = NULL;
 
   vTaskDelete(NULL);
 }
 
 void UpdateManager::update_firmware(void *param) {
+  // Keep the radio awake for the whole update, even if a reconnect brings the screensaver back.
+  WiFiManager::set_update_in_progress(true);
   std::string firmware_md5_string = "http://";
   firmware_md5_string.append(NSPM_ConfigManager::get_manager_address());
   firmware_md5_string.append(":");
@@ -293,11 +299,15 @@ void UpdateManager::update_firmware(void *param) {
 
         ESP_LOGI("UpdateManager", "Firmware update complete. Stored firmware checksum will be updated on next successful boot.");
 
-        UpdateManager::update_littlefs(NULL, true);
-
-        ESP_LOGI("UpdateManager", "Update complete. Will restart in 2 seconds");
-        vTaskDelay(pdMS_TO_TICKS(2000));
-        StatusUpdateManager::reboot();
+        if (UpdateManager::update_littlefs(NULL, true) == ESP_OK) {
+          ESP_LOGI("UpdateManager", "Update complete. Will restart in 2 seconds");
+          vTaskDelay(pdMS_TO_TICKS(2000));
+          StatusUpdateManager::reboot();
+        } else {
+          // Rebooting now would lose the settings for good. The new firmware is already set to boot,
+          // so it will start on the next restart, whenever that is.
+          ESP_LOGE("UpdateManager", "Settings could not be written back to LittleFS. Will not restart.");
+        }
       }
     } else {
       ESP_LOGI("UpdateManager", "Firmware already up to date. Will check LittleFS.");
@@ -307,11 +317,12 @@ void UpdateManager::update_firmware(void *param) {
     ESP_LOGE("UpdateManager", "Failed to new firmware MD5 checksum.");
   }
 
+  WiFiManager::set_update_in_progress(false); // The update ended without a reboot.
   UpdateManager::_current_update_task = NULL;
   vTaskDelete(NULL);
 }
 
-void UpdateManager::update_littlefs(void *param, bool force_update) {
+esp_err_t UpdateManager::update_littlefs(void *param, bool force_update) {
   // TODO: Implement
   std::string littlefs_md5_string = "http://";
   littlefs_md5_string.append(NSPM_ConfigManager::get_manager_address());
@@ -332,14 +343,41 @@ void UpdateManager::update_littlefs(void *param, bool force_update) {
     if (md5_string.compare(ConfigManager::md5_data_file) != 0 || force_update) {
       ESP_LOGI("UpdateManager", "New LittleFS available. Will update OTA.");
       LittleFS::unmount(); // Unmount LittleFS
-      if (UpdateManager::_update_littlefs_ota() == ESP_OK) {
+      bool erased = false;
+      esp_err_t result = UpdateManager::_update_littlefs_ota(&erased);
+      // Once the partition is erased the settings exist only in RAM, so giving up is no longer
+      // an option: retry, backing off to give a dropped Wi-Fi or MQTT connection time to recover.
+      for (uint8_t attempt = 2; result != ESP_OK && erased && attempt <= UpdateManager::LITTLEFS_UPDATE_ATTEMPTS; attempt++) {
+        uint32_t delay_ms = 2000 << (attempt - 2); // 2, 4, 8, 16 s
+        ESP_LOGW("UpdateManager", "LittleFS update failed. Will try again in %lu ms (attempt %u of %u).", delay_ms, attempt, UpdateManager::LITTLEFS_UPDATE_ATTEMPTS);
+        vTaskDelay(pdMS_TO_TICKS(delay_ms));
+        result = UpdateManager::_update_littlefs_ota(&erased);
+      }
+
+      if (result == ESP_OK) {
         ESP_LOGI("UpdateManager", "LittleFS update complete, will save new MD5 checksum.");
         ConfigManager::md5_data_file = md5_string;
         // Save the existing config loaded into memory into the new LittleFS partition.
-        LittleFS::mount();
-        ConfigManager::save_config();
+        if (LittleFS::mount() != ESP_OK || ConfigManager::save_config() != ESP_OK) {
+          ESP_LOGE("UpdateManager", "Failed to save settings to the new LittleFS image.");
+          if (UpdateManager::_restore_config_after_failed_littlefs_update() != ESP_OK) {
+            return ESP_FAIL;
+          }
+        }
 
         ESP_LOGI("UpdateManager", "Update complete. Will restart in 2 seconds");
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        StatusUpdateManager::reboot();
+      } else if (!erased) {
+        // Failed before anything was erased: the old filesystem and the settings in it are intact.
+        ESP_LOGE("UpdateManager", "LittleFS update failed before the partition was erased. Keeping the current LittleFS.");
+        LittleFS::mount();
+      } else {
+        ESP_LOGE("UpdateManager", "LittleFS update failed %u times. Will write the settings back to an empty LittleFS.", UpdateManager::LITTLEFS_UPDATE_ATTEMPTS);
+        if (UpdateManager::_restore_config_after_failed_littlefs_update() != ESP_OK) {
+          return ESP_FAIL;
+        }
+        ESP_LOGI("UpdateManager", "Settings saved. Will restart in 2 seconds");
         vTaskDelay(pdMS_TO_TICKS(2000));
         StatusUpdateManager::reboot();
       }
@@ -349,6 +387,19 @@ void UpdateManager::update_littlefs(void *param, bool force_update) {
   } else {
     ESP_LOGE("UpdateManager", "Failed to new LittleFS MD5 checksum.");
   }
+  return ESP_OK; // The LittleFS partition was not touched.
+}
+
+esp_err_t UpdateManager::_restore_config_after_failed_littlefs_update() {
+  LittleFS::unmount(); // In case it is mounted; format() needs it unmounted.
+  // Clear the stored checksum so that the manager sees LittleFS as out of date and offers it again.
+  ConfigManager::md5_data_file = "";
+  if (LittleFS::format() != ESP_OK || LittleFS::mount() != ESP_OK || ConfigManager::save_config() != ESP_OK) {
+    ESP_LOGE("UpdateManager", "Failed to write the settings back to LittleFS. They are only in RAM now.");
+    return ESP_FAIL;
+  }
+  ESP_LOGW("UpdateManager", "Settings written back to an empty LittleFS. The web UI files are missing until the next LittleFS update.");
+  return ESP_OK;
 }
 
 void UpdateManager::mark_boot_successful() {
@@ -533,10 +584,10 @@ void UpdateManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
 
         if (command_string.compare("reboot") == 0) { // TODO: Move to some place more fitting.
           ESP_LOGI("UpdateManager", "Received command to reboot. Will reboot NSPanel.");
-          LoadingPage::show();
-          LoadingPage::set_loading_text("Rebooting");
-          LoadingPage::set_secondary_text("");
-          StatusUpdateManager::reboot();
+          if (xTaskCreatePinnedToCore(UpdateManager::_task_reboot, "reboot", 4096, NULL, 2, NULL, 1) != pdPASS) [[unlikely]] {
+            ESP_LOGE("UpdateManager", "Failed to create the reboot task. Restarting without the status report.");
+            PanelRestart::restart();
+          }
         } else if (command_string.compare("firmware_update") == 0 && UpdateManager::_current_update_task == NULL) {
           UpdateManager::_force_update = false;
           xTaskCreatePinnedToCore(UpdateManager::update_firmware, "update_firmware", 8192, NULL, 2, &UpdateManager::_current_update_task, 1);
@@ -555,6 +606,13 @@ void UpdateManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
       }
     }
   }
+}
+
+void UpdateManager::_task_reboot(void *param) {
+  LoadingPage::show();
+  LoadingPage::set_loading_text("Rebooting");
+  LoadingPage::set_secondary_text("");
+  StatusUpdateManager::reboot(); // Does not return.
 }
 
 void UpdateManager::_nextion_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -680,7 +738,7 @@ esp_err_t UpdateManager::_update_firmware_ota() {
   }
 }
 
-esp_err_t UpdateManager::_update_littlefs_ota() {
+esp_err_t UpdateManager::_update_littlefs_ota(bool *erased) {
   // Firmware download URL
   std::string littlefs_download_url = "http://";
   littlefs_download_url.append(NSPM_ConfigManager::get_manager_address());
@@ -740,11 +798,19 @@ esp_err_t UpdateManager::_update_littlefs_ota() {
     return ESP_ERR_NOT_FINISHED;
   }
 
-  esp_http_client_fetch_headers(client);
-  uint64_t total_file_size = esp_http_client_get_content_length(client);
-  ESP_LOGI("UpdateManager", "Remote LittleFS image size: %lld bytes.", total_file_size);
+  int64_t content_length = esp_http_client_fetch_headers(client);
+  int status_code = esp_http_client_get_status_code(client);
+  // Check what we got before erasing anything: everything up to here can fail and leave the current LittleFS intact.
+  if (status_code != 200 || content_length <= 0 || content_length > littlefs_partition->size) {
+    ESP_LOGE("UpdateManager", "Unusable LittleFS download: HTTP status %d, size %lld bytes, partition size %lu bytes.", status_code, content_length, littlefs_partition->size);
+    esp_http_client_cleanup(client);
+    return ESP_ERR_NOT_FINISHED;
+  }
+  uint64_t total_file_size = content_length;
+  ESP_LOGI("UpdateManager", "Remote LittleFS image size: %llu bytes.", total_file_size);
 
-  // Delete current LittleFS partition
+  // Delete current LittleFS partition. From here on the old filesystem, and the settings in it, are gone.
+  *erased = true;
   err = esp_partition_erase_range(littlefs_partition, 0, littlefs_partition->size);
   if (err != ESP_OK) {
     ESP_LOGE("UpdateManager", "Failed to erase existing LittleFS partition. Error: %s", esp_err_to_name(err));
@@ -784,7 +850,12 @@ esp_err_t UpdateManager::_update_littlefs_ota() {
         last_progress_update = esp_timer_get_time() / 1000;
       }
     } else {
-      // Received 0 bytes ie. we've read all data and connection closed.
+      // Received 0 bytes ie. the connection closed. That is only the end of the image if all of it arrived.
+      if (total_bytes_read != total_file_size) {
+        ESP_LOGE("UpdateManager", "LittleFS download ended early: got %llu of %llu bytes.", total_bytes_read, total_file_size);
+        esp_http_client_cleanup(client);
+        return ESP_ERR_NOT_FINISHED;
+      }
       ESP_LOGI("UpdateManager", "Wrote %llu bytes to LittleFS partition via OTA from manager. Update complete.", total_bytes_read);
       esp_http_client_cleanup(client);
       esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::LITTLEFS_UPDATE_FINISHED, NULL, 0, pdMS_TO_TICKS(50));
