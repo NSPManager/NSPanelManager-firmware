@@ -15,6 +15,10 @@
  * sent and not yet answered are the bytes it has not processed yet. A writer waits, for a bounded
  * time, while more than the window's worth of bytes are unanswered.
  *
+ * A bulk writer (an album art render: thousands of fills back to back) gets only half the window.
+ * The other half is kept for everyone else, so a page update or a tap made during a render is written
+ * at once instead of waiting for the display to work through the render one reply at a time.
+ *
  * The count can drift. Some commands are never answered (printh), some answer with something other
  * than 0x01 (get answers with its value), and a raw command from MQTT can be anything. So every
  * MARKER_INTERVAL bytes a "printh" marker is sent, which the display echoes once it has processed
@@ -42,11 +46,17 @@ public:
    */
   static void stop_locked();
 
+  enum class write_class : uint8_t {
+    NORMAL,
+    // Long runs of writes nobody is waiting on. Waits while more than half the window is unanswered.
+    BULK,
+  };
+
   /**
    * @brief Wait until the display has room for another command, or the maximum wait has passed.
    * Call without holding Nextion::_uart_write_mutex, so other writers are not held up meanwhile.
    */
-  static void wait_for_room();
+  static void wait_for_room(write_class kind = write_class::NORMAL);
 
   /**
    * @brief Write one command and its terminator, accounting for it. The caller holds Nextion::_uart_write_mutex.
@@ -101,11 +111,11 @@ private:
 
   // These were measured on Office at 115200 baud. _configure_for_baud() scales them to the link's rate.
   static constexpr uint32_t MEASURED_BAUD = 115200;
-  // About a third of the display's ~1.08 KB buffer. On Office, 384 B gave the shortest wait for a tap
-  // during an album art render at almost the same throughput as 768 B. A tap waits for at most about
-  // one window to drain, so the window is really a time (384 B is ~33 ms on the wire at 115200) and
-  // scales with the baud rate...
-  static constexpr uint32_t MEASURED_WINDOW_BYTES = 384;
+  // The bulk window: about a third of the display's ~1.08 KB buffer. On Office, 384 B gave the shortest
+  // wait for a tap during an album art render at almost the same throughput as 768 B. A tap waits for
+  // at most about one bulk window to drain, so the window is really a time (384 B is ~33 ms on the wire
+  // at 115200) and scales with the baud rate. Everyone else gets twice this...
+  static constexpr uint32_t MEASURED_BULK_WINDOW_BYTES = 384;
   // ...but not past what the display can hold: a 1 KB window never overflowed it and a 2 KB one did.
   static constexpr uint32_t MAX_WINDOW_BYTES = 768;
   // At low rates the wire time dominates anyway; don't shrink the window to less than a few commands.
@@ -150,7 +160,8 @@ private:
   static inline stats_t _stats = {};
 
   // Set by _configure_for_baud() when the window starts; read from every writer and the monitor task.
-  static inline std::atomic<uint32_t> _window_bytes = MEASURED_WINDOW_BYTES;
+  static inline std::atomic<uint32_t> _window_bytes = 2 * MEASURED_BULK_WINDOW_BYTES;
+  static inline std::atomic<uint32_t> _bulk_window_bytes = MEASURED_BULK_WINDOW_BYTES;
   static inline std::atomic<uint32_t> _max_wait_ms = MEASURED_MAX_WAIT_MS;
   static inline std::atomic<uint32_t> _stall_ms = MEASURED_STALL_MS;
   static inline std::atomic<uint32_t> _probe_timeout_ms = MEASURED_PROBE_TIMEOUT_MS;

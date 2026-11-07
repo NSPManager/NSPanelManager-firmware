@@ -65,9 +65,11 @@ public:
    * @param height: The height of the rectangle
    * @param color: The 565 color value to fill the rectangle with
    * @param mutex_timeout: Timeout (in ms) of how long to wait for UART mutex
+   * @param bulk: True for one of a long run of fills nobody is waiting on, such as an image drawn
+   *              fill by fill. It then leaves room in the display's buffer for other writes.
    * @return ESP_OK or ESP_ERR_TIMEOUT
    */
-  static esp_err_t fill(const uint32_t x, const uint32_t y, const uint32_t width, const uint32_t height, const uint16_t color, uint16_t mutex_timeout);
+  static esp_err_t fill(const uint32_t x, const uint32_t y, const uint32_t width, const uint32_t height, const uint16_t color, uint16_t mutex_timeout, bool bulk = false);
 
   /**
    * @brief Set the text on the given component
@@ -306,9 +308,10 @@ private:
    * @brief Send one command, if the display is running. Every public command goes through here.
    * @param command: The command, without its 0xFF 0xFF 0xFF terminator.
    * @param mutex_timeout: Timeout (in ms) of how long to wait for UART mutex
+   * @param bulk: Wait for room as a bulk writer (see NextionWindow::write_class).
    * @return ESP_OK or ESP_ERR_TIMEOUT
    */
-  static esp_err_t _send_command(const std::string &command, uint16_t mutex_timeout);
+  static esp_err_t _send_command(const std::string &command, uint16_t mutex_timeout, bool bulk = false);
 
   /**
    * @brief Write one command and its terminator. The caller holds _uart_write_mutex.

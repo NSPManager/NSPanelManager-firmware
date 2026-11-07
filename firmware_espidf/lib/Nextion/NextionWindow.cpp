@@ -55,17 +55,19 @@ void NextionWindow::_configure_for_baud(uint32_t baud) {
   if (baud == 0) {
     baud = MEASURED_BAUD;
   }
-  uint32_t window = (uint32_t)((uint64_t)MEASURED_WINDOW_BYTES * baud / MEASURED_BAUD);
+  uint32_t window = (uint32_t)((uint64_t)2 * MEASURED_BULK_WINDOW_BYTES * baud / MEASURED_BAUD);
   window = std::clamp(window, MIN_WINDOW_BYTES, MAX_WINDOW_BYTES);
+  uint32_t bulk_window = window / 2;
   // Waits and stalls cover a redraw plus the time to drain what is queued ahead of it, with room to spare.
   uint32_t drain_ms = 2 * NextionWindow::_wire_ms(window, baud);
   uint32_t stall_ms = std::max(MEASURED_STALL_MS, REDRAW_MS + drain_ms);
   NextionWindow::_window_bytes = window;
+  NextionWindow::_bulk_window_bytes = bulk_window;
   NextionWindow::_max_wait_ms = std::max(MEASURED_MAX_WAIT_MS, REDRAW_MS + drain_ms);
   NextionWindow::_stall_ms = stall_ms;
   NextionWindow::_probe_timeout_ms = std::max(MEASURED_PROBE_TIMEOUT_MS, stall_ms + NextionWindow::_wire_ms(MARKER_INTERVAL, baud));
-  ESP_LOGI("NextionWindow", "Write window for %lu baud: %lu B, max wait %lu ms, stall %lu ms, probe timeout %lu ms.",
-           baud, window, NextionWindow::_max_wait_ms.load(), stall_ms, NextionWindow::_probe_timeout_ms.load());
+  ESP_LOGI("NextionWindow", "Write window for %lu baud: %lu B (bulk %lu B), max wait %lu ms, stall %lu ms, probe timeout %lu ms.",
+           baud, window, bulk_window, NextionWindow::_max_wait_ms.load(), stall_ms, NextionWindow::_probe_timeout_ms.load());
 }
 
 void NextionWindow::start_locked() {
@@ -104,18 +106,19 @@ void NextionWindow::_reset_locked() {
   }
 }
 
-void NextionWindow::wait_for_room() {
+void NextionWindow::wait_for_room(write_class kind) {
   if (!NextionWindow::_accounting) {
     return;
   }
 
+  const std::atomic<uint32_t> &window = kind == write_class::BULK ? NextionWindow::_bulk_window_bytes : NextionWindow::_window_bytes;
   int64_t start = esp_timer_get_time();
   bool waited = false;
   for (;;) {
     taskENTER_CRITICAL(&NextionWindow::_lock);
     uint32_t inflight = NextionWindow::_inflight_bytes;
     taskEXIT_CRITICAL(&NextionWindow::_lock);
-    if (inflight <= NextionWindow::_window_bytes || !NextionWindow::_accounting) {
+    if (inflight <= window || !NextionWindow::_accounting) {
       break;
     }
     if (esp_timer_get_time() - start >= (int64_t)NextionWindow::_max_wait_ms * 1000) {

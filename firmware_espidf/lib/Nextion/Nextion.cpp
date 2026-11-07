@@ -628,7 +628,7 @@ void Nextion::_write_locked(const std::string &command) {
   NextionWindow::write_locked(command);
 }
 
-esp_err_t Nextion::_send_command(const std::string &command, uint16_t mutex_timeout) {
+esp_err_t Nextion::_send_command(const std::string &command, uint16_t mutex_timeout, bool bulk) {
   // Verify that the Nextion state is "running" as we don't want to send data that may interrupt other processes such as updating the GUI
   if (xSemaphoreTake(Nextion::_nextion_state_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
     if (Nextion::_current_nextion_state != nextion_state_t::RUNNING) {
@@ -639,7 +639,7 @@ esp_err_t Nextion::_send_command(const std::string &command, uint16_t mutex_time
   }
 
   // Wait before taking the mutex, so other writers can still queue behind it meanwhile.
-  NextionWindow::wait_for_room();
+  NextionWindow::wait_for_room(bulk ? NextionWindow::write_class::BULK : NextionWindow::write_class::NORMAL);
   if (xSemaphoreTake(Nextion::_uart_write_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
     Nextion::_write_locked(command);
     xSemaphoreGive(Nextion::_uart_write_mutex);
@@ -656,7 +656,7 @@ esp_err_t Nextion::send_raw_command(const char *command, uint16_t mutex_timeout)
   return Nextion::_send_command(command, mutex_timeout);
 }
 
-esp_err_t Nextion::fill(const uint32_t x, const uint32_t y, const uint32_t width, const uint32_t height, const uint16_t color, uint16_t mutex_timeout) {
+esp_err_t Nextion::fill(const uint32_t x, const uint32_t y, const uint32_t width, const uint32_t height, const uint16_t color, uint16_t mutex_timeout, bool bulk) {
   std::string command = "fill ";
   command.append(std::to_string(x));
   command.append(",");
@@ -667,7 +667,7 @@ esp_err_t Nextion::fill(const uint32_t x, const uint32_t y, const uint32_t width
   command.append(std::to_string(height));
   command.append(",");
   command.append(std::to_string(color));
-  return Nextion::_send_command(command, mutex_timeout);
+  return Nextion::_send_command(command, mutex_timeout, bulk);
 }
 
 esp_err_t Nextion::set_component_text(const char *component_id, const char *text, uint16_t mutex_timeout) {
