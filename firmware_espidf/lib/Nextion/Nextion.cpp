@@ -21,6 +21,10 @@ esp_err_t Nextion::init() {
   Nextion::_uart_write_mutex = xSemaphoreCreateMutex();
   Nextion::_event_wait_mutex = xSemaphoreCreateMutex();
   Nextion::_event_wait_integer_mutex = xSemaphoreCreateMutex();
+  // Registered once and never unregistered: unregistering from the default loop
+  // while it is busy can deadlock it (see PageHandlers.hpp). The handler only
+  // acts while a task is waiting in _wait_for_event().
+  esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, Nextion::_wait_for_event_event_handler, NULL);
   Nextion::_cmd_finished_bin_sem = xSemaphoreCreateBinary();
 
   Nextion::_nextion_buffer_out = 0;
@@ -410,12 +414,17 @@ void Nextion::_uart_data_handler(void *arg, esp_event_base_t event_base, int32_t
 }
 
 esp_err_t Nextion::_wait_for_event(esp_event_base_t event_base, int32_t event_id, uint16_t timeout, uint16_t mutex_timeout) {
+  if (event_base != NEXTION_EVENT) [[unlikely]] {
+    ESP_LOGE("Nextion", "_wait_for_event only waits for NEXTION_EVENTs.");
+    return ESP_ERR_NOT_SUPPORTED;
+  }
+
   // Wait for mutex that allows us to manipulate the _event_wait_task task handle
   if (xSemaphoreTake(Nextion::_event_wait_mutex, pdMS_TO_TICKS(mutex_timeout)) == pdTRUE) {
     // Set the waiting task handle to the currently calling task
     if (Nextion::_event_wait_task == NULL) {
       Nextion::_event_wait_task = xTaskGetCurrentTaskHandle();
-      esp_event_handler_register(event_base, event_id, Nextion::_wait_for_event_event_handler, NULL);
+      Nextion::_event_wait_id = event_id;
     }
     xSemaphoreGive(Nextion::_event_wait_mutex);
   } else {
@@ -433,9 +442,6 @@ esp_err_t Nextion::_wait_for_event(esp_event_base_t event_base, int32_t event_id
     return ESP_ERR_TIMEOUT;
   }
 
-  // Unregister event handler for waiting task
-  esp_event_handler_unregister(event_base, event_id, Nextion::_wait_for_event_event_handler);
-
   if (result == pdTRUE) {
     return ESP_OK;
   } else {
@@ -444,9 +450,9 @@ esp_err_t Nextion::_wait_for_event(esp_event_base_t event_base, int32_t event_id
 }
 
 void Nextion::_wait_for_event_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-  // Handler is set to only trigger on the correct EVENT_BASE and EVENT_ID, simply send a notification to task that event happened
+  // Registered for every NEXTION_EVENT; notify the waiting task, if any, when its event arrives.
   if (xSemaphoreTake(Nextion::_event_wait_mutex, pdMS_TO_TICKS(32)) == pdTRUE) {
-    if (Nextion::_event_wait_task != NULL) { // A task is set, send notification
+    if (Nextion::_event_wait_task != NULL && Nextion::_event_wait_id == event_id) {
       xTaskNotifyGive(Nextion::_event_wait_task);
     }
     xSemaphoreGive(Nextion::_event_wait_mutex);

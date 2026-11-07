@@ -59,7 +59,7 @@ void EntitiesPage::show(display_type_t display_type) {
 }
 
 void EntitiesPage::unshow() {
-  // Event handlers are removed by InterfaceManager (PageHandlers::retire()).
+  // Event handlers stop with the page: InterfaceManager only dispatches to the current page.
 
   EntitiesPage::_current_entities_page.set(nullptr);
   EntitiesPage::_currently_showing_page_type = 0;       // Set to 0 to force a page navigation on Nextion display when showing EntitiesPage next time.
