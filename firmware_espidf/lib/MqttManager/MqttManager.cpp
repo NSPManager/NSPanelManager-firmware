@@ -1,3 +1,4 @@
+#include <PanelRestart.hpp>
 #include <ConfigManager.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
@@ -103,7 +104,7 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
   MqttManager::_mqtt_client = esp_mqtt_client_init(&MqttManager::_mqtt_config);
   if (MqttManager::_mqtt_client == NULL) {
     ESP_LOGE("MqttManager", "Failed to create MQTT client!");
-    esp_restart();
+    PanelRestart::restart();
     return;
   }
 
@@ -112,12 +113,12 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
   switch (result) {
   case ESP_ERR_NO_MEM:
     ESP_LOGE("MqttManager", "Failed to allocate MQTT event handler!");
-    esp_restart();
+    PanelRestart::restart();
     break;
 
   case ESP_ERR_INVALID_ARG:
     ESP_LOGE("MqttManager", "Failed to initialize MQTT event handler!");
-    esp_restart();
+    PanelRestart::restart();
     break;
 
   case ESP_OK:
@@ -134,7 +135,7 @@ void MqttManager::start(std::string *server, uint16_t *port, std::string *userna
   switch (result) {
   case ESP_ERR_INVALID_ARG:
     ESP_LOGE("MqttManager", "Failed to start MQTT client!");
-    esp_restart();
+    PanelRestart::restart();
     break;
 
   case ESP_OK:

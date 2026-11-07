@@ -1,3 +1,4 @@
+#include <PanelRestart.hpp>
 #include "RoomManager.hpp"
 #include <ConfigManager.hpp>
 #include <MqttManager.hpp>
@@ -337,7 +338,7 @@ esp_err_t RoomManager::go_to_entities_page_id(uint32_t page_id) {
         if (xSemaphoreGive(RoomManager::_entities_page_mutex) != pdTRUE) [[unlikely]] {
           ESP_LOGE("RoomManager", "Failed to give back _entities_page_mutex! Will restart panel!");
           vTaskDelay(pdMS_TO_TICKS(2000)); // Give time for log message to get to manager then reboot.
-          esp_restart();
+          PanelRestart::restart();
         }
 
         if (!have_state) {

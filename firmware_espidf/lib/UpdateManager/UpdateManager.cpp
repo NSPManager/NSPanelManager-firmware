@@ -1,3 +1,4 @@
+#include <PanelRestart.hpp>
 #include <ConfigManager.hpp>
 #include <LittleFS.hpp>
 #include <LoadingPage.hpp>
@@ -533,10 +534,10 @@ void UpdateManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
 
         if (command_string.compare("reboot") == 0) { // TODO: Move to some place more fitting.
           ESP_LOGI("UpdateManager", "Received command to reboot. Will reboot NSPanel.");
-          LoadingPage::show();
-          LoadingPage::set_loading_text("Rebooting");
-          LoadingPage::set_secondary_text("");
-          StatusUpdateManager::reboot();
+          if (xTaskCreatePinnedToCore(UpdateManager::_task_reboot, "reboot", 4096, NULL, 2, NULL, 1) != pdPASS) [[unlikely]] {
+            ESP_LOGE("UpdateManager", "Failed to create the reboot task. Restarting without the status report.");
+            PanelRestart::restart();
+          }
         } else if (command_string.compare("firmware_update") == 0 && UpdateManager::_current_update_task == NULL) {
           UpdateManager::_force_update = false;
           xTaskCreatePinnedToCore(UpdateManager::update_firmware, "update_firmware", 8192, NULL, 2, &UpdateManager::_current_update_task, 1);
@@ -555,6 +556,13 @@ void UpdateManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
       }
     }
   }
+}
+
+void UpdateManager::_task_reboot(void *param) {
+  LoadingPage::show();
+  LoadingPage::set_loading_text("Rebooting");
+  LoadingPage::set_secondary_text("");
+  StatusUpdateManager::reboot(); // Does not return.
 }
 
 void UpdateManager::_nextion_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
