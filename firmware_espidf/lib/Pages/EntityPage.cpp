@@ -1,4 +1,5 @@
 #include <ConfigManager.hpp>
+#include <CoverPage.hpp>
 #include <EntitiesPage.hpp>
 #include <EntityPage.hpp>
 #include <GUI_data.hpp>
@@ -29,6 +30,7 @@ void EntityPage::show(std::string state_topic) {
 }
 
 void EntityPage::unshow() {
+  CoverPage::unshow();
   MqttManager::unregister_handler(MQTT_EVENT_ANY, &EntityPage::_handle_mqtt_event);
   // The Nextion handler is removed by InterfaceManager (PageHandlers::retire()).
   if (!EntityPage::_current_entity_mqtt_topic.empty()) {
@@ -69,6 +71,8 @@ void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int3
             }
           } else if (state->entity_case == NSPanelEntityState__EntityCase::NSPANEL_ENTITY_STATE__ENTITY_THERMOSTAT) {
             EntityPage::_current_mode = _entity_page_modes::THERMOSTAT;
+          } else if (state->entity_case == NSPanelEntityState__EntityCase::NSPANEL_ENTITY_STATE__ENTITY_COVER) {
+            EntityPage::_current_mode = _entity_page_modes::COVER;
           } else {
             ESP_LOGE("EntityPage", "Unknown entity state case!");
           }
@@ -101,6 +105,10 @@ void EntityPage::_update_display() {
     EntityPage::_update_display_thermostat();
     break;
 
+  case NSPANEL_ENTITY_STATE__ENTITY_COVER:
+    EntityPage::_update_display_cover();
+    break;
+
   default:
     ESP_LOGE("EntityPage", "Unknown state type. Can't call appropriate update display function.");
     break;
@@ -127,6 +135,9 @@ void EntityPage::_handle_nextion_event(void *arg, esp_event_base_t event_base, i
       EntityPage::_handle_string_event_thermostat(state, (char *)event_data);
       break;
 
+    case NSPANEL_ENTITY_STATE__ENTITY_COVER:
+      break;
+
     default:
       ESP_LOGE("EntityPage", "Unknown state type. Can't call appropriate string event function.");
       break;
@@ -144,6 +155,10 @@ void EntityPage::_handle_touch_event(const std::shared_ptr<NSPanelEntityState> &
     break;
 
   case NSPANEL_ENTITY_STATE__ENTITY_THERMOSTAT:
+    break;
+
+  case NSPANEL_ENTITY_STATE__ENTITY_COVER:
+    CoverPage::handle_touch(component_id, pressed);
     break;
 
   default:
@@ -389,6 +404,31 @@ void EntityPage::_handle_touch_event_light(const std::shared_ptr<NSPanelEntitySt
   default:
     break;
   }
+}
+
+void EntityPage::_update_display_cover() {
+  ESP_LOGI("EntityPage", "Updating EntityPage with cover state.");
+  bool page_just_opened = false;
+  if (!EntityPage::_currently_showing) {
+    ESP_LOGD("EntityPage", "Switching page to %s", GUI_COVER_CONTROL_PAGE::page_name);
+    EntityPage::_currently_showing = true;
+    if (Nextion::go_to_page(GUI_COVER_CONTROL_PAGE::page_name, 1000) != ESP_OK) [[unlikely]] {
+      // A stock TFT has no cover page yet. Clear the flag before backing out, otherwise the next
+      // state update would take the "already showing" path and write cover components onto
+      // whatever page is actually displayed.
+      ESP_LOGE("EntityPage", "Failed to navigate to the cover page. Will go back.");
+      EntityPage::_currently_showing = false;
+      EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
+      return;
+    }
+
+    std::shared_ptr<PageHandlers> handlers = InterfaceManager::begin_page(EntityPage::unshow);
+    handlers->add(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event);
+    page_just_opened = true;
+  }
+
+  std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+  CoverPage::update_display(state->cover, page_just_opened);
 }
 
 void EntityPage::_update_display_thermostat() {
