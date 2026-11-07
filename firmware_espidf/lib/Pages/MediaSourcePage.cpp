@@ -10,6 +10,12 @@
 void MediaSourcePage::show(std::string media_player_state_topic, bool source_player, const NSPanelEntityState__MediaPlayer__SourceSelection *sources) {
   esp_log_level_set("MediaSourcePage", ConfigManager::log_level);
 
+  // Checked before begin_page(), so a call with nothing to list leaves the current page as it is.
+  if (sources == NULL || sources->n_sources == 0 || sources->sources == NULL) [[unlikely]] {
+    ESP_LOGW("MediaSourcePage", "No sources to show.");
+    return;
+  }
+
   std::shared_ptr<PageHandlers> handlers = InterfaceManager::begin_page(MediaSourcePage::unshow);
 
   MediaSourcePage::_media_player_state_topic = media_player_state_topic;
