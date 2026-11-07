@@ -32,6 +32,8 @@ void UpdateManager::init() {
 }
 
 void UpdateManager::update_gui(void *param) {
+  // Keep the radio awake for the whole update, even if a reconnect brings the screensaver back.
+  WiFiManager::set_update_in_progress(true);
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
     esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, UpdateManager::_nextion_event_handler, NULL);
@@ -256,12 +258,15 @@ void UpdateManager::update_gui(void *param) {
     ESP_LOGE("UpdateManager", "Failed to get NSPanelConfig when trying to update GUI.");
   }
 
+  WiFiManager::set_update_in_progress(false); // The update ended without a reboot.
   UpdateManager::_current_update_task = NULL;
 
   vTaskDelete(NULL);
 }
 
 void UpdateManager::update_firmware(void *param) {
+  // Keep the radio awake for the whole update, even if a reconnect brings the screensaver back.
+  WiFiManager::set_update_in_progress(true);
   std::string firmware_md5_string = "http://";
   firmware_md5_string.append(NSPM_ConfigManager::get_manager_address());
   firmware_md5_string.append(":");
@@ -312,6 +317,7 @@ void UpdateManager::update_firmware(void *param) {
     ESP_LOGE("UpdateManager", "Failed to new firmware MD5 checksum.");
   }
 
+  WiFiManager::set_update_in_progress(false); // The update ended without a reboot.
   UpdateManager::_current_update_task = NULL;
   vTaskDelete(NULL);
 }

@@ -145,6 +145,10 @@ std::shared_ptr<PageHandlers> InterfaceManager::begin_page(void (*unshow)()) {
   InterfaceManager::_current_page = next;
   portEXIT_CRITICAL(&InterfaceManager::_current_page_lock);
 
+  if (InterfaceManager::_page_transitions_task != NULL) [[likely]] {
+    xTaskNotify(InterfaceManager::_page_transitions_task, PAGE_TRANSITION_WIFI_POWER_SAVE, eSetBits);
+  }
+
   if (previous->unshow == nullptr) {
     delete previous; // First page since boot
   } else if (xQueueSend(InterfaceManager::_unshow_queue, &previous, 0) != pdTRUE) {
@@ -244,6 +248,12 @@ void InterfaceManager::_task_page_transitions(void *param) {
       case PageRequest::NONE:
         break; // Already handled by an earlier wake-up
       }
+    }
+    if (requested & PAGE_TRANSITION_WIFI_POWER_SAVE) {
+      // Keep the radio awake while someone may be using the panel, and let it sleep between
+      // beacons while the screensaver is shown. Read the current page here rather than trusting
+      // the page that sent the notification: a later switch may already have replaced it.
+      WiFiManager::set_low_latency(!ScreensaverPage::showing());
     }
   }
 }
