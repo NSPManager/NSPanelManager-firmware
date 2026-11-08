@@ -57,6 +57,13 @@ void InterfaceManager::init() {
   esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_nextion_event_handler, NULL);
   esp_event_handler_register(UPDATEMANAGER_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_update_manager_event_handler, NULL);
   esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_nspm_configmanager_event_handler, NULL);
+  // Page handlers: registered once, after InterfaceManager's own so they keep
+  // running after them, and never unregistered. Keep is_dispatched() in step.
+  esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_page_event_dispatcher, NULL);
+  esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_page_event_dispatcher, NULL);
+  if (RoomManager::event_loop() != NULL) {
+    esp_event_handler_register_with(RoomManager::event_loop(), ROOMMANAGER_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_page_event_dispatcher, RoomManager::event_loop());
+  }
   MqttManager::register_handler(MQTT_EVENT_ANY, &InterfaceManager::_mqtt_event_handler, NULL);
   RoomManager::register_handler(ESP_EVENT_ANY_ID, InterfaceManager::_room_manager_event_handler, NULL);
 
@@ -166,8 +173,29 @@ bool InterfaceManager::is_current_page(void (*unshow)()) {
   return current;
 }
 
+bool InterfaceManager::is_dispatched(esp_event_loop_handle_t event_loop, esp_event_base_t event_base) {
+  if (event_loop == NULL) {
+    return event_base == NEXTION_EVENT || event_base == NSPM_CONFIGMANAGER_EVENT;
+  }
+  return event_loop == RoomManager::event_loop() && event_base == ROOMMANAGER_EVENT;
+}
+
+void InterfaceManager::_page_event_dispatcher(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
+  // Only reference counts change in here, as in begin_page(); the copy keeps
+  // the page's handlers alive while they run, even if another page is shown.
+  std::shared_ptr<PageHandlers> handlers;
+  portENTER_CRITICAL(&InterfaceManager::_current_page_lock);
+  handlers = InterfaceManager::_current_page.handlers;
+  portEXIT_CRITICAL(&InterfaceManager::_current_page_lock);
+
+  if (handlers) {
+    handlers->dispatch(static_cast<esp_event_loop_handle_t>(arg), event_base, event_id, event_data);
+  }
+}
+
 void InterfaceManager::_finish_unshow(ShownPage *page) {
-  // Always safe: removes only the registrations that page's show() made.
+  // Stops the page accepting handlers from a show() still running; the
+  // dispatchers already pass events only to the current page.
   page->handlers->retire();
 
   if (InterfaceManager::is_current_page(page->unshow)) {

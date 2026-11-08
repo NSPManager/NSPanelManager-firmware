@@ -55,7 +55,7 @@ void HomePage::show() {
 }
 
 void HomePage::unshow() {
-  // Event handlers are removed by InterfaceManager (PageHandlers::retire()).
+  // Event handlers stop with the page: InterfaceManager only dispatches to the current page.
   HomePage::_current_affect_mode = HomePageAffectMode::ROOM;
   HomePage::_current_edit_mode = HomePageEditMode::ALL_LIGHTS;
 }

@@ -281,6 +281,9 @@ private:
   // The Task that is waiting for an event to happen
   static inline TaskHandle_t _event_wait_task;
 
+  // The NEXTION_EVENT id _event_wait_task is waiting for
+  static inline int32_t _event_wait_id;
+
   // Mutex to only allow one task at the time to access the variables for "event_wait_integer"
   static inline SemaphoreHandle_t _event_wait_integer_mutex;
 

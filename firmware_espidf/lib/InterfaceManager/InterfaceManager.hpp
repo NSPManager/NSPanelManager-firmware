@@ -18,10 +18,11 @@ public:
    * @brief Make the calling page the current page. Every page's show() calls this first.
    *
    * The previous page is unshown on a separate task, as show() is usually
-   * called from inside one of that page's own event handlers. Register the new
-   * page's event handlers through the returned PageHandlers, never directly:
-   * the previous page's late unshow then only removes its own registrations,
-   * not the new page's.
+   * called from inside one of that page's own event handlers. Add the new
+   * page's event handlers to the returned PageHandlers, never register them
+   * with esp_event directly: InterfaceManager's dispatchers deliver each event
+   * to the current page's handlers only, and nothing is ever unregistered (see
+   * PageHandlers for why unregistering can deadlock the default event loop).
    *
    * @param unshow The page's unshow function. It is skipped if the same page has
    *               been shown again by the time it would run, so that it cannot
@@ -38,6 +39,11 @@ public:
    * while after another page has been shown.
    */
   static bool is_current_page(void (*unshow)());
+
+  /**
+   * @brief Does init() register a page dispatcher for this loop (NULL for the default loop) and event base?
+   */
+  static bool is_dispatched(esp_event_loop_handle_t event_loop, esp_event_base_t event_base);
 
   /**
    * Show the user selected default page
@@ -108,22 +114,23 @@ private:
   static void _task_unshow_page(void *param);
   static void _finish_unshow(ShownPage *page);
 
+  /**
+   * Registered once in init() for every loop and event base pages use (arg is
+   * the loop, NULL for the default loop). Passes the event to the current
+   * page's PageHandlers.
+   */
+  static void _page_event_dispatcher(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
   // Page transitions requested from event-loop handlers run here instead.
   //
-  // Showing or hiding a page registers and unregisters handlers on both the
-  // default event loop and RoomManager's loop, and esp_event takes a loop's
-  // mutex for that, the same mutex its own task holds while dispatching. If a
-  // handler on one loop does this while a handler on the other does the same,
-  // each loop task holds its own mutex and waits on the other's: a permanent
-  // deadlock that freezes the UI (e.g. the screensaver is touched just as the
-  // first room state arrives). A plain task holds no loop mutex, so it cannot
-  // be part of that cycle. Handlers notify it with xTaskNotify, which never blocks.
-  //
-  // The MQTT client task needs the same treatment. esp-mqtt holds the client's
-  // API lock while it runs our MQTT handlers, and default-loop handlers publish
-  // (which takes that lock) while the loop's mutex is held. A page switch from
-  // an MQTT handler (the screen_cmd topic) would wait on the default loop's
-  // mutex while holding the API lock: the same cycle, between those two tasks.
+  // This task was added because showing or hiding a page used to register and
+  // unregister handlers on both the default event loop and RoomManager's loop,
+  // taking each loop's mutex while a handler on the other loop (or the MQTT
+  // client task, holding esp-mqtt's API lock) did the same: a lock-order
+  // deadlock that froze the UI. Pages no longer touch esp_event when shown
+  // (see PageHandlers), so that cycle is gone; the task stays because a page's
+  // show() still draws and waits on the display, which is better done off the
+  // loop tasks. Handlers notify it with xTaskNotify, which never blocks.
   static void _task_page_transitions(void *param);
   static void _associate_with_manager_if_ready();
   static inline TaskHandle_t _page_transitions_task = NULL;

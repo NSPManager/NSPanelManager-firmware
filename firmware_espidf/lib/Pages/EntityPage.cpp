@@ -34,7 +34,7 @@ void EntityPage::show(std::string state_topic) {
 void EntityPage::unshow() {
   CoverPage::unshow();
   MqttManager::unregister_handler(MQTT_EVENT_ANY, &EntityPage::_handle_mqtt_event);
-  // The Nextion handler is removed by InterfaceManager (PageHandlers::retire()).
+  // The Nextion handler stops with the page: InterfaceManager only dispatches to the current page.
   if (!EntityPage::_current_entity_mqtt_topic.empty()) {
     MqttManager::unsubscribe(EntityPage::_current_entity_mqtt_topic);
   }
