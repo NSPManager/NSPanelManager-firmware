@@ -59,9 +59,13 @@ esp_err_t ConfigManager::load_config() {
 
   // Absent from configs saved by older firmware, which then keeps the AUTO default.
   if (config_data.contains("serial_log") && config_data["serial_log"].is_number_integer()) {
+    // Read wider than the enum's uint8_t and range-check before narrowing: get<uint8_t>() would
+    // wrap a corrupt value (258, -254) into a valid mode before the check could catch it.
     int32_t serial_log = config_data["serial_log"].get<int32_t>();
     if (serial_log >= 0 && serial_log <= static_cast<int32_t>(ConfigManager::SerialLogMode::NEVER)) {
       ConfigManager::serial_log = static_cast<ConfigManager::SerialLogMode>(serial_log);
+    } else {
+      ESP_LOGW("ConfigManager", "Ignoring invalid serial_log value %ld in config, keeping Auto.", (long)serial_log);
     }
   }
 
