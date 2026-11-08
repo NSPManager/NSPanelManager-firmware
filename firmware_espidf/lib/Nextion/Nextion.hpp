@@ -6,6 +6,7 @@
 #include <esp_err.h>
 #include <esp_event.h>
 #include <freertos/semphr.h>
+#include <string>
 #include <vector>
 
 /**
@@ -22,6 +23,8 @@ static constexpr uint16_t NEXTION_UART_EVENT_LOOP_STACK_SIZE = 3096;
 static constexpr uint16_t NEXTION_UART_EVENT_LOOP_QUEUE_SIZE = 6;
 
 class Nextion {
+  friend class NextionWindow;
+
 public:
   /**
    * Initialize the Nextion display and gather any facts about it.
@@ -62,9 +65,11 @@ public:
    * @param height: The height of the rectangle
    * @param color: The 565 color value to fill the rectangle with
    * @param mutex_timeout: Timeout (in ms) of how long to wait for UART mutex
+   * @param bulk: True for one of a long run of fills nobody is waiting on, such as an image drawn
+   *              fill by fill. It then leaves room in the display's buffer for other writes.
    * @return ESP_OK or ESP_ERR_TIMEOUT
    */
-  static esp_err_t fill(const uint32_t x, const uint32_t y, const uint32_t width, const uint32_t height, const uint16_t color, uint16_t mutex_timeout);
+  static esp_err_t fill(const uint32_t x, const uint32_t y, const uint32_t width, const uint32_t height, const uint16_t color, uint16_t mutex_timeout, bool bulk = false);
 
   /**
    * @brief Set the text on the given component
@@ -212,6 +217,16 @@ public:
   static std::string get_link_baud_warning();
 
   /**
+   * Power-cycle the display and connect to it again, for when it stopped answering while the link
+   * ran above the communication baud rate. If the display reset by itself it came back at its default
+   * rate, and nothing it sends can be read at the operating rate. Switches to the operating baud rate
+   * again the first time only; after that the link stays at the communication baud rate until the
+   * panel reboots. Writers are turned away while this runs (a few seconds).
+   * Blocks: call from a task of its own, never from an event handler. Takes _uart_write_mutex.
+   */
+  static void recover_link();
+
+  /**
    * Restart the Nextion display via GPIO pins (power off and power on. Not a soft reboot via commands!)
    * The display comes back at its stored default baud rate, so the UART is set back to
    * ConfigManager::communication_baud_rate as well.
@@ -290,20 +305,23 @@ private:
   static esp_err_t _write_command(const char *data);
 
   /**
-   * @brief Write data to Nextion display
+   * @brief Send one command, if the display is running. Every public command goes through here.
+   * @param command: The command, without its 0xFF 0xFF 0xFF terminator.
+   * @param mutex_timeout: Timeout (in ms) of how long to wait for UART mutex
+   * @param bulk: Wait for room as a bulk writer (see NextionWindow::write_class).
+   * @return ESP_OK or ESP_ERR_TIMEOUT
    */
-  static int nextion_write(const void *src, size_t size);
+  static esp_err_t _send_command(const std::string &command, uint16_t mutex_timeout, bool bulk = false);
 
   /**
-   * @brief write end 0xff,0xff,0xff to Nextion display
+   * @brief Write one command and its terminator. The caller holds _uart_write_mutex.
    */
-  static void nextion_write_end();
+  static void _write_locked(const std::string &command);
 
-public:
   /**
-   * @brief works in the same way as _write_command, but handles buffer overflow,
+   * @brief get_integer_value() for one caller at a time. The caller holds _get_integer_mutex.
    */
-  static esp_err_t write_command(const char *data);
+  static esp_err_t _get_integer_value(const char *expression, int32_t *result, uint16_t timeout, uint16_t mutex_timeout);
 
 private:
   // VARIABLES:
@@ -327,6 +345,9 @@ private:
 
   // Mutex to only allow one task at the time to access the variables for "event_wait_integer"
   static inline SemaphoreHandle_t _event_wait_integer_mutex;
+
+  // Held for the whole of an integer fetch, so only one runs at a time
+  static inline SemaphoreHandle_t _get_integer_mutex;
 
   // The task that requested an integer value from the Nextion display and is currently waiting
   static inline TaskHandle_t _event_wait_integer;
@@ -359,10 +380,4 @@ private:
 
   static inline std::atomic<uint32_t> _link_baud = 0;
   static inline std::atomic<link_baud_result_t> _link_baud_result = link_baud_result_t::NOT_REQUESTED;
-
-  // Buffer overflow protection, used in nextion_write_end
-  static inline SemaphoreHandle_t _cmd_finished_bin_sem;
-
-  // buffer overlow protection, keep track of how many bytes currently waiting.
-  static inline int _nextion_buffer_out;
 };

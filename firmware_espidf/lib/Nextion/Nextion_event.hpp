@@ -18,6 +18,7 @@ enum nextion_event_t {
   UPDATE_READY_FOR_NEXT_CHUNK,
   UPDATE_JUMP_TO_OFFSET,
   UPDATE_FINISHED,
+  DISPLAY_RESTARTED, // The display restarted while running and is back on its startup page.
 };
 
 struct nextion_event_data_t {

@@ -93,7 +93,6 @@ void AlbumArt::_start_render(const std::string &url, uint16_t x, uint16_t y, boo
 
 void AlbumArt::_task_render(void *param) {
   std::string *base_url = (std::string *)param;
-  AlbumArt::_fills_since_sync = 0;
 
   // The image currently on screen, which is exactly the last pass that was drawn. Held so the
   // next pass can emit only what changed. NULL for the first pass, which draws everything.
@@ -248,15 +247,6 @@ esp_err_t AlbumArt::_run_pass(const std::string &base_url, uint16_t grid, const 
   return err;
 }
 
-void AlbumArt::_wait_for_display() {
-  AlbumArt::_fills_since_sync = 0;
-  int32_t page;
-  if (Nextion::get_integer_value("dp", &page, 500, 250) != ESP_OK) {
-    // Most likely the display dropped the request itself. Carry on rather than stall the render.
-    ESP_LOGD("AlbumArt", "No answer from the display while pacing the render, carrying on.");
-  }
-}
-
 uint32_t AlbumArt::_draw_row(const uint8_t *row, uint16_t grid, uint16_t row_index, const uint8_t *previous, uint16_t previous_grid) {
   const uint16_t block_size = AlbumArt::draw_size / grid;
   const uint32_t y = AlbumArt::_draw_origin_y + (uint32_t)row_index * block_size;
@@ -298,17 +288,17 @@ uint32_t AlbumArt::_draw_row(const uint8_t *row, uint16_t grid, uint16_t row_ind
         return fills;
       }
       if (Nextion::fill(AlbumArt::_draw_origin_x + (uint32_t)run_start * block_size, y,
-                        (uint32_t)(col - run_start) * block_size, block_size, run_color, 250) != ESP_OK) {
+                        (uint32_t)(col - run_start) * block_size, block_size, run_color, 250, true) != ESP_OK) {
         // The display is not in a state to be drawn on -- updating, most likely. Stop rather
         // than spin through thousands of failing writes.
         ESP_LOGW("AlbumArt", "Display rejected a fill, cancelling the render.");
         AlbumArt::_cancelled = true;
         return fills;
       }
+      // No pacing here: every write to the display goes through NextionWindow, which keeps its
+      // serial buffer from overflowing. Bulk fills use only half its window, so the page's own
+      // updates and a tap's are written at once rather than queueing behind the render.
       fills++;
-      if (++AlbumArt::_fills_since_sync >= AlbumArt::_fills_per_sync) {
-        AlbumArt::_wait_for_display();
-      }
     }
 
     if (col == grid) {
