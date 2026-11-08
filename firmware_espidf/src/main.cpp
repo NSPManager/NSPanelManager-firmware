@@ -14,6 +14,8 @@
 #include <WebManager.hpp>
 #include <WiFiManager.hpp>
 #include <esp_log.h>
+#include <algorithm>
+#include <atomic>
 #include <nvs_flash.h>
 #include <string>
 
@@ -21,6 +23,8 @@
 std::string mqtt_log_topic;
 TaskHandle_t task_publish_mqtt_log_message_handle = NULL;
 QueueHandle_t publish_mqtt_log_messages_queue = NULL;
+// Log lines dropped because the queue to task_publish_mqtt_log_message was full. Reported and reset by that task.
+std::atomic<uint32_t> dropped_log_lines = 0;
 
 void task_print_mem_usage(void *param) {
   TaskStatus_t *taskStatusArray;
@@ -62,6 +66,16 @@ void task_publish_mqtt_log_message(void *param) {
       }
 
       if (publish_mqtt_log_messages_queue != NULL && task_publish_mqtt_log_message_handle != NULL && MqttManager::connected()) {
+        // Report lines lost to a full queue in the same format as an ESP_LOGW line. Published
+        // directly rather than logged, which would only queue it behind the overflow it reports.
+        uint32_t dropped = dropped_log_lines.exchange(0);
+        if (dropped > 0) {
+          char dropped_message[96];
+          int dropped_len = snprintf(dropped_message, sizeof(dropped_message), "W (%lu) Main: %lu log lines dropped (log queue full)\n", esp_log_timestamp(), dropped);
+          if (dropped_len > 0) {
+            MqttManager::publish(mqtt_log_topic, dropped_message, std::min<size_t>(dropped_len, sizeof(dropped_message) - 1), false);
+          }
+        }
         MqttManager::publish(mqtt_log_topic, log_message, message_len, false);
       }
       free(log_message);
@@ -72,12 +86,24 @@ void task_publish_mqtt_log_message(void *param) {
 int custom_log_vprintf(const char *fmt, va_list args) {
   // vprintf(fmt, args); // Keep default behavior, print to UART
 
+  // This runs on whichever task logs, including the MQTT client task while it holds esp-mqtt's lock,
+  // so it must never wait: not on the serial port, and not on the queue.
   char *buffer = NULL;
   int len = vasprintf(&buffer, fmt, args);
   if (len != -1) {
-    printf(buffer);
-    if (xQueueSend(publish_mqtt_log_messages_queue, &buffer, pdMS_TO_TICKS(100)) != pdTRUE) {
+    bool connected = MqttManager::connected();
+    // Writing to UART0 at 115200 baud costs about 9ms per line. Only do it when the line has nowhere
+    // else to go (not connected, so it cannot reach the manager), unless configured otherwise.
+    ConfigManager::SerialLogMode serial_log = ConfigManager::serial_log;
+    if (serial_log == ConfigManager::SerialLogMode::ALWAYS || (serial_log == ConfigManager::SerialLogMode::AUTO && !connected)) {
+      fputs(buffer, stdout);
+    }
+
+    if (!connected) {
+      free(buffer); // The publish task would only discard it.
+    } else if (xQueueSend(publish_mqtt_log_messages_queue, &buffer, 0) != pdTRUE) {
       free(buffer);
+      dropped_log_lines++;
     }
   }
 
