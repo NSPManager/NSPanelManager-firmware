@@ -23,21 +23,15 @@ void NSPM_ConfigManager::init() {
   }
   MqttManager::register_handler(MQTT_EVENT_ANY, &NSPM_ConfigManager::_mqtt_event_handler, NULL);
 
-  // Subscribe to the topics the manager answers register_request on. The MAC topic is the
-  // one that matters: it survives a rename by the manager, whereas the hostname topic would
-  // go stale (see the header).
-  NSPM_ConfigManager::_mqtt_mac_command_topic = "nspanel/";
-  NSPM_ConfigManager::_mqtt_mac_command_topic.append(WiFiManager::mac_string());
-  NSPM_ConfigManager::_mqtt_mac_command_topic.append("/command");
+  // Subscribe to the topic the manager answers register_request on. It is keyed on the MAC,
+  // so it survives the manager renaming the panel.
   NSPM_ConfigManager::_mqtt_command_topic = "nspanel/";
-  NSPM_ConfigManager::_mqtt_command_topic.append(ConfigManager::wifi_hostname);
+  NSPM_ConfigManager::_mqtt_command_topic.append(WiFiManager::mac_string());
   NSPM_ConfigManager::_mqtt_command_topic.append("/command");
   // Wait until subscribe is successful
-  for (const std::string &topic : {NSPM_ConfigManager::_mqtt_mac_command_topic, NSPM_ConfigManager::_mqtt_command_topic}) {
-    while (MqttManager::subscribe(topic) != ESP_OK) {
-      ESP_LOGE("NSPM_ConfigManager", "Tried to subscribe to NSPanel command topic '%s' but subscribe call was unsuccessful! Will try again.", topic.c_str());
-      vTaskDelay(pdMS_TO_TICKS(100));
-    }
+  while (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_command_topic) != ESP_OK) {
+    ESP_LOGE("NSPM_ConfigManager", "Tried to subscribe to NSPanel command topic '%s' but subscribe call was unsuccessful! Will try again.", NSPM_ConfigManager::_mqtt_command_topic.c_str());
+    vTaskDelay(pdMS_TO_TICKS(100));
   }
 
   // The manager status topic is deliberately not subscribed here. _manager_address is only
@@ -56,10 +50,8 @@ void NSPM_ConfigManager::_mqtt_event_handler(void *arg, esp_event_base_t event_b
     std::string topic_string = std::string(event->topic, event->topic_len);
     // esp_mqtt_client_handle_t client = event->client;
 
-    // The manager sends register_accept on both command topics, so it is usually handled twice.
-    // Handling it is idempotent. The MAC topic also carries other commands (reboot, updates),
-    // which _handle_register_accept() ignores.
-    if (NSPM_ConfigManager::_mqtt_mac_command_topic.compare(topic_string) == 0 || NSPM_ConfigManager::_mqtt_command_topic.compare(topic_string) == 0) {
+    // This topic also carries other commands (reboot, updates), which _handle_register_accept() ignores.
+    if (NSPM_ConfigManager::_mqtt_command_topic.compare(topic_string) == 0) {
       NSPM_ConfigManager::_handle_register_accept(event->data, event->data_len);
     } else if (NSPM_ConfigManager::_mqtt_config_topic.compare(topic_string) == 0) {
       NSPM_ConfigManager::_handle_new_config_data(event->data, event->data_len);
