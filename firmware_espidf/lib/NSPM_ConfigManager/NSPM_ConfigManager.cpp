@@ -23,13 +23,14 @@ void NSPM_ConfigManager::init() {
   }
   MqttManager::register_handler(MQTT_EVENT_ANY, &NSPM_ConfigManager::_mqtt_event_handler, NULL);
 
-  // Subscribe to MQTT command topic
+  // Subscribe to the topic the manager answers register_request on. It is keyed on the MAC,
+  // so it survives the manager renaming the panel.
   NSPM_ConfigManager::_mqtt_command_topic = "nspanel/";
-  NSPM_ConfigManager::_mqtt_command_topic.append(ConfigManager::wifi_hostname);
+  NSPM_ConfigManager::_mqtt_command_topic.append(WiFiManager::mac_string());
   NSPM_ConfigManager::_mqtt_command_topic.append("/command");
   // Wait until subscribe is successful
-  while (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_command_topic.c_str()) != ESP_OK) {
-    ESP_LOGE("NSPM_ConfigManager", "Tried to subscribe to NSPanel command topic but subscribe call was unsuccessful! Will try again.");
+  while (MqttManager::subscribe(NSPM_ConfigManager::_mqtt_command_topic) != ESP_OK) {
+    ESP_LOGE("NSPM_ConfigManager", "Tried to subscribe to NSPanel command topic '%s' but subscribe call was unsuccessful! Will try again.", NSPM_ConfigManager::_mqtt_command_topic.c_str());
     vTaskDelay(pdMS_TO_TICKS(100));
   }
 
@@ -49,6 +50,7 @@ void NSPM_ConfigManager::_mqtt_event_handler(void *arg, esp_event_base_t event_b
     std::string topic_string = std::string(event->topic, event->topic_len);
     // esp_mqtt_client_handle_t client = event->client;
 
+    // This topic also carries other commands (reboot, updates), which _handle_register_accept() ignores.
     if (NSPM_ConfigManager::_mqtt_command_topic.compare(topic_string) == 0) {
       NSPM_ConfigManager::_handle_register_accept(event->data, event->data_len);
     } else if (NSPM_ConfigManager::_mqtt_config_topic.compare(topic_string) == 0) {
@@ -87,10 +89,8 @@ void NSPM_ConfigManager::_handle_register_accept(const char *data, size_t data_l
     return;
   }
 
-  if (json.contains("command") && json["command"].is_string()) {
-    if (json["command"].get<std::string>().compare("register_accept") != 0) {
-      return; // Command we received was not a "register_accept" from manager, cancel processing.
-    }
+  if (!json.contains("command") || !json["command"].is_string() || json["command"].get<std::string>().compare("register_accept") != 0) {
+    return; // Not a "register_accept", e.g. a reboot or update command on the MAC topic.
   }
 
   if (json.contains("address") && json["address"].is_string() && json["address"].get<std::string>().length() > 0) {

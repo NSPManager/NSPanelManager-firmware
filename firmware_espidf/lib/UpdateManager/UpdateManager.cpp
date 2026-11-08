@@ -600,6 +600,8 @@ void UpdateManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
           } else {
             xTaskCreatePinnedToCore(UpdateManager::update_gui, "update_gui", 8192, NULL, 2, &UpdateManager::_current_update_task, 1);
           }
+        } else if (command_string.compare("register_accept") == 0) {
+          // Handled by NSPM_ConfigManager, which also listens on this topic.
         } else {
           ESP_LOGW("UpdateManager", "Unknown command: %s", command_string.c_str());
         }
