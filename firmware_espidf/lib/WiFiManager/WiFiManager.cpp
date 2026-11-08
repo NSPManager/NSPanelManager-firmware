@@ -63,6 +63,14 @@ void WiFiManager::start_client(std::string *ssid, std::string *psk, std::string 
   psk->copy((char *)WiFiManager::_config.sta.password, psk->size(), 0);
   WiFiManager::_has_wifi_config = true;
 
+  // Join the strongest AP broadcasting this SSID, not the first one found. The IDF default,
+  // WIFI_FAST_SCAN, scans channel by channel and connects to the first match, so sort_method never
+  // gets a say: with several APs on one SSID a panel can sit next to one AP and still join a distant
+  // one on a lower channel, every boot and every reconnect (they reuse _config). A full scan costs a
+  // few hundred ms more per connect.
+  WiFiManager::_config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+  WiFiManager::_config.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &WiFiManager::_config));
   ESP_ERROR_CHECK(esp_wifi_start());
@@ -170,13 +178,15 @@ void WiFiManager::_event_handler(void *arg, esp_event_base_t event_base, int32_t
       WiFiManager::_connected = false;
       esp_wifi_connect(); // We lost connection, try to reconnect.
       break;
-    case WIFI_EVENT_STA_CONNECTED:
-      ESP_LOGI("WiFiManager", "Connected to WiFi.");
+    case WIFI_EVENT_STA_CONNECTED: {
+      wifi_event_sta_connected_t *connected = (wifi_event_sta_connected_t *)event_data;
+      ESP_LOGI("WiFiManager", "Connected to WiFi, AP " MACSTR " on channel %d.", MAC2STR(connected->bssid), connected->channel);
       WiFiManager::_connected = true;
       if (WiFiManager::_dns_server != nullptr) {
         WiFiManager::_dns_server->stop();
       }
       break;
+    }
 
     default:
       break;

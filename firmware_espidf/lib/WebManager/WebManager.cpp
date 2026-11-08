@@ -13,6 +13,20 @@ void WebManager::start() {
   if (WebManager::_server == NULL) {
     WebManager::_config = HTTPD_DEFAULT_CONFIG();
     WebManager::_config.max_uri_handlers = 12;
+    // The stock config keeps an idle client connection open forever: the 5 s timeouts only cover
+    // reading/sending a request. When Wi-Fi drops while a client (e.g. a periodic scraper) has a
+    // connection open, its FIN never arrives and the session holds an lwIP socket indefinitely.
+    // With CONFIG_LWIP_MAX_SOCKETS=10 a few such sessions exhaust the pool, after which MQTT
+    // reconnects, OTA downloads and accept() itself fail with ENFILE.
+    // TCP keepalive closes dead sessions after ~30 s idle; capping sessions at 4 (plus the 3 the
+    // server uses internally) leaves sockets free for MQTT and HTTP clients, and LRU purge drops
+    // the oldest session instead of refusing new clients when the cap is reached.
+    WebManager::_config.max_open_sockets = 4;
+    WebManager::_config.lru_purge_enable = true;
+    WebManager::_config.keep_alive_enable = true;
+    WebManager::_config.keep_alive_idle = 15;
+    WebManager::_config.keep_alive_interval = 5;
+    WebManager::_config.keep_alive_count = 3;
 
     if (httpd_start(&WebManager::_server, &WebManager::_config) == ESP_OK) {
       httpd_register_uri_handler(WebManager::_server, &WebManager::_uri_index);                  // Register index view
@@ -39,6 +53,7 @@ esp_err_t WebManager::_handle_uri_config_data(httpd_req_t *req) {
   nlohmann::json json;
   json["version"] = NSPM_VERSION;
   json["log_level"] = static_cast<int>(ConfigManager::log_level);
+  json["serial_log"] = static_cast<int>(ConfigManager::serial_log);
   json["wifi_hostname"] = ConfigManager::wifi_hostname.c_str();
   json["wifi_ssid"] = ConfigManager::wifi_ssid.c_str();
   json["wifi_psk_set"] = !ConfigManager::wifi_psk.empty();
@@ -83,6 +98,18 @@ esp_err_t WebManager::_handle_uri_save_config(httpd_req_t *req) {
     ConfigManager::log_level = static_cast<esp_log_level_t>(atoi(result["log_level"].c_str()));
   } else {
     ESP_LOGE("WebManager", "Could not find field name 'log_level' while saving config from web post request!");
+  }
+
+  // Missing when the LittleFS image (and so index.html) predates the setting. Keep the current value then.
+  if (result.find("serial_log") != result.end()) {
+    int serial_log = atoi(result["serial_log"].c_str());
+    if (serial_log >= 0 && serial_log <= static_cast<int>(ConfigManager::SerialLogMode::NEVER)) {
+      ConfigManager::serial_log = static_cast<ConfigManager::SerialLogMode>(serial_log);
+    } else {
+      ESP_LOGW("WebManager", "Ignoring invalid serial_log value '%s' from web post request.", result["serial_log"].c_str());
+    }
+  } else {
+    ESP_LOGD("WebManager", "No 'serial_log' field in web post request, keeping current setting.");
   }
 
   if (result.find("wifi_ssid") != result.end()) {

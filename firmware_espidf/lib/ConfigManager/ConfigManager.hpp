@@ -108,4 +108,13 @@ public:
 
   // Global log level to set for all components
   static inline esp_log_level_t log_level = esp_log_level_t::ESP_LOG_DEBUG;
+
+  // When log lines are also written to the serial console. Writing to UART0 at 115200 baud takes
+  // about 9ms per line on whichever task logs, so once lines reach the manager over MQTT it is skipped.
+  enum class SerialLogMode : uint8_t {
+    AUTO = 0,   // Only while not connected to MQTT, i.e. while lines cannot reach the manager.
+    ALWAYS = 1, // Every line, for development with a serial cable attached.
+    NEVER = 2,  // Never.
+  };
+  static inline SerialLogMode serial_log = SerialLogMode::AUTO;
 };
