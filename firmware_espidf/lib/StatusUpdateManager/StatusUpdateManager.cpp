@@ -2,6 +2,7 @@
 #include <ConfigManager.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
+#include <Nextion.hpp>
 #include <NSPM_ConfigManager_event.hpp>
 #include <StatusUpdateManager.hpp>
 #include <StatusUpdateManager_events.hpp>
@@ -42,6 +43,8 @@ void StatusUpdateManager::init() {
   StatusUpdateManager::_status_report.md5_firmware = (char *)ConfigManager::md5_firmware.c_str();
   StatusUpdateManager::_status_report.md5_littlefs = (char *)ConfigManager::md5_data_file.c_str();
   StatusUpdateManager::_status_report.md5_tft_gui = (char *)ConfigManager::md5_gui.c_str();
+  nspanel_warning__init(&StatusUpdateManager::_link_baud_warning);
+  StatusUpdateManager::_link_baud_warning.level = NSPANEL_WARNING_LEVEL__WARNING;
 #if defined(BOARD_CUSTOM)
   StatusUpdateManager::_status_report.has_humidity = true;
   StatusUpdateManager::_status_report.has_pressure = true;
@@ -156,7 +159,16 @@ void StatusUpdateManager::_send_status_update(void *arg) {
     StatusUpdateManager::_status_report.pressure = StatusUpdateManager::_measured_average_pressure.get();
 #endif
 
-    // TODO: Load warnings
+    // Warnings are rebuilt on every report, so the manager drops one once it no longer applies.
+    StatusUpdateManager::_status_report.n_warnings = 0;
+    StatusUpdateManager::_status_report.warnings = NULL;
+    StatusUpdateManager::_link_baud_warning_text = Nextion::get_link_baud_warning();
+    if (!StatusUpdateManager::_link_baud_warning_text.empty()) {
+      StatusUpdateManager::_link_baud_warning.text = (char *)StatusUpdateManager::_link_baud_warning_text.c_str();
+      StatusUpdateManager::_warnings[StatusUpdateManager::_status_report.n_warnings++] = &StatusUpdateManager::_link_baud_warning;
+      StatusUpdateManager::_status_report.warnings = StatusUpdateManager::_warnings;
+    }
+
     // Send status update
     size_t packed_length = nspanel_status_report__get_packed_size(&StatusUpdateManager::_status_report);
     buffer.resize(packed_length);

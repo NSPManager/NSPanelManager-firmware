@@ -6,6 +6,7 @@
 #include <esp_adc/adc_oneshot.h>
 #include <esp_timer.h>
 #include <protobuf_nspanel.pb-c.h>
+#include <string>
 #include <vector>
 
 #if defined(BOARD_CUSTOM)
@@ -118,6 +119,12 @@ private:
 
   // Status report object used to send protobuf data to manager
   static inline NSPanelStatusReport _status_report;
+
+  // Warning sent in _status_report when the display is not at its operating baud rate. Guarded by
+  // _status_report_mutex; the text must outlive packing, since the protobuf only points at it.
+  static inline NSPanelWarning _link_baud_warning;
+  static inline std::string _link_baud_warning_text;
+  static inline NSPanelWarning *_warnings[1];
 
 #if defined(BOARD_CUSTOM)
   // Custom PCB that uses I2C sensors. Define them:

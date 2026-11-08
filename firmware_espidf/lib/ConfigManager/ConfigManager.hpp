@@ -49,8 +49,13 @@ public:
   // Nextion upload protocol baudrate
   static inline uint32_t nextion_upload_baudrate;
 
-  // What baudrate should be used to communicate (send/receive commands) to the Nextion display.
+  // Baud rate the panel first connects to the Nextion display at. Must match the display's stored default.
+  // Also the fallback: if the display does not answer at operating_baud_rate, it is power-cycled back to this.
   static inline uint32_t communication_baud_rate = 115200;
+
+  // Baud rate to move the display to with baud= once connected, or 0 to stay at communication_baud_rate.
+  // Lasts only until the display is next power-cycled, so the display's stored default never changes.
+  static inline uint32_t operating_baud_rate = 0;
 
   // MD5 checksum for installed firmware, used to check if new firmware update is available in manager
   static inline std::string md5_firmware;
