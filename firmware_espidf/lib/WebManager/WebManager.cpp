@@ -13,6 +13,20 @@ void WebManager::start() {
   if (WebManager::_server == NULL) {
     WebManager::_config = HTTPD_DEFAULT_CONFIG();
     WebManager::_config.max_uri_handlers = 12;
+    // The stock config keeps an idle client connection open forever: the 5 s timeouts only cover
+    // reading/sending a request. When Wi-Fi drops while a client (e.g. a periodic scraper) has a
+    // connection open, its FIN never arrives and the session holds an lwIP socket indefinitely.
+    // With CONFIG_LWIP_MAX_SOCKETS=10 a few such sessions exhaust the pool, after which MQTT
+    // reconnects, OTA downloads and accept() itself fail with ENFILE.
+    // TCP keepalive closes dead sessions after ~30 s idle; capping sessions at 4 (plus the 3 the
+    // server uses internally) leaves sockets free for MQTT and HTTP clients, and LRU purge drops
+    // the oldest session instead of refusing new clients when the cap is reached.
+    WebManager::_config.max_open_sockets = 4;
+    WebManager::_config.lru_purge_enable = true;
+    WebManager::_config.keep_alive_enable = true;
+    WebManager::_config.keep_alive_idle = 15;
+    WebManager::_config.keep_alive_interval = 5;
+    WebManager::_config.keep_alive_count = 3;
 
     if (httpd_start(&WebManager::_server, &WebManager::_config) == ESP_OK) {
       httpd_register_uri_handler(WebManager::_server, &WebManager::_uri_index);                  // Register index view
