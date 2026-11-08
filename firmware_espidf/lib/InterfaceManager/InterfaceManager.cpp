@@ -179,6 +179,7 @@ void InterfaceManager::_finish_unshow(ShownPage *page) {
 }
 
 void InterfaceManager::show_default_page() {
+  ESP_LOGD("InterfaceManager", "show_default_page called.");
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
     switch (config->default_page) {
@@ -264,10 +265,14 @@ void InterfaceManager::_associate_with_manager_if_ready() {
   // notifications can be coalesced into one wake-up.
   if (InterfaceManager::_home_page_status_loaded && InterfaceManager::_nspm_config_loaded && LoadingPage::showing() && !InterfaceManager::_has_been_associated_with_manager) {
     if (!ConfigManager::has_updated) [[likely]] {
-      ESP_LOGI("InterfaceManager", "Home page status and base config loaded. Will go to home page on default room.");
+      ESP_LOGI("InterfaceManager", "Home page status and base config loaded.");
       RoomManager::go_to_default_room();
       RoomManager::go_to_first_entities_page(); // Also select the first entities page for default room as this is the first time and no room is currently selected.
-      InterfaceManager::show_default_page();
+
+      if (!ScreensaverPage::showing()) {
+        ESP_LOGD("InterfaceManager", "Screensaver is not active and new status received. Show default page.");
+        InterfaceManager::show_default_page();
+      }
 
       // Initialize Screensaver page so that it's ready when it's time to show it.
       ScreensaverPage::init();
@@ -441,6 +446,7 @@ void InterfaceManager::_nspm_configmanager_event_handler(void *arg, esp_event_ba
       // Go to new default page if it has changed
       if (InterfaceManager::_nspm_cur_config != nullptr) {
         if (InterfaceManager::_nspm_cur_config->default_page != config->default_page && !ScreensaverPage::showing()) {
+          ESP_LOGD("InterfaceManager", "Navigating to new default page.");
           InterfaceManager::show_default_page();
         }
       }

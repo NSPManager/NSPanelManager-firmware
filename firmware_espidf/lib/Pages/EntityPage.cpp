@@ -407,7 +407,7 @@ void EntityPage::_handle_touch_event_light(const std::shared_ptr<NSPanelEntitySt
 }
 
 void EntityPage::_update_display_cover() {
-  ESP_LOGI("EntityPage", "Updating EntityPage with cover state.");
+  ESP_LOGD("EntityPage", "Updating EntityPage with cover state.");
   bool page_just_opened = false;
   if (!EntityPage::_currently_showing) {
     ESP_LOGD("EntityPage", "Switching page to %s", GUI_COVER_CONTROL_PAGE::page_name);
