@@ -1,6 +1,7 @@
 #include <BuzzerManager.hpp>
 #include <ButtonManager.hpp>
 #include <ConfigManager.hpp>
+#include <EventLoopWatchdog.hpp>
 #include <InterfaceManager.hpp>
 #include <LittleFS.hpp>
 #include <MqttManager.hpp>
@@ -117,6 +118,7 @@ extern "C" void app_main() {
   UpdateManager::mark_boot_successful();
 
   esp_event_loop_create_default();
+  EventLoopWatchdog::init(); // Logs every task's backtrace if the default loop stops dispatching.
 
   // xTaskCreatePinnedToCore(task_print_mem_usage, "task_mem_debug", 4096, NULL, 3, NULL, 1);
 
