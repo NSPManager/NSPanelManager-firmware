@@ -139,8 +139,11 @@ private:
   // task's self-teardown and _start_register_request_task's spawn check.
   static inline SemaphoreHandle_t _register_request_task_mutex = NULL;
 
-  // Topic that the MQTT Manager container send commands to panel on:
+  // Topics the manager sends register_accept on. nspanel/<mac>/command is the primary one and
+  // never changes. nspanel/<hostname>/command is only for managers older than 2026-01-31, which
+  // don't send on the MAC topic. It is not moved when the manager renames the panel.
   static inline std::string _mqtt_command_topic;
+  static inline std::string _mqtt_mac_command_topic;
 
   // Topic that NSPanels can send command to the MQTTManager on:
   static inline std::string _mqtt_manager_command_topic;
