@@ -234,6 +234,22 @@ void Nextion::log_link_baud() {
   }
 }
 
+std::string Nextion::get_link_baud_warning() {
+  char text[160];
+  switch (Nextion::_link_baud_result.load()) {
+  case link_baud_result_t::FELL_BACK:
+    snprintf(text, sizeof(text), "Display did not answer at the operating baud rate %lu, so it is running at %lu baud.", ConfigManager::operating_baud_rate, Nextion::_link_baud.load());
+    return text;
+  case link_baud_result_t::UNSUPPORTED:
+    snprintf(text, sizeof(text), "Operating baud rate %lu is not one the display supports, so it is running at %lu baud.", ConfigManager::operating_baud_rate, Nextion::_link_baud.load());
+    return text;
+  case link_baud_result_t::NOT_REQUESTED:
+  case link_baud_result_t::SWITCHED:
+    break;
+  }
+  return {};
+}
+
 void Nextion::_task_uart_event(void *param) {
   ESP_LOGI("Nextion", "Started Nextion uart event handler.");
 

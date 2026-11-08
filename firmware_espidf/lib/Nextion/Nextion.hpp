@@ -206,6 +206,12 @@ public:
   static void log_link_baud();
 
   /**
+   * Text for a status report warning when the display is not at the operating baud rate it was set to,
+   * because it did not answer there or the rate is not one it supports. Empty when there is nothing to report.
+   */
+  static std::string get_link_baud_warning();
+
+  /**
    * Restart the Nextion display via GPIO pins (power off and power on. Not a soft reboot via commands!)
    * The display comes back at its stored default baud rate, so the UART is set back to
    * ConfigManager::communication_baud_rate as well.
