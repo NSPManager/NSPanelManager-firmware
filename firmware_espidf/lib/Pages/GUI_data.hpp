@@ -422,32 +422,48 @@ struct GUI_THERMOSTAT_OPTIONS_MODE_DATA {
 
 class GUI_COVER_CONTROL_PAGE {
 public:
-  static inline constexpr const uint8_t page_id = 4;
-  static inline constexpr const char *page_name = "cover";
+  static inline constexpr const uint8_t page_id = 12;
+  static inline constexpr const char *page_name = "blinds";
 
-  // Fallback component IDs for a page whose components are added in this order. The firmware
-  // looks the real IDs up by name when the page opens, so the HMI may order them differently.
   static inline constexpr const uint8_t back_button_id = 1;
-  static inline constexpr const uint8_t position_slider_id = 4;
-  static inline constexpr const uint8_t open_button_id = 5;
-  static inline constexpr const uint8_t stop_button_id = 6;
-  static inline constexpr const uint8_t close_button_id = 7;
-
   static inline constexpr const char *name_label_name = "current";
-  static inline constexpr const char *state_label_name = "state";
-  static inline constexpr const char *position_slider_name = "pos";
-  static inline constexpr const char *back_button_name = "home";
-  // Button labels are written by the firmware when the page opens. They are ASCII characters
-  // because the HMI's fonts carry no geometric-shape codepoints; the ICU arrow fonts
-  // (arrows25/arrows30/arrows40) map '!' to left, '"' to right, 'k' to up and 'l' to down, and
-  // none of them has a stop glyph, hence the two bars.
-  static inline constexpr const char *open_button_text = "k";   // arrow font: up chevron
-  static inline constexpr const char *stop_button_text = "||";  // text font: two bars
-  static inline constexpr const char *close_button_text = "l";  // arrow font: down chevron
 
-  static inline constexpr const char *open_button_name = "b_open";
-  static inline constexpr const char *stop_button_name = "b_stop";
-  static inline constexpr const char *close_button_name = "b_close";
+  //Page contains 7 buttons but they are doubled. 7 for controlling blinds in normal mode and 7 for controlling blinds in tilt mode.
+  //Nextion screen will send a value containing the name of the button the user has pressed so the firmware can decide what action to take.
+  //No normal on release event is sent for any of the buttons.
+  //There is a mode change button in top rigt corner and visibility of correct buttons is entirely done by the screen so it does not have to be done by the firmware.
+
+  static inline constexpr const uint8_t preset1_button_id = 8;
+  static inline constexpr const uint8_t preset2_button_id = 9;
+  static inline constexpr const uint8_t preset3_button_id = 10;
+  static inline constexpr const uint8_t open_button_id = 11;
+  static inline constexpr const uint8_t stop_button_id = 12;
+  static inline constexpr const uint8_t close_button_id = 13;
+  static inline constexpr const uint8_t position_slider_id = 14;
+
+  static inline constexpr const char preset1_button_name = "bPreset1";   //b as in blinds
+  static inline constexpr const char preset2_button_name = "bPreset2";
+  static inline constexpr const char preset3_button_name = "bPreset3";
+  static inline constexpr const char open_button_name = "bUp";
+  static inline constexpr const char stop_button_name = "bStop";
+  static inline constexpr const char close_button_name = "bDown";
+  static inline constexpr const char position_slider_name = "bSlider"
+
+  static inline constexpr const uint8_t preset1_button_id = 15;
+  static inline constexpr const uint8_t preset2_button_id = 16;
+  static inline constexpr const uint8_t preset3_button_id = 17;
+  static inline constexpr const uint8_t open_button_id = 18;
+  static inline constexpr const uint8_t stop_button_id = 19;
+  static inline constexpr const uint8_t close_button_id = 20;
+  static inline constexpr const uint8_t position_slider_id = 21;
+
+  static inline constexpr const char preset1_button_name = "tPreset1";   //t as in tilt
+  static inline constexpr const char preset2_button_name = "tPreset2";
+  static inline constexpr const char preset3_button_name = "tPreset3";
+  static inline constexpr const char open_button_name = "tUp";
+  static inline constexpr const char stop_button_name = "tStop";
+  static inline constexpr const char close_button_name = "tDown";
+  static inline constexpr const char position_slider_name = "tSlider"
 };
 
 class GUI_THERMOSTAT_CONTROL_PAGE {
