@@ -9,6 +9,7 @@ from typing import Optional
 from .broker import Broker
 from .fake_manager import QEMU_HOST_ADDRESS, FakeManager
 from .panel import QemuPanel
+from .update_server import UpdateServer
 
 PROJECT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DEFAULT_BUILD_DIR = os.path.join(PROJECT_DIR, ".pio", "build", "qemu")
@@ -24,7 +25,9 @@ class Rig:
                  build_dir: Optional[str] = None, panel_config: Optional[dict] = None):
         os.makedirs(workdir, exist_ok=True)
         self.broker = Broker(log_path=os.path.join(workdir, "mosquitto.log"))
-        self.manager = FakeManager(self.broker)
+        # The manager's HTTP side (update downloads), on the port register_accept advertises.
+        self.update_server = UpdateServer()
+        self.manager = FakeManager(self.broker, port=self.update_server.port)
         self.hostname = hostname
         if panel_config is None:
             panel_config = self.default_panel_config()
@@ -34,7 +37,7 @@ class Rig:
         # Every page a test waits for, and the screen when it fails (tests/conftest.py).
         self.nextion.screenshots_dir = os.path.join(workdir, "screens")
         # Any wait on a fake ends as soon as the firmware panics or QEMU exits.
-        for fake in (self.broker, self.manager, self.nextion):
+        for fake in (self.broker, self.manager, self.nextion, self.update_server):
             fake.abort_check = self.panel.check_alive
 
     def default_panel_config(self) -> dict:
@@ -93,4 +96,5 @@ class Rig:
 
     def stop(self) -> None:
         self.panel.stop()
+        self.update_server.close()
         self.broker.close()
