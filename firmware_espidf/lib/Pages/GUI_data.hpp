@@ -426,12 +426,16 @@ public:
   static inline constexpr const char *page_name = "blinds";
 
   static inline constexpr const uint8_t back_button_id = 1;
+  static inline constexpr const char *back_button_text_string = "back"; // Data sent when pressing back button
   static inline constexpr const char *name_label_name = "current";
+
+  // Button in top right corner to switch between position & tilt mode.
+  static inline constexpr const char *mode_button_name = "mode";
 
   // Page contains 7 buttons but they are doubled. 7 for controlling blinds in normal mode and 7 for controlling blinds in tilt mode.
   // Nextion screen will send a value containing the name of the button the user has pressed so the firmware can decide what action to take.
   // No normal on release event is sent for any of the buttons.
-  // There is a mode change button in top rigt corner and visibility of correct buttons is entirely done by the screen so it does not have to be done by the firmware.
+  // There is a mode change button in top right corner and visibility of correct buttons is entirely done by the screen so it does not have to be done by the firmware.
 
   static inline constexpr const uint8_t preset1_button_id = 8;
   static inline constexpr const uint8_t preset2_button_id = 9;
@@ -449,21 +453,21 @@ public:
   static inline constexpr const char *close_button_name = "bDown";
   static inline constexpr const char *position_slider_name = "bSlider";
 
-  static inline constexpr const uint8_t preset1_button_id = 15;
-  static inline constexpr const uint8_t preset2_button_id = 16;
-  static inline constexpr const uint8_t preset3_button_id = 17;
-  static inline constexpr const uint8_t open_button_id = 18;
-  static inline constexpr const uint8_t stop_button_id = 19;
-  static inline constexpr const uint8_t close_button_id = 20;
-  static inline constexpr const uint8_t position_slider_id = 21;
+  static inline constexpr const uint8_t tilt_preset1_button_id = 15;
+  static inline constexpr const uint8_t tilt_preset2_button_id = 16;
+  static inline constexpr const uint8_t tilt_preset3_button_id = 17;
+  static inline constexpr const uint8_t tilt_open_button_id = 18;
+  static inline constexpr const uint8_t tilt_stop_button_id = 19;
+  static inline constexpr const uint8_t tilt_close_button_id = 20;
+  static inline constexpr const uint8_t tilt_position_slider_id = 21;
 
-  static inline constexpr const char *preset1_button_name = "tPreset1"; // t as in tilt
-  static inline constexpr const char *preset2_button_name = "tPreset2";
-  static inline constexpr const char *preset3_button_name = "tPreset3";
-  static inline constexpr const char *open_button_name = "tUp";
-  static inline constexpr const char *stop_button_name = "tStop";
-  static inline constexpr const char *close_button_name = "tDown";
-  static inline constexpr const char *position_slider_name = "tSlider";
+  static inline constexpr const char *tilt_preset1_button_name = "tPreset1"; // t as in tilt
+  static inline constexpr const char *tilt_preset2_button_name = "tPreset2";
+  static inline constexpr const char *tilt_preset3_button_name = "tPreset3";
+  static inline constexpr const char *tilt_open_button_name = "tUp";
+  static inline constexpr const char *tilt_stop_button_name = "tStop";
+  static inline constexpr const char *tilt_close_button_name = "tDown";
+  static inline constexpr const char *tilt_position_slider_name = "tSlider";
 };
 
 class GUI_THERMOSTAT_CONTROL_PAGE {
