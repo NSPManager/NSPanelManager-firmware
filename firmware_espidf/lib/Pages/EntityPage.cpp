@@ -147,7 +147,10 @@ void EntityPage::_handle_nextion_event(void *arg, esp_event_base_t event_base, i
       break;
 
     case NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER:
+      break;
+
     case NSPANEL_ENTITY_STATE__ENTITY_COVER:
+      CoverPage::handle_string_event(state, (char *)event_data);
       break;
 
     default:
@@ -171,10 +174,6 @@ void EntityPage::_handle_touch_event(const std::shared_ptr<NSPanelEntityState> &
 
   case NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER:
     MediaPlayerPage::handle_touch(component_id, pressed);
-    break;
-
-  case NSPANEL_ENTITY_STATE__ENTITY_COVER:
-    CoverPage::handle_touch(component_id, pressed);
     break;
 
   default:
