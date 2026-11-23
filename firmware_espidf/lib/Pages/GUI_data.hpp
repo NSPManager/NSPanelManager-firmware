@@ -422,7 +422,7 @@ struct GUI_THERMOSTAT_OPTIONS_MODE_DATA {
 
 class GUI_COVER_CONTROL_PAGE {
 public:
-  static inline constexpr const uint8_t page_id = 12;
+  static inline constexpr const uint8_t page_id = 13;
   static inline constexpr const char *page_name = "blinds";
 
   static inline constexpr const uint8_t back_button_id = 1;
