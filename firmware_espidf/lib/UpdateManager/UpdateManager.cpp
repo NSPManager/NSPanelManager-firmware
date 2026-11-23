@@ -1,11 +1,11 @@
-#include <PanelRestart.hpp>
 #include <ConfigManager.hpp>
 #include <LittleFS.hpp>
 #include <LoadingPage.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
-#include <Nextion.hpp>
-#include <Nextion_event.hpp>
+#include <PanelRestart.hpp>
+// #include <Nextion.hpp>
+// #include <Nextion_event.hpp>
 #include <StatusUpdateManager.hpp>
 #include <UpdateManager.hpp>
 #include <UpdateManager_event.hpp>
@@ -36,7 +36,7 @@ void UpdateManager::update_gui(void *param) {
   WiFiManager::set_update_in_progress(true);
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-    esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, UpdateManager::_nextion_event_handler, NULL);
+    // esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, UpdateManager::_nextion_event_handler, NULL);
 
     std::string tft_file_url = "http://";
     tft_file_url.append(NSPM_ConfigManager::get_manager_address());
@@ -57,10 +57,10 @@ void UpdateManager::update_gui(void *param) {
     }
 
     ESP_LOGI("UpdateManager", "Will start updating GUI. Remote file size: %zu bytes", remote_tft_file_size);
-    while (Nextion::start_update(ConfigManager::nextion_upload_baudrate, ConfigManager::use_latest_nextion_upload_protocol, remote_tft_file_size) != ESP_OK) {
-      ESP_LOGW("UpdateManager", "Failed to init update process with Nextion display. Will try again in 5000ms");
-      vTaskDelay(pdMS_TO_TICKS(5000));
-    }
+    // while (Nextion::start_update(ConfigManager::nextion_upload_baudrate, ConfigManager::use_latest_nextion_upload_protocol, remote_tft_file_size) != ESP_OK) {
+    //   ESP_LOGW("UpdateManager", "Failed to init update process with Nextion display. Will try again in 5000ms");
+    //   vTaskDelay(pdMS_TO_TICKS(5000));
+    // }
 
     esp_event_post(UPDATEMANAGER_EVENT, updatemanager_event_t::NEXTION_UPDATE_STARTED, NULL, 0, pdMS_TO_TICKS(500));
 
@@ -196,10 +196,10 @@ void UpdateManager::update_gui(void *param) {
           }
         }
 
-        while (Nextion::write_update_bytes(tft_data_buffer.data(), tft_data_buffer.size()) != ESP_OK) {
-          ESP_LOGE("UpdateManager", "Failed to write TFT chunk to UART while updating GUI. Will try again in 5 seconds.");
-          vTaskDelay(pdMS_TO_TICKS(5000));
-        }
+        // while (Nextion::write_update_bytes(tft_data_buffer.data(), tft_data_buffer.size()) != ESP_OK) {
+        //   ESP_LOGE("UpdateManager", "Failed to write TFT chunk to UART while updating GUI. Will try again in 5 seconds.");
+        //   vTaskDelay(pdMS_TO_TICKS(5000));
+        // }
         // ESP_LOGD("UpdateManager", "Wrote %zu bytes to Nextion display. Total bytes written: %llu", tft_data_buffer.size(), UpdateManager::_nextion_update_current_offset + tft_data_buffer.size());
 
         progress = (std::round((((double)UpdateManager::_nextion_update_current_offset + (double)UpdateManager::_nextion_update_next_chunk_size) / (double)remote_tft_file_size) * 100) / 100) * 100;
@@ -216,10 +216,10 @@ void UpdateManager::update_gui(void *param) {
           vTaskDelay(pdMS_TO_TICKS(2000));
           StatusUpdateManager::reboot();
         }
-        while (Nextion::start_update(ConfigManager::nextion_upload_baudrate, ConfigManager::use_latest_nextion_upload_protocol, remote_tft_file_size) != ESP_OK) {
-          ESP_LOGW("UpdateManager", "Failed to init update process with Nextion display. Will try again in 5000ms");
-          vTaskDelay(pdMS_TO_TICKS(5000));
-        }
+        // while (Nextion::start_update(ConfigManager::nextion_upload_baudrate, ConfigManager::use_latest_nextion_upload_protocol, remote_tft_file_size) != ESP_OK) {
+        //   ESP_LOGW("UpdateManager", "Failed to init update process with Nextion display. Will try again in 5000ms");
+        //   vTaskDelay(pdMS_TO_TICKS(5000));
+        // }
       }
     }
 
@@ -618,29 +618,29 @@ void UpdateManager::_task_reboot(void *param) {
 }
 
 void UpdateManager::_nextion_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-  switch (event_id) {
-  case nextion_event_t::UPDATE_READY_FOR_NEXT_CHUNK: {
-    UpdateManager::_nextion_update_current_offset += UpdateManager::_nextion_update_next_chunk_size;
-    xTaskNotifyGive(UpdateManager::_current_update_task);
-    break;
-  }
+  // switch (event_id) {
+  // case nextion_event_t::UPDATE_READY_FOR_NEXT_CHUNK: {
+  //   UpdateManager::_nextion_update_current_offset += UpdateManager::_nextion_update_next_chunk_size;
+  //   xTaskNotifyGive(UpdateManager::_current_update_task);
+  //   break;
+  // }
 
-  case nextion_event_t::UPDATE_JUMP_TO_OFFSET: {
-    size_t *jump_offset = (size_t *)event_data;
-    if (*jump_offset > 0) { // If set to zero, continue and treat it as a 0x05 as 0 means "continue and do not jump"
-      UpdateManager::_nextion_update_current_offset = *jump_offset;
-      UpdateManager::_nextion_update_reset_http_client = true; // We jumped in file. Reset HTTP client and reconnect with correct "Range"-header set.
-    } else {
-      UpdateManager::_nextion_update_current_offset += UpdateManager::_nextion_update_next_chunk_size;
-    }
-    ESP_LOGI("UpdateManager", "Received instruction from Nextion display to jump to %zu TFT file offset.", *jump_offset);
-    xTaskNotifyGive(UpdateManager::_current_update_task);
-    break;
-  }
+  // case nextion_event_t::UPDATE_JUMP_TO_OFFSET: {
+  //   size_t *jump_offset = (size_t *)event_data;
+  //   if (*jump_offset > 0) { // If set to zero, continue and treat it as a 0x05 as 0 means "continue and do not jump"
+  //     UpdateManager::_nextion_update_current_offset = *jump_offset;
+  //     UpdateManager::_nextion_update_reset_http_client = true; // We jumped in file. Reset HTTP client and reconnect with correct "Range"-header set.
+  //   } else {
+  //     UpdateManager::_nextion_update_current_offset += UpdateManager::_nextion_update_next_chunk_size;
+  //   }
+  //   ESP_LOGI("UpdateManager", "Received instruction from Nextion display to jump to %zu TFT file offset.", *jump_offset);
+  //   xTaskNotifyGive(UpdateManager::_current_update_task);
+  //   break;
+  // }
 
-  default:
-    break;
-  }
+  // default:
+  //   break;
+  // }
 }
 
 esp_err_t UpdateManager::_update_firmware_ota() {

@@ -1,0 +1,23 @@
+#pragma once
+#include "stream_engine.h"
+
+class NSPanelDisplay;
+class NSPanelTouchscreen {
+public:
+  void set_panel(NSPanelDisplay *panel);
+  bool new_report(bool down, uint16_t x, uint16_t y);
+  unsigned touch_edges() const { return edges_; }
+  unsigned touch_drops() const { return drops_; }
+  void reset_contacts() {
+    queue_ = TouchQueue();
+    current_ = {};
+    last_reported_ = false;
+  }
+
+private:
+  NSPanelDisplay *panel_ = nullptr;
+  TouchQueue queue_;
+  TouchSample current_;
+  unsigned edges_ = 0, drops_ = 0;
+  bool last_reported_ = false;
+};

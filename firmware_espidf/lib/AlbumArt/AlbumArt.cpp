@@ -1,6 +1,6 @@
 #include <AlbumArt.hpp>
 #include <ConfigManager.hpp>
-#include <Nextion.hpp>
+// #include <Nextion.hpp>
 #include <esp_http_client.h>
 #include <esp_log.h>
 #include <esp_timer.h>
@@ -71,9 +71,9 @@ bool AlbumArt::_page_still_shown() {
 void AlbumArt::_clear_display() {
   ESP_LOGD("AlbumArt", "Clearing the album art.");
   // Sent after every fill, so the display redraws the page only once it has drawn them.
-  if (Nextion::send_raw_command("ref 0", 250) != ESP_OK) [[unlikely]] {
-    ESP_LOGW("AlbumArt", "Failed to redraw the page to clear the album art.");
-  }
+  // if (Nextion::send_raw_command("ref 0", 250) != ESP_OK) [[unlikely]] {
+  //   ESP_LOGW("AlbumArt", "Failed to redraw the page to clear the album art.");
+  // }
 }
 
 void AlbumArt::_start_render(const std::string &url, uint16_t x, uint16_t y, bool (*still_shown)()) {
@@ -287,14 +287,14 @@ uint32_t AlbumArt::_draw_row(const uint8_t *row, uint16_t grid, uint16_t row_ind
       if (!AlbumArt::_page_still_shown()) {
         return fills;
       }
-      if (Nextion::fill(AlbumArt::_draw_origin_x + (uint32_t)run_start * block_size, y,
-                        (uint32_t)(col - run_start) * block_size, block_size, run_color, 250, true) != ESP_OK) {
-        // The display is not in a state to be drawn on -- updating, most likely. Stop rather
-        // than spin through thousands of failing writes.
-        ESP_LOGW("AlbumArt", "Display rejected a fill, cancelling the render.");
-        AlbumArt::_cancelled = true;
-        return fills;
-      }
+      // if (Nextion::fill(AlbumArt::_draw_origin_x + (uint32_t)run_start * block_size, y,
+      //                   (uint32_t)(col - run_start) * block_size, block_size, run_color, 250, true) != ESP_OK) {
+      //   // The display is not in a state to be drawn on -- updating, most likely. Stop rather
+      //   // than spin through thousands of failing writes.
+      //   ESP_LOGW("AlbumArt", "Display rejected a fill, cancelling the render.");
+      //   AlbumArt::_cancelled = true;
+      //   return fills;
+      // }
       // No pacing here: every write to the display goes through NextionWindow, which keeps its
       // serial buffer from overflowing. Bulk fills use only half its window, so the page's own
       // updates and a tap's are written at once rather than queueing behind the render.

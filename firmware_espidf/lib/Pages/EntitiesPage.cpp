@@ -7,8 +7,8 @@
 #include <InterfaceManager.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
-#include <Nextion.hpp>
-#include <Nextion_event.hpp>
+// #include <Nextion.hpp>
+// #include <Nextion_event.hpp>
 #include <RoomManager.hpp>
 #include <RoomManager_event.hpp>
 #include <esp_log.h>
@@ -26,10 +26,10 @@ void EntitiesPage::show(display_type_t display_type) {
     HomePage::show();
   }
 
-  if (handlers->add(NEXTION_EVENT, ESP_EVENT_ANY_ID, EntitiesPage::_handle_nextion_event) != ESP_OK) [[unlikely]] {
-    ESP_LOGE("EntitiesPage", "Failed to register event handler for EntitiesPage to Nextion. Will return on HomePage.");
-    HomePage::show();
-  }
+  // if (handlers->add(NEXTION_EVENT, ESP_EVENT_ANY_ID, EntitiesPage::_handle_nextion_event) != ESP_OK) [[unlikely]] {
+  //   ESP_LOGE("EntitiesPage", "Failed to register event handler for EntitiesPage to Nextion. Will return on HomePage.");
+  //   HomePage::show();
+  // }
 
   // If current room has an entities page, go to it and if not, show the next available entities page.
   switch (display_type) {
@@ -78,7 +78,7 @@ void EntitiesPage::_update_display(const std::shared_ptr<NSPanelRoomEntitiesPage
   switch (page->page_type) {
   case 4: {
     if (EntitiesPage::_currently_showing_page_type != 4) {
-      Nextion::go_to_page(GUI_ITEMS4_PAGE::page_name, 1000);
+      // Nextion::go_to_page(GUI_ITEMS4_PAGE::page_name, 1000);
       EntitiesPage::_currently_showing_page_type = 4;
       EntitiesPage::_currently_showing_header_text.set("");
     }
@@ -87,7 +87,7 @@ void EntitiesPage::_update_display(const std::shared_ptr<NSPanelRoomEntitiesPage
 
   case 8: {
     if (EntitiesPage::_currently_showing_page_type != 8) {
-      Nextion::go_to_page(GUI_ITEMS8_PAGE::page_name, 1000);
+      // Nextion::go_to_page(GUI_ITEMS8_PAGE::page_name, 1000);
       EntitiesPage::_currently_showing_page_type = 8;
       EntitiesPage::_currently_showing_header_text.set("");
     }
@@ -96,7 +96,7 @@ void EntitiesPage::_update_display(const std::shared_ptr<NSPanelRoomEntitiesPage
 
   case 12: {
     if (EntitiesPage::_currently_showing_page_type != 12) {
-      Nextion::go_to_page(GUI_ITEMS12_PAGE::page_name, 1000);
+      // Nextion::go_to_page(GUI_ITEMS12_PAGE::page_name, 1000);
       EntitiesPage::_currently_showing_page_type = 12;
       EntitiesPage::_currently_showing_header_text.set("");
     }
@@ -111,7 +111,7 @@ void EntitiesPage::_update_display(const std::shared_ptr<NSPanelRoomEntitiesPage
 
   // Header first: it is a single command, whereas the slots below take several commands each.
   if (std::string(page->header_text).compare(EntitiesPage::_currently_showing_header_text.get()) != 0) {
-    Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, page->header_text, 250);
+    // Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, page->header_text, 250);
     EntitiesPage::_currently_showing_header_text.set(page->header_text);
   }
 
@@ -167,17 +167,17 @@ void EntitiesPage::_update_displayed_items(const std::shared_ptr<NSPanelRoomEnti
 
 void EntitiesPage::_update_displayed_item_in_slot(NSPanelRoomEntitiesPage__EntitySlot *slot_data, const GUI_ITEMS_PAGE_ITEM_DATA page_slot) {
   if (slot_data != nullptr) {
-    Nextion::set_component_text(page_slot.label_name, (std::string("   ") + slot_data->name).c_str(), 250);
-    Nextion::set_component_text(page_slot.button_name, slot_data->icon, 250);
-    Nextion::set_component_foreground(page_slot.button_name, slot_data->pco, 250);
-    Nextion::set_component_pco2(page_slot.button_name, slot_data->pco2, 250);
+    // Nextion::set_component_text(page_slot.label_name, (std::string("   ") + slot_data->name).c_str(), 250);
+    // Nextion::set_component_text(page_slot.button_name, slot_data->icon, 250);
+    // Nextion::set_component_foreground(page_slot.button_name, slot_data->pco, 250);
+    // Nextion::set_component_pco2(page_slot.button_name, slot_data->pco2, 250);
 
-    Nextion::set_component_visibility(page_slot.button_name, true, 250);
-    Nextion::set_component_visibility(page_slot.label_name, true, 250);
+    // Nextion::set_component_visibility(page_slot.button_name, true, 250);
+    // Nextion::set_component_visibility(page_slot.label_name, true, 250);
   } else {
     // No entity was found for page slot. Blank page slot.
-    Nextion::set_component_visibility(page_slot.button_name, false, 250);
-    Nextion::set_component_visibility(page_slot.label_name, false, 250);
+    // Nextion::set_component_visibility(page_slot.button_name, false, 250);
+    // Nextion::set_component_visibility(page_slot.label_name, false, 250);
   }
 }
 
@@ -207,344 +207,344 @@ void EntitiesPage::_handle_nextion_event(void *arg, esp_event_base_t event_base,
     return;
   }
 
-  switch (event_id) {
-  case nextion_event_t::TOUCH_EVENT: {
-    nextion_event_touch_t *data = (nextion_event_touch_t *)event_data;
-    switch (page->page_type) {
-    case 4:
-      EntitiesPage::_handle_items4_touch_event(page, data);
-      break;
-    case 8:
-      EntitiesPage::_handle_items8_touch_event(page, data);
-      break;
-    case 12:
-      EntitiesPage::_handle_items12_touch_event(page, data);
-      break;
+  // switch (event_id) {
+  // case nextion_event_t::TOUCH_EVENT: {
+  //   nextion_event_touch_t *data = (nextion_event_touch_t *)event_data;
+  //   switch (page->page_type) {
+  //   case 4:
+  //     EntitiesPage::_handle_items4_touch_event(page, data);
+  //     break;
+  //   case 8:
+  //     EntitiesPage::_handle_items8_touch_event(page, data);
+  //     break;
+  //   case 12:
+  //     EntitiesPage::_handle_items12_touch_event(page, data);
+  //     break;
 
-    default:
-      ESP_LOGE("EntitiesPage", "Unknown entities page type! Type: %ld while handling page touch event!", page->page_type);
-      HomePage::show();
-      return;
-    }
+  //   default:
+  //     ESP_LOGE("EntitiesPage", "Unknown entities page type! Type: %ld while handling page touch event!", page->page_type);
+  //     HomePage::show();
+  //     return;
+  //   }
 
-    break;
-  }
+  //   break;
+  // }
 
-  default:
-    break;
-  }
+  // default:
+  //   break;
+  // }
 }
 
-void EntitiesPage::_handle_items4_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data) {
-  // First check if we actually pressed an entity toggle button or an entity name
-  if (EntitiesPage::_display_type == display_type_t::SCENES || EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
-    // When displaying scenes we don't want to send the toggle command when pressing the icon above/beside the button.
-    // We want to send the toggle command when pressing the text itself as the icon is for saving applicable scenes.
-    for (int i = 0; i < 4; i++) {
-      if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].label_id) {
-        if (touch_data->pressed) {
-          BuzzerManager::raise_event_for_touch(buzzer_event_t::SCENE_ACTIVATED);
-          EntitiesPage::_send_entity_toggle_command_to_manager(page->id, i);
-        }
-        return; // Found match, no need to continue.
-      }
-    }
+// void EntitiesPage::_handle_items4_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data) {
+//   // First check if we actually pressed an entity toggle button or an entity name
+//   if (EntitiesPage::_display_type == display_type_t::SCENES || EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+//     // When displaying scenes we don't want to send the toggle command when pressing the icon above/beside the button.
+//     // We want to send the toggle command when pressing the text itself as the icon is for saving applicable scenes.
+//     for (int i = 0; i < 4; i++) {
+//       if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].label_id) {
+//         if (touch_data->pressed) {
+//           BuzzerManager::raise_event_for_touch(buzzer_event_t::SCENE_ACTIVATED);
+//           EntitiesPage::_send_entity_toggle_command_to_manager(page->id, i);
+//         }
+//         return; // Found match, no need to continue.
+//       }
+//     }
 
-    // Handle scene save buttons
-    for (int i = 0; i < 4; i++) {
-      if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].button_id) {
-        if (touch_data->pressed) {
-          for (int j = 0; j < page->n_entities; j++) {
-            if (page->entities[j] != nullptr) {
-              if (page->entities[j]->room_view_position == i && page->entities[j]->can_save_scene && EntitiesPage::_save_scene_task_handle == NULL) {
-                // This is a scene we can actually save. Start save scene process.
-                ESP_LOGD("EntitiesPage", "Entity in slot %ld can save scene.", page->entities[j]->room_view_position);
-                EntitiesPage::_save_scene = true;
-                int32_t *scene_slot = new int32_t(page->entities[j]->room_view_position);
-                xTaskCreatePinnedToCore(EntitiesPage::_task_save_scene_progress, "save_scene", 4096, (void *)scene_slot, 1, &EntitiesPage::_save_scene_task_handle, 1);
-              }
-            }
-          }
-        } else {
-          // User released the button
-          EntitiesPage::_save_scene = false;
-        }
-        return; // Found match, no need to continue.
-      }
-    }
-  } else {
-    // Handle entities and not scenes
-    for (int i = 0; i < 4; i++) {
-      if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].button_id) {
-        if (touch_data->pressed) {
-          EntitiesPage::_handle_entity_button_pressed(page, i);
-        }
-        return; // Found match, no need to continue.
-      }
-    }
+//     // Handle scene save buttons
+//     for (int i = 0; i < 4; i++) {
+//       if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].button_id) {
+//         if (touch_data->pressed) {
+//           for (int j = 0; j < page->n_entities; j++) {
+//             if (page->entities[j] != nullptr) {
+//               if (page->entities[j]->room_view_position == i && page->entities[j]->can_save_scene && EntitiesPage::_save_scene_task_handle == NULL) {
+//                 // This is a scene we can actually save. Start save scene process.
+//                 ESP_LOGD("EntitiesPage", "Entity in slot %ld can save scene.", page->entities[j]->room_view_position);
+//                 EntitiesPage::_save_scene = true;
+//                 int32_t *scene_slot = new int32_t(page->entities[j]->room_view_position);
+//                 xTaskCreatePinnedToCore(EntitiesPage::_task_save_scene_progress, "save_scene", 4096, (void *)scene_slot, 1, &EntitiesPage::_save_scene_task_handle, 1);
+//               }
+//             }
+//           }
+//         } else {
+//           // User released the button
+//           EntitiesPage::_save_scene = false;
+//         }
+//         return; // Found match, no need to continue.
+//       }
+//     }
+//   } else {
+//     // Handle entities and not scenes
+//     for (int i = 0; i < 4; i++) {
+//       if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].button_id) {
+//         if (touch_data->pressed) {
+//           EntitiesPage::_handle_entity_button_pressed(page, i);
+//         }
+//         return; // Found match, no need to continue.
+//       }
+//     }
 
-    for (int i = 0; i < 4; i++) {
-      if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].label_id) {
-        if (touch_data->pressed) {
-          for (int j = 0; j < page->n_entities; j++) {
-            if (page->entities[j] != nullptr) [[likely]] {
-              if (page->entities[j]->room_view_position == i) {
-                std::string topic_string = page->entities[j]->mqtt_state_topic;
-                if (!topic_string.empty()) [[likely]] {
-                  EntityPage::show(topic_string);
-                }
-              }
-            }
-          }
-        }
-        return; // Found match, no need to continue.
-      }
-    }
-  }
+//     for (int i = 0; i < 4; i++) {
+//       if (touch_data->component_id == GUI_ITEMS4_PAGE::item_slots[i].label_id) {
+//         if (touch_data->pressed) {
+//           for (int j = 0; j < page->n_entities; j++) {
+//             if (page->entities[j] != nullptr) [[likely]] {
+//               if (page->entities[j]->room_view_position == i) {
+//                 std::string topic_string = page->entities[j]->mqtt_state_topic;
+//                 if (!topic_string.empty()) [[likely]] {
+//                   EntityPage::show(topic_string);
+//                 }
+//               }
+//             }
+//           }
+//         }
+//         return; // Found match, no need to continue.
+//       }
+//     }
+//   }
 
-  // We did not press an entity, check if we pressed any other button
-  if (touch_data->pressed) {
-    switch (touch_data->component_id) {
-    case GUI_ITEMS4_PAGE::button_back_id:
-      HomePage::show();
-      break;
+//   // We did not press an entity, check if we pressed any other button
+//   if (touch_data->pressed) {
+//     switch (touch_data->component_id) {
+//     case GUI_ITEMS4_PAGE::button_back_id:
+//       HomePage::show();
+//       break;
 
-    case GUI_ITEMS4_PAGE::button_previous_page_id: {
-      if (EntitiesPage::_display_type == display_type_t::SCENES) {
-        RoomManager::go_to_previous_scenes_page();
-      } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
-        RoomManager::go_to_previous_global_scenes_page();
-      } else {
-        RoomManager::go_to_previous_entities_page();
-      }
-      break;
-    }
+//     case GUI_ITEMS4_PAGE::button_previous_page_id: {
+//       if (EntitiesPage::_display_type == display_type_t::SCENES) {
+//         RoomManager::go_to_previous_scenes_page();
+//       } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+//         RoomManager::go_to_previous_global_scenes_page();
+//       } else {
+//         RoomManager::go_to_previous_entities_page();
+//       }
+//       break;
+//     }
 
-    case GUI_ITEMS4_PAGE::button_next_page_id: {
-      if (EntitiesPage::_display_type == display_type_t::SCENES) {
-        RoomManager::go_to_next_scenes_page();
-      } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
-        RoomManager::go_to_next_global_scenes_page();
-      } else {
-        RoomManager::go_to_next_entities_page();
-      }
-      break;
-    }
+//     case GUI_ITEMS4_PAGE::button_next_page_id: {
+//       if (EntitiesPage::_display_type == display_type_t::SCENES) {
+//         RoomManager::go_to_next_scenes_page();
+//       } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+//         RoomManager::go_to_next_global_scenes_page();
+//       } else {
+//         RoomManager::go_to_next_entities_page();
+//       }
+//       break;
+//     }
 
-    default:
-      ESP_LOGD("EntitiesPage", "Unknown component ID of touch event in items4. ID: %u", touch_data->component_id);
-      break;
-    }
-  }
-}
+//     default:
+//       ESP_LOGD("EntitiesPage", "Unknown component ID of touch event in items4. ID: %u", touch_data->component_id);
+//       break;
+//     }
+//   }
+// }
 
-void EntitiesPage::_handle_items8_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data) {
-  // First check if we actually pressed an entity toggle button or an entity name
-  if (EntitiesPage::_display_type == display_type_t::SCENES || EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
-    // When displaying scenes we don't want to send the toggle command when pressing the icon above/beside the button.
-    // We want to send the toggle command when pressing the text itself as the icon is for saving applicable scenes.
-    for (int i = 0; i < 8; i++) {
-      if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].label_id) {
-        if (touch_data->pressed) {
-          BuzzerManager::raise_event_for_touch(buzzer_event_t::SCENE_ACTIVATED);
-          EntitiesPage::_send_entity_toggle_command_to_manager(page->id, i);
-        }
-        return; // Found match, no need to continue.
-      }
-    }
+// void EntitiesPage::_handle_items8_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data) {
+//   // First check if we actually pressed an entity toggle button or an entity name
+//   if (EntitiesPage::_display_type == display_type_t::SCENES || EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+//     // When displaying scenes we don't want to send the toggle command when pressing the icon above/beside the button.
+//     // We want to send the toggle command when pressing the text itself as the icon is for saving applicable scenes.
+//     for (int i = 0; i < 8; i++) {
+//       if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].label_id) {
+//         if (touch_data->pressed) {
+//           BuzzerManager::raise_event_for_touch(buzzer_event_t::SCENE_ACTIVATED);
+//           EntitiesPage::_send_entity_toggle_command_to_manager(page->id, i);
+//         }
+//         return; // Found match, no need to continue.
+//       }
+//     }
 
-    // Handle scene save buttons
-    for (int i = 0; i < 8; i++) {
-      if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].button_id) {
-        if (touch_data->pressed) {
-          for (int j = 0; j < page->n_entities; j++) {
-            if (page->entities[j] != nullptr) {
-              if (page->entities[j]->room_view_position == i && page->entities[j]->can_save_scene && EntitiesPage::_save_scene_task_handle == NULL) {
-                // This is a scene we can actually save. Start save scene process.
-                ESP_LOGD("EntitiesPage", "Entity in slot %ld can save scene.", page->entities[j]->room_view_position);
-                EntitiesPage::_save_scene = true;
-                int32_t *scene_slot = new int32_t(page->entities[j]->room_view_position);
-                xTaskCreatePinnedToCore(EntitiesPage::_task_save_scene_progress, "save_scene", 4096, (void *)scene_slot, 1, &EntitiesPage::_save_scene_task_handle, 1);
-              }
-            }
-          }
-        } else {
-          // User released the button
-          EntitiesPage::_save_scene = false;
-        }
-        return; // Found match, no need to continue.
-      }
-    }
-  } else {
-    // Handle entities and not scenes
-    for (int i = 0; i < 8; i++) {
-      if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].button_id) {
-        if (touch_data->pressed) {
-          EntitiesPage::_handle_entity_button_pressed(page, i);
-        }
-        return; // Found match, no need to continue.
-      }
-    }
+//     // Handle scene save buttons
+//     for (int i = 0; i < 8; i++) {
+//       if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].button_id) {
+//         if (touch_data->pressed) {
+//           for (int j = 0; j < page->n_entities; j++) {
+//             if (page->entities[j] != nullptr) {
+//               if (page->entities[j]->room_view_position == i && page->entities[j]->can_save_scene && EntitiesPage::_save_scene_task_handle == NULL) {
+//                 // This is a scene we can actually save. Start save scene process.
+//                 ESP_LOGD("EntitiesPage", "Entity in slot %ld can save scene.", page->entities[j]->room_view_position);
+//                 EntitiesPage::_save_scene = true;
+//                 int32_t *scene_slot = new int32_t(page->entities[j]->room_view_position);
+//                 xTaskCreatePinnedToCore(EntitiesPage::_task_save_scene_progress, "save_scene", 4096, (void *)scene_slot, 1, &EntitiesPage::_save_scene_task_handle, 1);
+//               }
+//             }
+//           }
+//         } else {
+//           // User released the button
+//           EntitiesPage::_save_scene = false;
+//         }
+//         return; // Found match, no need to continue.
+//       }
+//     }
+//   } else {
+//     // Handle entities and not scenes
+//     for (int i = 0; i < 8; i++) {
+//       if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].button_id) {
+//         if (touch_data->pressed) {
+//           EntitiesPage::_handle_entity_button_pressed(page, i);
+//         }
+//         return; // Found match, no need to continue.
+//       }
+//     }
 
-    for (int i = 0; i < 8; i++) {
-      if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].label_id) {
-        if (touch_data->pressed) {
-          for (int j = 0; j < page->n_entities; j++) {
-            if (page->entities[j] != nullptr) [[likely]] {
-              if (page->entities[j]->room_view_position == i) {
-                std::string topic_string = page->entities[j]->mqtt_state_topic;
+//     for (int i = 0; i < 8; i++) {
+//       if (touch_data->component_id == GUI_ITEMS8_PAGE::item_slots[i].label_id) {
+//         if (touch_data->pressed) {
+//           for (int j = 0; j < page->n_entities; j++) {
+//             if (page->entities[j] != nullptr) [[likely]] {
+//               if (page->entities[j]->room_view_position == i) {
+//                 std::string topic_string = page->entities[j]->mqtt_state_topic;
 
-                if (!topic_string.empty()) [[likely]] {
-                  EntityPage::show(topic_string);
-                }
-                return; // Found match, no need to continue.
-              }
-            }
-          }
-        }
-        return; // Found match, no need to continue.
-      }
-    }
-  }
+//                 if (!topic_string.empty()) [[likely]] {
+//                   EntityPage::show(topic_string);
+//                 }
+//                 return; // Found match, no need to continue.
+//               }
+//             }
+//           }
+//         }
+//         return; // Found match, no need to continue.
+//       }
+//     }
+//   }
 
-  // We did not press an entity, check if we pressed any other button
-  if (touch_data->pressed) {
-    switch (touch_data->component_id) {
-    case GUI_ITEMS8_PAGE::button_back_id:
-      HomePage::show();
-      break;
+//   // We did not press an entity, check if we pressed any other button
+//   if (touch_data->pressed) {
+//     switch (touch_data->component_id) {
+//     case GUI_ITEMS8_PAGE::button_back_id:
+//       HomePage::show();
+//       break;
 
-    case GUI_ITEMS8_PAGE::button_previous_page_id: {
-      if (EntitiesPage::_display_type == display_type_t::SCENES) {
-        RoomManager::go_to_previous_scenes_page();
-      } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
-        RoomManager::go_to_previous_global_scenes_page();
-      } else {
-        RoomManager::go_to_previous_entities_page();
-      }
-      break;
-    }
+//     case GUI_ITEMS8_PAGE::button_previous_page_id: {
+//       if (EntitiesPage::_display_type == display_type_t::SCENES) {
+//         RoomManager::go_to_previous_scenes_page();
+//       } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+//         RoomManager::go_to_previous_global_scenes_page();
+//       } else {
+//         RoomManager::go_to_previous_entities_page();
+//       }
+//       break;
+//     }
 
-    case GUI_ITEMS8_PAGE::button_next_page_id: {
-      if (EntitiesPage::_display_type == display_type_t::SCENES) {
-        RoomManager::go_to_next_scenes_page();
-      } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
-        RoomManager::go_to_next_global_scenes_page();
-      } else {
-        RoomManager::go_to_next_entities_page();
-      }
-      break;
-    }
+//     case GUI_ITEMS8_PAGE::button_next_page_id: {
+//       if (EntitiesPage::_display_type == display_type_t::SCENES) {
+//         RoomManager::go_to_next_scenes_page();
+//       } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+//         RoomManager::go_to_next_global_scenes_page();
+//       } else {
+//         RoomManager::go_to_next_entities_page();
+//       }
+//       break;
+//     }
 
-    default:
-      ESP_LOGD("EntitiesPage", "Unknown component ID of touch event in items8. ID: %u", touch_data->component_id);
-      break;
-    }
-  }
-}
+//     default:
+//       ESP_LOGD("EntitiesPage", "Unknown component ID of touch event in items8. ID: %u", touch_data->component_id);
+//       break;
+//     }
+//   }
+// }
 
-void EntitiesPage::_handle_items12_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data) {
-  // First check if we actually pressed an entity toggle button or an entity name
-  if (EntitiesPage::_display_type == display_type_t::SCENES || EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
-    // When displaying scenes we don't want to send the toggle command when pressing the icon above/beside the button.
-    // We want to send the toggle command when pressing the text itself as the icon is for saving applicable scenes.
-    for (int i = 0; i < 12; i++) {
-      if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].label_id) {
-        if (touch_data->pressed) {
-          BuzzerManager::raise_event_for_touch(buzzer_event_t::SCENE_ACTIVATED);
-          EntitiesPage::_send_entity_toggle_command_to_manager(page->id, i);
-        }
-        return; // Found match, no need to continue.
-      }
-    }
+// void EntitiesPage::_handle_items12_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data) {
+//   // First check if we actually pressed an entity toggle button or an entity name
+//   if (EntitiesPage::_display_type == display_type_t::SCENES || EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+//     // When displaying scenes we don't want to send the toggle command when pressing the icon above/beside the button.
+//     // We want to send the toggle command when pressing the text itself as the icon is for saving applicable scenes.
+//     for (int i = 0; i < 12; i++) {
+//       if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].label_id) {
+//         if (touch_data->pressed) {
+//           BuzzerManager::raise_event_for_touch(buzzer_event_t::SCENE_ACTIVATED);
+//           EntitiesPage::_send_entity_toggle_command_to_manager(page->id, i);
+//         }
+//         return; // Found match, no need to continue.
+//       }
+//     }
 
-    // Handle scene save buttons
-    for (int i = 0; i < 12; i++) {
-      if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].button_id) {
-        if (touch_data->pressed) {
-          for (int j = 0; j < page->n_entities; j++) {
-            if (page->entities[j] != nullptr) {
-              if (page->entities[j]->room_view_position == i && page->entities[j]->can_save_scene && EntitiesPage::_save_scene_task_handle == NULL) {
-                // This is a scene we can actually save. Start save scene process.
-                ESP_LOGD("EntitiesPage", "Entity in slot %ld can save scene.", page->entities[j]->room_view_position);
-                EntitiesPage::_save_scene = true;
-                int32_t *scene_slot = new int32_t(page->entities[j]->room_view_position);
-                xTaskCreatePinnedToCore(EntitiesPage::_task_save_scene_progress, "save_scene", 4096, (void *)scene_slot, 1, &EntitiesPage::_save_scene_task_handle, 1);
-              }
-            }
-          }
-        } else {
-          // User released the button
-          EntitiesPage::_save_scene = false;
-        }
-        return; // Found match, no need to continue.
-      }
-    }
-  } else {
-    // Handle entities and not scenes
-    for (int i = 0; i < 12; i++) {
-      if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].button_id) {
-        if (touch_data->pressed) {
-          EntitiesPage::_handle_entity_button_pressed(page, i);
-        }
-        return; // Found match, no need to continue.
-      }
-    }
+//     // Handle scene save buttons
+//     for (int i = 0; i < 12; i++) {
+//       if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].button_id) {
+//         if (touch_data->pressed) {
+//           for (int j = 0; j < page->n_entities; j++) {
+//             if (page->entities[j] != nullptr) {
+//               if (page->entities[j]->room_view_position == i && page->entities[j]->can_save_scene && EntitiesPage::_save_scene_task_handle == NULL) {
+//                 // This is a scene we can actually save. Start save scene process.
+//                 ESP_LOGD("EntitiesPage", "Entity in slot %ld can save scene.", page->entities[j]->room_view_position);
+//                 EntitiesPage::_save_scene = true;
+//                 int32_t *scene_slot = new int32_t(page->entities[j]->room_view_position);
+//                 xTaskCreatePinnedToCore(EntitiesPage::_task_save_scene_progress, "save_scene", 4096, (void *)scene_slot, 1, &EntitiesPage::_save_scene_task_handle, 1);
+//               }
+//             }
+//           }
+//         } else {
+//           // User released the button
+//           EntitiesPage::_save_scene = false;
+//         }
+//         return; // Found match, no need to continue.
+//       }
+//     }
+//   } else {
+//     // Handle entities and not scenes
+//     for (int i = 0; i < 12; i++) {
+//       if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].button_id) {
+//         if (touch_data->pressed) {
+//           EntitiesPage::_handle_entity_button_pressed(page, i);
+//         }
+//         return; // Found match, no need to continue.
+//       }
+//     }
 
-    for (int i = 0; i < 12; i++) {
-      if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].label_id) {
-        if (touch_data->pressed) {
-          for (int j = 0; j < page->n_entities; j++) {
-            if (page->entities[j] != nullptr) [[likely]] {
-              if (page->entities[j]->room_view_position == i) {
-                std::string topic_string = page->entities[j]->mqtt_state_topic;
-                if (!topic_string.empty()) [[likely]] {
-                  EntityPage::show(topic_string);
-                }
-              }
-            }
-          }
-        }
-        return; // Found match, no need to continue.
-      }
-    }
-  }
+//     for (int i = 0; i < 12; i++) {
+//       if (touch_data->component_id == GUI_ITEMS12_PAGE::item_slots[i].label_id) {
+//         if (touch_data->pressed) {
+//           for (int j = 0; j < page->n_entities; j++) {
+//             if (page->entities[j] != nullptr) [[likely]] {
+//               if (page->entities[j]->room_view_position == i) {
+//                 std::string topic_string = page->entities[j]->mqtt_state_topic;
+//                 if (!topic_string.empty()) [[likely]] {
+//                   EntityPage::show(topic_string);
+//                 }
+//               }
+//             }
+//           }
+//         }
+//         return; // Found match, no need to continue.
+//       }
+//     }
+//   }
 
-  // We did not press an entity, check if we pressed any other button
-  if (touch_data->pressed) {
-    switch (touch_data->component_id) {
-    case GUI_ITEMS12_PAGE::button_back_id:
-      HomePage::show();
-      break;
+//   // We did not press an entity, check if we pressed any other button
+//   if (touch_data->pressed) {
+//     switch (touch_data->component_id) {
+//     case GUI_ITEMS12_PAGE::button_back_id:
+//       HomePage::show();
+//       break;
 
-    case GUI_ITEMS12_PAGE::button_previous_page_id: {
-      if (EntitiesPage::_display_type == display_type_t::SCENES) {
-        RoomManager::go_to_previous_scenes_page();
-      } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
-        RoomManager::go_to_previous_global_scenes_page();
-      } else {
-        RoomManager::go_to_previous_entities_page();
-      }
-      break;
-    }
+//     case GUI_ITEMS12_PAGE::button_previous_page_id: {
+//       if (EntitiesPage::_display_type == display_type_t::SCENES) {
+//         RoomManager::go_to_previous_scenes_page();
+//       } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+//         RoomManager::go_to_previous_global_scenes_page();
+//       } else {
+//         RoomManager::go_to_previous_entities_page();
+//       }
+//       break;
+//     }
 
-    case GUI_ITEMS12_PAGE::button_next_page_id: {
-      if (EntitiesPage::_display_type == display_type_t::SCENES) {
-        RoomManager::go_to_next_scenes_page();
-      } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
-        RoomManager::go_to_next_global_scenes_page();
-      } else {
-        RoomManager::go_to_next_entities_page();
-      }
-      break;
-    }
+//     case GUI_ITEMS12_PAGE::button_next_page_id: {
+//       if (EntitiesPage::_display_type == display_type_t::SCENES) {
+//         RoomManager::go_to_next_scenes_page();
+//       } else if (EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES) {
+//         RoomManager::go_to_next_global_scenes_page();
+//       } else {
+//         RoomManager::go_to_next_entities_page();
+//       }
+//       break;
+//     }
 
-    default:
-      ESP_LOGD("EntitiesPage", "Unknown component ID of touch event in items12. ID: %u", touch_data->component_id);
-      break;
-    }
-  }
-}
+//     default:
+//       ESP_LOGD("EntitiesPage", "Unknown component ID of touch event in items12. ID: %u", touch_data->component_id);
+//       break;
+//     }
+//   }
+// }
 
 NSPanelRoomEntitiesPage__EntitySlot *EntitiesPage::_get_entity_in_slot(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, int32_t slot) {
   for (int i = 0; i < page->n_entities; i++) {
@@ -595,12 +595,12 @@ void EntitiesPage::_task_save_scene_progress(void *scene_slot) {
 
   ESP_LOGD("EntitiesPage", "Starting save of scene in slot %ld", scene_slot_int);
 
-  Nextion::set_component_visibility(GUI_ITEMS_PAGE_COMMON::slider_save_name, true, 250);
+  // Nextion::set_component_visibility(GUI_ITEMS_PAGE_COMMON::slider_save_name, true, 250);
   for (int i = 0; i < 100 && EntitiesPage::_save_scene; i += 2) {
-    Nextion::set_component_value(GUI_ITEMS_PAGE_COMMON::slider_save_name, i, 25);
+    // Nextion::set_component_value(GUI_ITEMS_PAGE_COMMON::slider_save_name, i, 25);
     vTaskDelay(pdMS_TO_TICKS(3000 / (100 / 2))); // Update in steps of 2 and take 3 seconds (3000ms) to save a scene
   }
-  Nextion::set_component_visibility(GUI_ITEMS_PAGE_COMMON::slider_save_name, false, 250);
+  // Nextion::set_component_visibility(GUI_ITEMS_PAGE_COMMON::slider_save_name, false, 250);
 
   std::shared_ptr<NSPanelRoomEntitiesPage> page = EntitiesPage::_current_entities_page.get();
   if (EntitiesPage::_save_scene && page == nullptr) {
@@ -626,26 +626,26 @@ void EntitiesPage::_task_save_scene_progress(void *scene_slot) {
         BuzzerManager::raise_event(buzzer_event_t::SCENE_SAVED);
 
         // Display text to user to say scene was saved.
-        Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, "Scene saved", 250);
+        // Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, "Scene saved", 250);
         EntitiesPage::_currently_showing_header_text.set("Scene saved");
         vTaskDelay(pdMS_TO_TICKS(1000));
-        Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, page->header_text, 250);
+        // Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, page->header_text, 250);
         EntitiesPage::_currently_showing_header_text.set(page->header_text);
       } else {
         ESP_LOGE("EntitiesPage", "Failed to send save command!");
-        Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, "Save failed", 250);
+        // Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, "Save failed", 250);
         EntitiesPage::_currently_showing_header_text.set("Save failed");
         vTaskDelay(pdMS_TO_TICKS(1000));
-        Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, page->header_text, 250);
+        // Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, page->header_text, 250);
         EntitiesPage::_currently_showing_header_text.set(page->header_text);
       }
     } else {
       ESP_LOGE("EntitiesPage", "Failed to serialize save command!");
       ESP_LOGE("EntitiesPage", "Failed to send save command!");
-      Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, "Save failed", 250);
+      // Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, "Save failed", 250);
       EntitiesPage::_currently_showing_header_text.set("Save failed");
       vTaskDelay(pdMS_TO_TICKS(1000));
-      Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, page->header_text, 250);
+      // Nextion::set_component_text(GUI_ITEMS_PAGE_COMMON::page_header_label, page->header_text, 250);
       EntitiesPage::_currently_showing_header_text.set(page->header_text);
     }
   }

@@ -1,0 +1,38 @@
+#include "nspanel_touchscreen.h"
+
+#include "nspanel_terminal.h"
+
+void NSPanelTouchscreen::set_panel(NSPanelDisplay *panel) {
+  this->panel_ = panel;
+  panel->set_touchscreen(this);
+}
+
+bool NSPanelTouchscreen::new_report(bool down, uint16_t x, uint16_t y) {
+  if (down && panel_ && (x >= panel_->width() || y >= panel_->height())) {
+    ++drops_;
+    return false;
+  }
+  ++edges_;
+  if (down != last_reported_) {
+    last_reported_ = down;
+  }
+  if (!queue_.push(down, x, y)) {
+    ++drops_;
+    return false;
+  }
+  store_.touched = true;
+  return true;
+}
+
+void NSPanelTouchscreen::update_touches() {
+  std::lock_guard<std::recursive_mutex> lock(panel_->transport_mutex());
+  queue_.pop(current_);
+  if (current_.down)
+    add_raw_touch_position_(0, current_.x, current_.y);
+  if (!queue_.empty())
+    store_.touched = true;
+}
+
+void NSPanelTouchscreen::dump_config() {
+  ESP_LOGCONFIG("nspanel_terminal", "NSPanel protocol8 touchscreen, single pointer");
+}

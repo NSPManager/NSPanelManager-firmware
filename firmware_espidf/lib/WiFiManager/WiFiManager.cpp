@@ -1,6 +1,7 @@
 #include <ConfigManager.hpp>
 #include <WiFiManager.hpp>
 #include <esp_event.h>
+#include <esp_heap_caps.h>
 #include <esp_log.h>
 #include <esp_mac.h>
 #include <esp_netif.h>
@@ -173,11 +174,17 @@ void WiFiManager::_event_handler(void *arg, esp_event_base_t event_base, int32_t
     case WIFI_EVENT_STA_START:
       esp_wifi_connect(); // WiFi station started, start trying to connect to configured wifi.
       break;
-    case WIFI_EVENT_STA_DISCONNECTED:
-      ESP_LOGI("WiFiManager", "Lost connection to Wifi, will try to reconnect.");
+    case WIFI_EVENT_STA_DISCONNECTED: {
+      wifi_event_sta_disconnected_t *disconnected = (wifi_event_sta_disconnected_t *)event_data;
+      ESP_LOGI("WiFiManager", "Lost connection to Wifi (reason %d, rssi %d, free internal heap %u, largest block %u, min ever %u), will try to reconnect.",
+               disconnected->reason, disconnected->rssi,
+               (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+               (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+               (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
       WiFiManager::_connected = false;
       esp_wifi_connect(); // We lost connection, try to reconnect.
       break;
+    }
     case WIFI_EVENT_STA_CONNECTED: {
       wifi_event_sta_connected_t *connected = (wifi_event_sta_connected_t *)event_data;
       ESP_LOGI("WiFiManager", "Connected to WiFi, AP " MACSTR " on channel %d.", MAC2STR(connected->bssid), connected->channel);

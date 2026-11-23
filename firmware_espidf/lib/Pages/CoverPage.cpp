@@ -4,7 +4,7 @@
 #include <GUI_data.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
-#include <Nextion.hpp>
+// #include <Nextion.hpp>
 #include <cstdio>
 #include <esp_log.h>
 #include <esp_timer.h>
@@ -55,45 +55,45 @@ void CoverPage::update_display(const NSPanelEntityState__Cover *cover, bool page
     }
 
     if (cover->can_set_position && cover->can_set_tilt_position) {
-      Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::mode_button_name, true, 500);
+      // Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::mode_button_name, true, 500);
     } else {
-      Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::mode_button_name, false, 500);
+      // Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::mode_button_name, false, 500);
     }
   }
 
-  Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::name_label_name, cover->name, 500);
+  // Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::name_label_name, cover->name, 500);
 
   if (CoverPage::_current_edit_mode == CoverPage::_edit_mode::POSITION) {
     std::string preset1_str = std::to_string(cover->position_preset1);
     std::string preset2_str = std::to_string(cover->position_preset2);
     std::string preset3_str = std::to_string(cover->position_preset3);
-    Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::preset1_button_name, preset1_str.c_str(), 500);
-    Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::preset2_button_name, preset2_str.c_str(), 500);
-    Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::preset3_button_name, preset3_str.c_str(), 500);
+    // Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::preset1_button_name, preset1_str.c_str(), 500);
+    // Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::preset2_button_name, preset2_str.c_str(), 500);
+    // Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::preset3_button_name, preset3_str.c_str(), 500);
 
-    Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::preset1_button_name, true, 500);
-    Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::preset2_button_name, true, 500);
-    Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::preset3_button_name, true, 500);
+    // Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::preset1_button_name, true, 500);
+    // Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::preset2_button_name, true, 500);
+    // Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::preset3_button_name, true, 500);
   } else if (CoverPage::_current_edit_mode == CoverPage::_edit_mode::TILT) {
     std::string preset1_str = std::to_string(cover->tilt_preset1);
     std::string preset2_str = std::to_string(cover->tilt_preset2);
     std::string preset3_str = std::to_string(cover->tilt_preset3);
-    Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::tilt_preset1_button_name, preset1_str.c_str(), 500);
-    Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::tilt_preset2_button_name, preset2_str.c_str(), 500);
-    Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::tilt_preset3_button_name, preset3_str.c_str(), 500);
+    // Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::tilt_preset1_button_name, preset1_str.c_str(), 500);
+    // Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::tilt_preset2_button_name, preset2_str.c_str(), 500);
+    // Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::tilt_preset3_button_name, preset3_str.c_str(), 500);
 
-    Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::tilt_preset1_button_name, true, 500);
-    Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::tilt_preset2_button_name, true, 500);
-    Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::tilt_preset3_button_name, true, 500);
+    // Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::tilt_preset1_button_name, true, 500);
+    // Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::tilt_preset2_button_name, true, 500);
+    // Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::tilt_preset3_button_name, true, 500);
   } else {
-    Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::preset1_button_name, false, 500);
-    Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::preset2_button_name, false, 500);
-    Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::preset3_button_name, false, 500);
+    // Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::preset1_button_name, false, 500);
+    // Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::preset2_button_name, false, 500);
+    // Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::preset3_button_name, false, 500);
   }
 
-  Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::open_button_name, cover->can_set_position || cover->can_open, 500);
-  Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::close_button_name, cover->can_set_position || cover->can_close, 500);
-  Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::stop_button_name, cover->can_stop, 500);
+  // Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::open_button_name, cover->can_set_position || cover->can_open, 500);
+  // Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::close_button_name, cover->can_set_position || cover->can_close, 500);
+  // Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::stop_button_name, cover->can_stop, 500);
 
   // Drop a pending position once the cover reports it, or once the request has had time to be
   // carried out. The panel then follows the controller again.
@@ -112,7 +112,7 @@ void CoverPage::update_display(const NSPanelEntityState__Cover *cover, bool page
   combined_text.append(CoverPage::_state_text(cover->state));
   if (cover->can_set_position && CoverPage::_current_edit_mode == CoverPage::_edit_mode::POSITION) {
     int32_t shown_position = pending >= 0 ? pending : (cover->has_position ? cover->position : 0);
-    Nextion::set_component_value(GUI_COVER_CONTROL_PAGE::position_slider_name, shown_position, 250);
+    // Nextion::set_component_value(GUI_COVER_CONTROL_PAGE::position_slider_name, shown_position, 250);
     if (pending >= 0 || cover->has_position) {
       combined_text.append(std::to_string(static_cast<int>(shown_position)));
       combined_text.append("%");
@@ -130,7 +130,7 @@ void CoverPage::update_display(const NSPanelEntityState__Cover *cover, bool page
 
   if (cover->can_set_tilt_position && CoverPage::_current_edit_mode == CoverPage::_edit_mode::TILT) {
     int32_t shown_position = pending >= 0 ? pending : (cover->has_tilt_position ? cover->tilt_position : 0);
-    Nextion::set_component_value(GUI_COVER_CONTROL_PAGE::tilt_position_slider_name, shown_position, 250);
+    // Nextion::set_component_value(GUI_COVER_CONTROL_PAGE::tilt_position_slider_name, shown_position, 250);
     if (pending >= 0 || cover->has_position) {
       combined_text.append(std::to_string(static_cast<int>(shown_position)));
       combined_text.append("%");
@@ -138,11 +138,11 @@ void CoverPage::update_display(const NSPanelEntityState__Cover *cover, bool page
   }
 
   if (!cover->can_set_position && !cover->can_set_tilt_position) {
-    Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::position_slider_name, false, 250);
-    Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::tilt_position_slider_name, false, 250);
+    // Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::position_slider_name, false, 250);
+    // Nextion::set_component_visibility(GUI_COVER_CONTROL_PAGE::tilt_position_slider_name, false, 250);
   }
 
-  Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::name_label_name, combined_text.c_str(), 250);
+  // Nextion::set_component_text(GUI_COVER_CONTROL_PAGE::name_label_name, combined_text.c_str(), 250);
 }
 
 void CoverPage::_send_command(NSPanelMQTTManagerCommand__CoverCommand *cover_command) {

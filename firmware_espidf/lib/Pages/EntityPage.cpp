@@ -4,11 +4,11 @@
 #include <EntityPage.hpp>
 #include <GUI_data.hpp>
 #include <InterfaceManager.hpp>
-#include <MediaPlayerPage.hpp>
+// #include <MediaPlayerPage.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
-#include <Nextion.hpp>
-#include <Nextion_event.hpp>
+// #include <Nextion.hpp>
+// #include <Nextion_event.hpp>
 #include <StatusUpdateManager.hpp>
 #include <esp_log.h>
 #include <protobuf_nspanel_entity.pb-c.h>
@@ -39,7 +39,7 @@ void EntityPage::unshow() {
     MqttManager::unsubscribe(EntityPage::_current_entity_mqtt_topic);
   }
   EntityPage::_currently_showing = false;
-  MediaPlayerPage::unshow();
+  // MediaPlayerPage::unshow();
 }
 
 void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -77,7 +77,7 @@ void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int3
             EntityPage::_current_mode = _entity_page_modes::THERMOSTAT;
           } else if (state->entity_case == NSPanelEntityState__EntityCase::NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER) {
             EntityPage::_current_mode = _entity_page_modes::MEDIA_PLAYER;
-            MediaPlayerPage::handle_state(state->media_player);
+            // MediaPlayerPage::handle_state(state->media_player);
           } else if (state->entity_case == NSPanelEntityState__EntityCase::NSPANEL_ENTITY_STATE__ENTITY_COVER) {
             EntityPage::_current_mode = _entity_page_modes::COVER;
           } else {
@@ -127,37 +127,37 @@ void EntityPage::_update_display() {
 }
 
 void EntityPage::_handle_nextion_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-  // Take our own reference for the whole event. If we went through _current_state directly, nothing would
-  // keep the state alive when a new state arrives on the MQTT task and replaces it mid-handler.
-  std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
-  if (state == nullptr) { // No state received yet. Nothing to act on.
-    return;
-  }
+  // // Take our own reference for the whole event. If we went through _current_state directly, nothing would
+  // // keep the state alive when a new state arrives on the MQTT task and replaces it mid-handler.
+  // std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
+  // if (state == nullptr) { // No state received yet. Nothing to act on.
+  //   return;
+  // }
 
-  if (event_id == nextion_event_t::TOUCH_EVENT) {
-    nextion_event_touch_t *touch_data = (nextion_event_touch_t *)event_data;
-    EntityPage::_handle_touch_event(state, touch_data->component_id, touch_data->pressed);
-  } else if (event_id == nextion_event_t::STRING_EVENT) {
-    switch (state->entity_case) {
-    case NSPANEL_ENTITY_STATE__ENTITY_LIGHT:
-      break;
+  // if (event_id == nextion_event_t::TOUCH_EVENT) {
+  //   nextion_event_touch_t *touch_data = (nextion_event_touch_t *)event_data;
+  //   EntityPage::_handle_touch_event(state, touch_data->component_id, touch_data->pressed);
+  // } else if (event_id == nextion_event_t::STRING_EVENT) {
+  //   switch (state->entity_case) {
+  //   case NSPANEL_ENTITY_STATE__ENTITY_LIGHT:
+  //     break;
 
-    case NSPANEL_ENTITY_STATE__ENTITY_THERMOSTAT:
-      EntityPage::_handle_string_event_thermostat(state, (char *)event_data);
-      break;
+  //   case NSPANEL_ENTITY_STATE__ENTITY_THERMOSTAT:
+  //     EntityPage::_handle_string_event_thermostat(state, (char *)event_data);
+  //     break;
 
-    case NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER:
-      break;
+  //   case NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER:
+  //     break;
 
-    case NSPANEL_ENTITY_STATE__ENTITY_COVER:
-      CoverPage::handle_string_event(state, (char *)event_data);
-      break;
+  //   case NSPANEL_ENTITY_STATE__ENTITY_COVER:
+  //     CoverPage::handle_string_event(state, (char *)event_data);
+  //     break;
 
-    default:
-      ESP_LOGE("EntityPage", "Unknown state type. Can't call appropriate string event function.");
-      break;
-    }
-  }
+  //   default:
+  //     ESP_LOGE("EntityPage", "Unknown state type. Can't call appropriate string event function.");
+  //     break;
+  //   }
+  // }
 }
 
 void EntityPage::_handle_config_update(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -172,9 +172,9 @@ void EntityPage::_handle_touch_event(const std::shared_ptr<NSPanelEntityState> &
   case NSPANEL_ENTITY_STATE__ENTITY_THERMOSTAT:
     break;
 
-  case NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER:
-    MediaPlayerPage::handle_touch(component_id, pressed);
-    break;
+    // case NSPANEL_ENTITY_STATE__ENTITY_MEDIA_PLAYER:
+    //   MediaPlayerPage::handle_touch(component_id, pressed);
+    //   break;
 
   default:
     ESP_LOGE("EntityPage", "Unknown state type. Can't call appropriate touch function.");
@@ -187,95 +187,95 @@ void EntityPage::_update_display_light() {
   if (!EntityPage::_currently_showing) {
     ESP_LOGD("EntityPage", "Switching page to %s", GUI_LIGHT_CONTROL_PAGE::page_name);
     EntityPage::_currently_showing = true;
-    if (Nextion::go_to_page(GUI_LIGHT_CONTROL_PAGE::page_name, 1000) != ESP_OK) [[unlikely]] {
-      ESP_LOGE("EntityPage", "Failed to navigate Nextion to page. Will go back.");
-      EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
-      return;
-    }
+    // if (Nextion::go_to_page(GUI_LIGHT_CONTROL_PAGE::page_name, 1000) != ESP_OK) [[unlikely]] {
+    //   ESP_LOGE("EntityPage", "Failed to navigate Nextion to page. Will go back.");
+    //   EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
+    //   return;
+    // }
 
-    std::shared_ptr<PageHandlers> handlers = InterfaceManager::begin_page(EntityPage::unshow);
+    // std::shared_ptr<PageHandlers> handlers = InterfaceManager::begin_page(EntityPage::unshow);
 
-    handlers->add(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event);
+    // handlers->add(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event);
   }
 
   auto state = EntityPage::_get_current_state();
 
   // Show button to switch modes IF light can both color and color temp
-  if (state->light->can_color && state->light->can_color_temp) {
-    Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::switch_mode_button_name, true, 1000);
-  } else {
-    Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::switch_mode_button_name, false, 1000);
-  }
+  // if (state->light->can_color && state->light->can_color_temp) {
+  //   Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::switch_mode_button_name, true, 1000);
+  // } else {
+  //   Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::switch_mode_button_name, false, 1000);
+  // }
 
-  // Update name if it has changed
-  if (EntityPage::_last_displayed_name.compare(state->light->name) != 0) {
-    Nextion::set_component_text(GUI_LIGHT_CONTROL_PAGE::light_label_name, state->light->name, 500);
-    EntityPage::_last_displayed_name = state->light->name;
-  }
+  // // Update name if it has changed
+  // if (EntityPage::_last_displayed_name.compare(state->light->name) != 0) {
+  //   Nextion::set_component_text(GUI_LIGHT_CONTROL_PAGE::light_label_name, state->light->name, 500);
+  //   EntityPage::_last_displayed_name = state->light->name;
+  // }
 
-  // Update brightness if it has changed
-  if (EntityPage::_last_brightness != state->light->brightness) {
-    Nextion::set_component_value(GUI_LIGHT_CONTROL_PAGE::brightness_slider_name, state->light->brightness, 250);
-    EntityPage::_last_brightness = state->light->brightness;
-  }
+  // // Update brightness if it has changed
+  // if (EntityPage::_last_brightness != state->light->brightness) {
+  //   Nextion::set_component_value(GUI_LIGHT_CONTROL_PAGE::brightness_slider_name, state->light->brightness, 250);
+  //   EntityPage::_last_brightness = state->light->brightness;
+  // }
 
-  // Update hue if it has changed
-  if (EntityPage::_last_hue != state->light->hue) {
-    Nextion::set_component_value(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, state->light->hue, 250);
-    EntityPage::_last_hue = state->light->hue;
-  }
+  // // Update hue if it has changed
+  // if (EntityPage::_last_hue != state->light->hue) {
+  //   Nextion::set_component_value(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, state->light->hue, 250);
+  //   EntityPage::_last_hue = state->light->hue;
+  // }
 
-  // Set component icons and visibility
-  if (EntityPage::_current_mode == EntityPage::_entity_page_modes::LIGHT_COLOR_TEMPERATURE) {
-    Nextion::set_component_pic(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, GUI_LIGHT_CONTROL_PAGE::kelvin_slider_pic, 250);
-    Nextion::set_component_pic1(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, GUI_LIGHT_CONTROL_PAGE::kelvin_slider_pic1, 250);
+  // // Set component icons and visibility
+  // if (EntityPage::_current_mode == EntityPage::_entity_page_modes::LIGHT_COLOR_TEMPERATURE) {
+  //   Nextion::set_component_pic(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, GUI_LIGHT_CONTROL_PAGE::kelvin_slider_pic, 250);
+  //   Nextion::set_component_pic1(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, GUI_LIGHT_CONTROL_PAGE::kelvin_slider_pic1, 250);
 
-    Nextion::set_component_pic(GUI_LIGHT_CONTROL_PAGE::switch_mode_button_name, GUI_LIGHT_CONTROL_PAGE::rgb_mode_pic, 250); // Indicate that the user can switch to RGB-mode by pressing the button
-    Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, false, 250);
-  } else if (EntityPage::_current_mode == EntityPage::_entity_page_modes::LIGHT_RGB) {
-    Nextion::set_component_pic(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, GUI_LIGHT_CONTROL_PAGE::saturation_slider_pic, 250);
-    Nextion::set_component_pic1(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, GUI_LIGHT_CONTROL_PAGE::saturation_slider_pic1, 250);
+  //   Nextion::set_component_pic(GUI_LIGHT_CONTROL_PAGE::switch_mode_button_name, GUI_LIGHT_CONTROL_PAGE::rgb_mode_pic, 250); // Indicate that the user can switch to RGB-mode by pressing the button
+  //   Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, false, 250);
+  // } else if (EntityPage::_current_mode == EntityPage::_entity_page_modes::LIGHT_RGB) {
+  //   Nextion::set_component_pic(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, GUI_LIGHT_CONTROL_PAGE::saturation_slider_pic, 250);
+  //   Nextion::set_component_pic1(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, GUI_LIGHT_CONTROL_PAGE::saturation_slider_pic1, 250);
 
-    Nextion::set_component_pic(GUI_LIGHT_CONTROL_PAGE::switch_mode_button_name, GUI_LIGHT_CONTROL_PAGE::kelvin_mode_pic, 250); // Indicate that the user can switch to color temperature mode by pressing the button
-    Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, true, 250);
-  } else {
-    ESP_LOGE("EntityPage", "Unknown light mode!");
-  }
+  //   Nextion::set_component_pic(GUI_LIGHT_CONTROL_PAGE::switch_mode_button_name, GUI_LIGHT_CONTROL_PAGE::kelvin_mode_pic, 250); // Indicate that the user can switch to color temperature mode by pressing the button
+  //   Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, true, 250);
+  // } else {
+  //   ESP_LOGE("EntityPage", "Unknown light mode!");
+  // }
 
-  if (state->light->can_color && state->light->can_color_temp) {
-    if (EntityPage::_current_mode == _entity_page_modes::LIGHT_COLOR_TEMPERATURE) {
-      if (EntityPage::_last_kelvin_pct != state->light->can_color_temp) {
-        Nextion::set_component_value(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, state->light->color_temp, 250);
-        EntityPage::_last_saturation_pct = state->light->color_temp;
-      }
-      Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, false, 250);
-      Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, true, 250);
-    } else if (EntityPage::_current_mode == _entity_page_modes::LIGHT_RGB) {
-      if (EntityPage::_last_saturation_pct != state->light->saturation) {
-        Nextion::set_component_value(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, state->light->saturation, 250);
-        EntityPage::_last_saturation_pct = state->light->saturation;
-      }
-      Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, true, 250);
-      Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, true, 250);
-    } else {
-      ESP_LOGE("EntityPage", "Unknown color mode for light!");
-    }
-  } else if (state->light->can_color_temp) {
-    EntityPage::_current_mode = _entity_page_modes::LIGHT_COLOR_TEMPERATURE;
-    Nextion::set_component_value(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, state->light->color_temp, 250);
-    EntityPage::_last_saturation_pct = state->light->color_temp;
-    Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, false, 250);
-    Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, true, 250);
-  } else if (state->light->can_color) {
-    EntityPage::_current_mode = _entity_page_modes::LIGHT_RGB;
-    Nextion::set_component_value(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, state->light->saturation, 250);
-    EntityPage::_last_saturation_pct = state->light->saturation;
-    Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, true, 250);
-    Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, true, 250);
-  } else {
-    ESP_LOGD("EntityPage", "Light is not capable of color or color temp, will hide kelvin/saturation slider.");
-    Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, false, 250);
-  }
+  // if (state->light->can_color && state->light->can_color_temp) {
+  //   if (EntityPage::_current_mode == _entity_page_modes::LIGHT_COLOR_TEMPERATURE) {
+  //     if (EntityPage::_last_kelvin_pct != state->light->can_color_temp) {
+  //       Nextion::set_component_value(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, state->light->color_temp, 250);
+  //       EntityPage::_last_saturation_pct = state->light->color_temp;
+  //     }
+  //     Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, false, 250);
+  //     Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, true, 250);
+  //   } else if (EntityPage::_current_mode == _entity_page_modes::LIGHT_RGB) {
+  //     if (EntityPage::_last_saturation_pct != state->light->saturation) {
+  //       Nextion::set_component_value(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, state->light->saturation, 250);
+  //       EntityPage::_last_saturation_pct = state->light->saturation;
+  //     }
+  //     Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, true, 250);
+  //     Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, true, 250);
+  //   } else {
+  //     ESP_LOGE("EntityPage", "Unknown color mode for light!");
+  //   }
+  // } else if (state->light->can_color_temp) {
+  //   EntityPage::_current_mode = _entity_page_modes::LIGHT_COLOR_TEMPERATURE;
+  //   Nextion::set_component_value(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, state->light->color_temp, 250);
+  //   EntityPage::_last_saturation_pct = state->light->color_temp;
+  //   Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, false, 250);
+  //   Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, true, 250);
+  // } else if (state->light->can_color) {
+  //   EntityPage::_current_mode = _entity_page_modes::LIGHT_RGB;
+  //   Nextion::set_component_value(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, state->light->saturation, 250);
+  //   EntityPage::_last_saturation_pct = state->light->saturation;
+  //   Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, true, 250);
+  //   Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, true, 250);
+  // } else {
+  //   ESP_LOGD("EntityPage", "Light is not capable of color or color temp, will hide kelvin/saturation slider.");
+  //   Nextion::set_component_visibility(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, false, 250);
+  // }
 }
 
 void EntityPage::_handle_touch_event_light(const std::shared_ptr<NSPanelEntityState> &state, uint16_t component_id, bool pressed) {
@@ -299,120 +299,120 @@ void EntityPage::_handle_touch_event_light(const std::shared_ptr<NSPanelEntitySt
   case GUI_LIGHT_CONTROL_PAGE::brightness_slider_id: {
     int32_t new_brightness;
     int32_t light_id = state->light->light_id;
-    if (Nextion::get_component_integer_value(GUI_LIGHT_CONTROL_PAGE::brightness_slider_name, &new_brightness, 250, 250) == ESP_OK) [[likely]] {
-      NSPanelMQTTManagerCommand__LightCommand light_command = NSPANEL_MQTTMANAGER_COMMAND__LIGHT_COMMAND__INIT;
-      light_command.light_ids = &light_id;
-      light_command.n_light_ids = 1;
-      light_command.has_brightness = true;
-      light_command.brightness = new_brightness;
+    // if (Nextion::get_component_integer_value(GUI_LIGHT_CONTROL_PAGE::brightness_slider_name, &new_brightness, 250, 250) == ESP_OK) [[likely]] {
+    //   NSPanelMQTTManagerCommand__LightCommand light_command = NSPANEL_MQTTMANAGER_COMMAND__LIGHT_COMMAND__INIT;
+    //   light_command.light_ids = &light_id;
+    //   light_command.n_light_ids = 1;
+    //   light_command.has_brightness = true;
+    //   light_command.brightness = new_brightness;
 
-      NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
-      cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_LIGHT_COMMAND;
-      cmd.light_command = &light_command;
-      cmd.nspanel_id = NSPM_ConfigManager::get_nspanel_id();
+    //   NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
+    //   cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_LIGHT_COMMAND;
+    //   cmd.light_command = &light_command;
+    //   cmd.nspanel_id = NSPM_ConfigManager::get_nspanel_id();
 
-      uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
-      std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
-      size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
-      if (packed_data_size == packed_length) [[likely]] {
-        if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) [[likely]] {
-          EntityPage::_last_brightness = new_brightness;
-        } else {
-          ESP_LOGE("EntityPage", "Failed to send MQTT message with command payload.");
-          EntityPage::_update_display_light(); // Update display to reset values to those stored
-        }
-      } else {
-        ESP_LOGE("EntityPage", "Failed to pack protobuf command.");
-        EntityPage::_update_display_light(); // Update display to reset values to those stored
-      }
+    //   uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
+    //   std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
+    //   size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
+    //   if (packed_data_size == packed_length) [[likely]] {
+    //     if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) [[likely]] {
+    //       EntityPage::_last_brightness = new_brightness;
+    //     } else {
+    //       ESP_LOGE("EntityPage", "Failed to send MQTT message with command payload.");
+    //       EntityPage::_update_display_light(); // Update display to reset values to those stored
+    //     }
+    //   } else {
+    //     ESP_LOGE("EntityPage", "Failed to pack protobuf command.");
+    //     EntityPage::_update_display_light(); // Update display to reset values to those stored
+    //   }
 
-    } else {
-      ESP_LOGE("EntityPage", "Failed to get new brightness value from Nextion. Will not send update command.");
-      EntityPage::_update_display_light(); // Update display to reset values to those stored
-    }
+    // } else {
+    //   ESP_LOGE("EntityPage", "Failed to get new brightness value from Nextion. Will not send update command.");
+    //   EntityPage::_update_display_light(); // Update display to reset values to those stored
+    // }
     break;
   }
 
   case GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_id: {
     int32_t new_kelvin_saturation;
     int32_t light_id = state->light->light_id;
-    if (Nextion::get_component_integer_value(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, &new_kelvin_saturation, 250, 250) == ESP_OK) [[likely]] {
-      NSPanelMQTTManagerCommand__LightCommand light_command = NSPANEL_MQTTMANAGER_COMMAND__LIGHT_COMMAND__INIT;
-      light_command.light_ids = &light_id;
-      light_command.n_light_ids = 1;
-      if (EntityPage::_current_mode == EntityPage::_entity_page_modes::LIGHT_COLOR_TEMPERATURE) {
-        light_command.has_color_temperature = true;
-        light_command.color_temperature = new_kelvin_saturation;
-      } else if (EntityPage::_current_mode == EntityPage::_entity_page_modes::LIGHT_RGB) {
-        light_command.has_saturation = true;
-        light_command.saturation = new_kelvin_saturation;
-      }
+    // if (Nextion::get_component_integer_value(GUI_LIGHT_CONTROL_PAGE::kelvin_saturation_slider_name, &new_kelvin_saturation, 250, 250) == ESP_OK) [[likely]] {
+    //   NSPanelMQTTManagerCommand__LightCommand light_command = NSPANEL_MQTTMANAGER_COMMAND__LIGHT_COMMAND__INIT;
+    //   light_command.light_ids = &light_id;
+    //   light_command.n_light_ids = 1;
+    //   if (EntityPage::_current_mode == EntityPage::_entity_page_modes::LIGHT_COLOR_TEMPERATURE) {
+    //     light_command.has_color_temperature = true;
+    //     light_command.color_temperature = new_kelvin_saturation;
+    //   } else if (EntityPage::_current_mode == EntityPage::_entity_page_modes::LIGHT_RGB) {
+    //     light_command.has_saturation = true;
+    //     light_command.saturation = new_kelvin_saturation;
+    //   }
 
-      NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
-      cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_LIGHT_COMMAND;
-      cmd.light_command = &light_command;
-      cmd.nspanel_id = NSPM_ConfigManager::get_nspanel_id();
+    //   NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
+    //   cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_LIGHT_COMMAND;
+    //   cmd.light_command = &light_command;
+    //   cmd.nspanel_id = NSPM_ConfigManager::get_nspanel_id();
 
-      uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
-      std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
-      size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
-      if (packed_data_size == packed_length) [[likely]] {
-        if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) [[likely]] {
-          if (EntityPage::_current_mode == EntityPage::_entity_page_modes::LIGHT_COLOR_TEMPERATURE) {
-            EntityPage::_last_kelvin_pct = new_kelvin_saturation;
-          } else if (EntityPage::_current_mode == EntityPage::_entity_page_modes::LIGHT_RGB) {
-            EntityPage::_last_saturation_pct = new_kelvin_saturation;
-          }
-        } else {
-          ESP_LOGE("EntityPage", "Failed to send MQTT message with command payload.");
-          EntityPage::_update_display_light(); // Update display to reset values to those stored
-        }
-      } else {
-        ESP_LOGE("EntityPage", "Failed to pack protobuf command.");
-        EntityPage::_update_display_light(); // Update display to reset values to those stored
-      }
+    //   uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
+    //   std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
+    //   size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
+    //   if (packed_data_size == packed_length) [[likely]] {
+    //     if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) [[likely]] {
+    //       if (EntityPage::_current_mode == EntityPage::_entity_page_modes::LIGHT_COLOR_TEMPERATURE) {
+    //         EntityPage::_last_kelvin_pct = new_kelvin_saturation;
+    //       } else if (EntityPage::_current_mode == EntityPage::_entity_page_modes::LIGHT_RGB) {
+    //         EntityPage::_last_saturation_pct = new_kelvin_saturation;
+    //       }
+    //     } else {
+    //       ESP_LOGE("EntityPage", "Failed to send MQTT message with command payload.");
+    //       EntityPage::_update_display_light(); // Update display to reset values to those stored
+    //     }
+    //   } else {
+    //     ESP_LOGE("EntityPage", "Failed to pack protobuf command.");
+    //     EntityPage::_update_display_light(); // Update display to reset values to those stored
+    //   }
 
-    } else {
-      ESP_LOGE("EntityPage", "Failed to get new brightness value from Nextion. Will not send update command.");
-      EntityPage::_update_display_light(); // Update display to reset values to those stored
-    }
+    // } else {
+    //   ESP_LOGE("EntityPage", "Failed to get new brightness value from Nextion. Will not send update command.");
+    //   EntityPage::_update_display_light(); // Update display to reset values to those stored
+    // }
     break;
   }
 
   case GUI_LIGHT_CONTROL_PAGE::hue_slider_id: {
     int32_t new_hue;
     int32_t light_id = state->light->light_id;
-    if (Nextion::get_component_integer_value(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, &new_hue, 250, 250) == ESP_OK) [[likely]] {
-      NSPanelMQTTManagerCommand__LightCommand light_command = NSPANEL_MQTTMANAGER_COMMAND__LIGHT_COMMAND__INIT;
-      light_command.light_ids = &light_id;
-      light_command.n_light_ids = 1;
-      light_command.has_hue = true;
-      light_command.hue = new_hue;
+    // if (Nextion::get_component_integer_value(GUI_LIGHT_CONTROL_PAGE::hue_slider_name, &new_hue, 250, 250) == ESP_OK) [[likely]] {
+    //   NSPanelMQTTManagerCommand__LightCommand light_command = NSPANEL_MQTTMANAGER_COMMAND__LIGHT_COMMAND__INIT;
+    //   light_command.light_ids = &light_id;
+    //   light_command.n_light_ids = 1;
+    //   light_command.has_hue = true;
+    //   light_command.hue = new_hue;
 
-      NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
-      cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_LIGHT_COMMAND;
-      cmd.light_command = &light_command;
-      cmd.nspanel_id = NSPM_ConfigManager::get_nspanel_id();
+    //   NSPanelMQTTManagerCommand cmd = NSPANEL_MQTTMANAGER_COMMAND__INIT;
+    //   cmd.command_data_case = NSPANEL_MQTTMANAGER_COMMAND__COMMAND_DATA_LIGHT_COMMAND;
+    //   cmd.light_command = &light_command;
+    //   cmd.nspanel_id = NSPM_ConfigManager::get_nspanel_id();
 
-      uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
-      std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
-      size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
-      if (packed_data_size == packed_length) [[likely]] {
-        if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) [[likely]] {
-          EntityPage::_last_hue = new_hue;
-        } else {
-          ESP_LOGE("EntityPage", "Failed to send MQTT message with command payload.");
-          EntityPage::_update_display_light(); // Update display to reset values to those stored
-        }
-      } else {
-        ESP_LOGE("EntityPage", "Failed to pack protobuf command.");
-        EntityPage::_update_display_light(); // Update display to reset values to those stored
-      }
+    //   uint32_t packed_length = nspanel_mqttmanager_command__get_packed_size(&cmd);
+    //   std::vector<uint8_t> buffer(packed_length); // Use vector for automatic cleanup of data when going out of scope
+    //   size_t packed_data_size = nspanel_mqttmanager_command__pack(&cmd, buffer.data());
+    //   if (packed_data_size == packed_length) [[likely]] {
+    //     if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) == ESP_OK) [[likely]] {
+    //       EntityPage::_last_hue = new_hue;
+    //     } else {
+    //       ESP_LOGE("EntityPage", "Failed to send MQTT message with command payload.");
+    //       EntityPage::_update_display_light(); // Update display to reset values to those stored
+    //     }
+    //   } else {
+    //     ESP_LOGE("EntityPage", "Failed to pack protobuf command.");
+    //     EntityPage::_update_display_light(); // Update display to reset values to those stored
+    //   }
 
-    } else {
-      ESP_LOGE("EntityPage", "Failed to get new brightness value from Nextion. Will not send update command.");
-      EntityPage::_update_display_light(); // Update display to reset values to those stored
-    }
+    // } else {
+    //   ESP_LOGE("EntityPage", "Failed to get new brightness value from Nextion. Will not send update command.");
+    //   EntityPage::_update_display_light(); // Update display to reset values to those stored
+    // }
     break;
   }
 
@@ -427,18 +427,18 @@ void EntityPage::_update_display_cover() {
   if (!EntityPage::_currently_showing) {
     ESP_LOGD("EntityPage", "Switching page to %s", GUI_COVER_CONTROL_PAGE::page_name);
     EntityPage::_currently_showing = true;
-    if (Nextion::go_to_page(GUI_COVER_CONTROL_PAGE::page_name, 1000) != ESP_OK) [[unlikely]] {
-      // A stock TFT has no cover page yet. Clear the flag before backing out, otherwise the next
-      // state update would take the "already showing" path and write cover components onto
-      // whatever page is actually displayed.
-      ESP_LOGE("EntityPage", "Failed to navigate to the cover page. Will go back.");
-      EntityPage::_currently_showing = false;
-      EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
-      return;
-    }
+    // if (Nextion::go_to_page(GUI_COVER_CONTROL_PAGE::page_name, 1000) != ESP_OK) [[unlikely]] {
+    //   // A stock TFT has no cover page yet. Clear the flag before backing out, otherwise the next
+    //   // state update would take the "already showing" path and write cover components onto
+    //   // whatever page is actually displayed.
+    //   ESP_LOGE("EntityPage", "Failed to navigate to the cover page. Will go back.");
+    //   EntityPage::_currently_showing = false;
+    //   EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
+    //   return;
+    // }
 
-    std::shared_ptr<PageHandlers> handlers = InterfaceManager::begin_page(EntityPage::unshow);
-    handlers->add(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event);
+    // std::shared_ptr<PageHandlers> handlers = InterfaceManager::begin_page(EntityPage::unshow);
+    // handlers->add(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event);
     page_just_opened = true;
   }
 
@@ -451,14 +451,14 @@ void EntityPage::_update_display_thermostat() {
   if (!EntityPage::_currently_showing) {
     ESP_LOGD("EntityPage", "Switching page to %s", GUI_THERMOSTAT_CONTROL_PAGE::page_name);
     EntityPage::_currently_showing = true;
-    if (Nextion::go_to_page(GUI_THERMOSTAT_CONTROL_PAGE::page_name, 1000) != ESP_OK) [[unlikely]] {
-      ESP_LOGE("EntityPage", "Failed to navigate Nextion to page. Will go back.");
-      EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
-    }
+    // if (Nextion::go_to_page(GUI_THERMOSTAT_CONTROL_PAGE::page_name, 1000) != ESP_OK) [[unlikely]] {
+    //   ESP_LOGE("EntityPage", "Failed to navigate Nextion to page. Will go back.");
+    //   EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
+    // }
 
     std::shared_ptr<PageHandlers> handlers = InterfaceManager::begin_page(EntityPage::unshow);
 
-    handlers->add(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event);
+    // handlers->add(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event);
   }
 
   std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
@@ -466,28 +466,28 @@ void EntityPage::_update_display_thermostat() {
   // Loop over all options. Set them to the corresponding value if an option in the index
   // is available in the state data. If not, clean it and hide it.
   for (int i = 0; i < sizeof(GUI_THERMOSTAT_CONTROL_PAGE::options) / sizeof(GUI_THERMOSTAT_OPTIONS_MODE_DATA); i++) {
-    if (i < state->thermostat->n_options) {
-      Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].icon_name, true, 1000);
-      Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].label_name, true, 1000);
-      Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::options[i].icon_name, state->thermostat->options[i]->current_icon, 1000);
-      Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::options[i].label_name, state->thermostat->options[i]->name, 1000);
-    } else {
-      Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].icon_name, false, 1000);
-      Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].label_name, false, 1000);
-    }
+    // if (i < state->thermostat->n_options) {
+    //   Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].icon_name, true, 1000);
+    //   Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].label_name, true, 1000);
+    //   Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::options[i].icon_name, state->thermostat->options[i]->current_icon, 1000);
+    //   Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::options[i].label_name, state->thermostat->options[i]->name, 1000);
+    // } else {
+    //   Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].icon_name, false, 1000);
+    //   Nextion::set_component_visibility(GUI_THERMOSTAT_CONTROL_PAGE::options[i].label_name, false, 1000);
+    // }
   }
 
   char buf[16];
   uint8_t chars_written = snprintf(buf, sizeof(buf), "%.1f°", state->thermostat->set_temperature);
   if (chars_written > 0) {
     if (!EntityPage::_is_currently_editing) { // Only update displayed temperature in case we are currently not editing any other option.
-      Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, buf, 1000);
+      // Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, buf, 1000);
     }
   } else {
     ESP_LOGE("EntityPage", "Failed to snprintf set temp to temperature buffer.");
   }
 
-  Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::room_name_label_name, state->thermostat->name, 1000);
+  // Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::room_name_label_name, state->thermostat->name, 1000);
   chars_written = 0;
   if (state->thermostat->has_current_temperature) {
     chars_written = snprintf(buf, sizeof(buf), "%.1f°", state->thermostat->current_temperature);
@@ -497,7 +497,7 @@ void EntityPage::_update_display_thermostat() {
   }
 
   if (chars_written > 0) {
-    Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::temperature_label_name, buf, 1000);
+    // Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::temperature_label_name, buf, 1000);
   } else {
     ESP_LOGE("EntityPage", "Failed to snprintf current temp to temperature buffer.");
   }
@@ -512,7 +512,7 @@ void EntityPage::_handle_string_event_thermostat(const std::shared_ptr<NSPanelEn
       ESP_LOGD("EntityPage", "Activating thermostat options set1");
       EntityPage::_is_currently_editing = true;
       EntityPage::_selected_thermostat_option_index = 0;
-      Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, state->thermostat->options[0]->current_value, 1000);
+      // Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, state->thermostat->options[0]->current_value, 1000);
     }
   } else if (strcmp(data, "activate:set2") == 0) {
     if (state->thermostat->n_options >= 2) {
@@ -520,7 +520,7 @@ void EntityPage::_handle_string_event_thermostat(const std::shared_ptr<NSPanelEn
       ESP_LOGD("EntityPage", "Activating thermostat options set2");
       EntityPage::_is_currently_editing = true;
       EntityPage::_selected_thermostat_option_index = 1;
-      Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, state->thermostat->options[1]->current_value, 1000);
+      // Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, state->thermostat->options[1]->current_value, 1000);
     }
   } else if (strcmp(data, "activate:set3") == 0) {
     if (state->thermostat->n_options >= 3) {
@@ -528,7 +528,7 @@ void EntityPage::_handle_string_event_thermostat(const std::shared_ptr<NSPanelEn
       ESP_LOGD("EntityPage", "Activating thermostat options set3");
       EntityPage::_is_currently_editing = true;
       EntityPage::_selected_thermostat_option_index = 2;
-      Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, state->thermostat->options[2]->current_value, 1000);
+      // Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, state->thermostat->options[2]->current_value, 1000);
     }
   } else if (strcmp(data, "activate:set4") == 0) {
     if (state->thermostat->n_options >= 4) {
@@ -536,7 +536,7 @@ void EntityPage::_handle_string_event_thermostat(const std::shared_ptr<NSPanelEn
       ESP_LOGD("EntityPage", "Activating thermostat options set4");
       EntityPage::_is_currently_editing = true;
       EntityPage::_selected_thermostat_option_index = 3;
-      Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, state->thermostat->options[3]->current_value, 1000);
+      // Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, state->thermostat->options[3]->current_value, 1000);
     }
   } else if (strcmp(data, "activate:set5") == 0) {
     if (state->thermostat->n_options >= 5) {
@@ -544,7 +544,7 @@ void EntityPage::_handle_string_event_thermostat(const std::shared_ptr<NSPanelEn
       ESP_LOGD("EntityPage", "Activating thermostat options set5");
       EntityPage::_is_currently_editing = true;
       EntityPage::_selected_thermostat_option_index = 4;
-      Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, state->thermostat->options[4]->current_value, 1000);
+      // Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, state->thermostat->options[4]->current_value, 1000);
     }
   } else if (strcmp(data, "deactivate") == 0) { // We've edited an option. Send updated state to manager.
     EntityPage::_send_thermostat_option_command();
@@ -621,8 +621,8 @@ void EntityPage::_handle_string_event_thermostat(const std::shared_ptr<NSPanelEn
           taskEXIT_CRITICAL(&EntityPage::_entity_page_spinlock);
         }
 
-        Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value, 1000);
-        Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::options[EntityPage::_selected_thermostat_option_index].icon_name, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_icon, 1000);
+        // Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value, 1000);
+        // Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::options[EntityPage::_selected_thermostat_option_index].icon_name, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_icon, 1000);
       }
     } else {
       state->thermostat->set_temperature += state->thermostat->step_size;
@@ -685,8 +685,8 @@ void EntityPage::_handle_string_event_thermostat(const std::shared_ptr<NSPanelEn
           taskEXIT_CRITICAL(&EntityPage::_entity_page_spinlock);
         }
 
-        Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value, 1000);
-        Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::options[EntityPage::_selected_thermostat_option_index].icon_name, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_icon, 1000);
+        // Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::set_label_name, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_value, 1000);
+        // Nextion::set_component_text(GUI_THERMOSTAT_CONTROL_PAGE::options[EntityPage::_selected_thermostat_option_index].icon_name, state->thermostat->options[EntityPage::_selected_thermostat_option_index]->current_icon, 1000);
       }
     } else {
       state->thermostat->set_temperature -= state->thermostat->step_size;
@@ -779,23 +779,23 @@ void EntityPage::_update_display_media_player() {
   if (!EntityPage::_currently_showing) {
     ESP_LOGD("EntityPage", "Switching page to %s", GUI_MEDIA_PLAYER_CONTROL_PAGE::page_name);
     EntityPage::_currently_showing = true;
-    if (Nextion::go_to_page(GUI_MEDIA_PLAYER_CONTROL_PAGE::page_name, 1000) != ESP_OK) [[unlikely]] {
-      // The official HMI has no media player page yet, so on a stock TFT this fails every time
-      // rather than never. Clear the flag before backing out: otherwise the next state update
-      // takes the "already showing" path, skips the page switch, and writes the media player
-      // components onto whatever page is actually displayed.
-      ESP_LOGE("EntityPage", "Failed to navigate Nextion to page. Will go back.");
-      EntityPage::_currently_showing = false;
-      EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
-      return;
-    }
+    // if (Nextion::go_to_page(GUI_MEDIA_PLAYER_CONTROL_PAGE::page_name, 1000) != ESP_OK) [[unlikely]] {
+    //   // The official HMI has no media player page yet, so on a stock TFT this fails every time
+    //   // rather than never. Clear the flag before backing out: otherwise the next state update
+    //   // takes the "already showing" path, skips the page switch, and writes the media player
+    //   // components onto whatever page is actually displayed.
+    //   ESP_LOGE("EntityPage", "Failed to navigate Nextion to page. Will go back.");
+    //   EntityPage::_currently_showing = false;
+    //   EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
+    //   return;
+    // }
 
-    std::shared_ptr<PageHandlers> handlers = InterfaceManager::begin_page(EntityPage::unshow);
+    // std::shared_ptr<PageHandlers> handlers = InterfaceManager::begin_page(EntityPage::unshow);
 
-    handlers->add(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event);
+    // handlers->add(NEXTION_EVENT, ESP_EVENT_ANY_ID, &EntityPage::_handle_nextion_event);
     page_just_opened = true;
   }
 
   std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
-  MediaPlayerPage::update_display(state->media_player, page_just_opened);
+  // MediaPlayerPage::update_display(state->media_player, page_just_opened);
 }

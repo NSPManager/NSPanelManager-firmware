@@ -1,15 +1,16 @@
 #include <ConfigManager.hpp>
-#include <EntitiesPage.hpp>
-#include <EntityPage.hpp>
+#include <DisplayManager.hpp>
+// #include <EntitiesPage.hpp>
+// #include <EntityPage.hpp>
 #include <GUI_data.hpp>
-#include <HomePage.hpp>
+// #include <HomePage.hpp>
 #include <InterfaceManager.hpp>
 #include <LoadingPage.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
 #include <NSPM_ConfigManager_event.hpp>
-#include <Nextion.hpp>
-#include <Nextion_event.hpp>
+// #include <Nextion.hpp>
+// #include <Nextion_event.hpp>
 #include <RoomManager.hpp>
 #include <RoomManager_event.hpp>
 #include <ScreensaverPage.hpp>
@@ -17,6 +18,7 @@
 #include <WiFiManager.hpp>
 #include <cmath>
 #include <esp_log.h>
+#include <lvgl.h>
 #include <protobuf_nspanel.pb-c.h>
 
 void InterfaceManager::init() {
@@ -25,10 +27,21 @@ void InterfaceManager::init() {
   xTaskCreatePinnedToCore(InterfaceManager::_task_unshow_page, "unshow_task", 4096, NULL, 6, NULL, 1);
   // Must exist before any handler below can notify it.
   xTaskCreatePinnedToCore(InterfaceManager::_task_page_transitions, "page_transitions", 8192, NULL, 6, &InterfaceManager::_page_transitions_task, 1);
-  esp_err_t nextion_init_result = Nextion::init();
-  if (nextion_init_result != ESP_OK) {
-    ESP_LOGE("InterfaceManager", "Failed to initialize Nextion display. Will not continue with InterfaceManager!");
+  esp_err_t display_init_result = DisplayManager::init();
+  if (display_init_result != ESP_OK) {
+    ESP_LOGE("InterfaceManager", "Failed to initialize display. Will not continue with InterfaceManager!");
     return;
+  }
+
+  {
+    DisplayManager::Lock lv_lock_guard;
+    auto screen2 = lv_obj_create(NULL);
+
+    auto label = lv_label_create(screen2);
+    lv_label_set_text(label, "Test label");
+    lv_obj_center(label);
+
+    lv_screen_load(screen2);
   }
 
   std::string base_topic = "nspanel/";
@@ -55,12 +68,12 @@ void InterfaceManager::init() {
 
   InterfaceManager::_subscribe_to_relevant_mqtt_topics();
 
-  esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_nextion_event_handler, NULL);
+  // esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_nextion_event_handler, NULL);
   esp_event_handler_register(UPDATEMANAGER_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_update_manager_event_handler, NULL);
   esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_nspm_configmanager_event_handler, NULL);
   // Page handlers: registered once, after InterfaceManager's own so they keep
   // running after them, and never unregistered. Keep is_dispatched() in step.
-  esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_page_event_dispatcher, NULL);
+  // esp_event_handler_register(NEXTION_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_page_event_dispatcher, NULL);
   esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_page_event_dispatcher, NULL);
   if (RoomManager::event_loop() != NULL) {
     esp_event_handler_register_with(RoomManager::event_loop(), ROOMMANAGER_EVENT, ESP_EVENT_ANY_ID, InterfaceManager::_page_event_dispatcher, RoomManager::event_loop());
@@ -175,9 +188,9 @@ bool InterfaceManager::is_current_page(void (*unshow)()) {
 }
 
 bool InterfaceManager::is_dispatched(esp_event_loop_handle_t event_loop, esp_event_base_t event_base) {
-  if (event_loop == NULL) {
-    return event_base == NEXTION_EVENT || event_base == NSPM_CONFIGMANAGER_EVENT;
-  }
+  // if (event_loop == NULL) {
+  //   return event_base == NEXTION_EVENT || event_base == NSPM_CONFIGMANAGER_EVENT;
+  // }
   return event_loop == RoomManager::event_loop() && event_base == ROOMMANAGER_EVENT;
 }
 
@@ -213,23 +226,23 @@ void InterfaceManager::show_default_page() {
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
     switch (config->default_page) {
     case NSPanelConfig__NSPanelDefaultPage::NSPANEL_CONFIG__NSPANEL_DEFAULT_PAGE__HOME: {
-      HomePage::show();
+      // HomePage::show();
       break;
     }
 
-    case NSPanelConfig__NSPanelDefaultPage::NSPANEL_CONFIG__NSPANEL_DEFAULT_PAGE__SCENES: {
-      EntitiesPage::show(EntitiesPage::display_type_t::SCENES);
-      break;
-    }
+      // case NSPanelConfig__NSPanelDefaultPage::NSPANEL_CONFIG__NSPANEL_DEFAULT_PAGE__SCENES: {
+      //   EntitiesPage::show(EntitiesPage::display_type_t::SCENES);
+      //   break;
+      // }
 
-    case NSPanelConfig__NSPanelDefaultPage::NSPANEL_CONFIG__NSPANEL_DEFAULT_PAGE__ENTITIES: {
-      EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
-      break;
-    }
+      // case NSPanelConfig__NSPanelDefaultPage::NSPANEL_CONFIG__NSPANEL_DEFAULT_PAGE__ENTITIES: {
+      //   EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
+      //   break;
+      // }
 
     default: {
       ESP_LOGE("InterfaceManager", "Unknown default page %ld, will default to home page!", static_cast<uint32_t>(config->default_page));
-      HomePage::show();
+      // HomePage::show();
       break;
     }
     }
@@ -263,23 +276,23 @@ void InterfaceManager::_show_requested_entity_page() {
   if (ScreensaverPage::showing()) {
     std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
-      Nextion::set_brightness_level(config->screen_dim_level, 1000);
+      // Nextion::set_brightness_level(config->screen_dim_level, 1000);
     } else {
       ESP_LOGE("InterfaceManager", "Failed to get config while waking the screen for an entity page.");
     }
     MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "1", strlen("1"), true);
   }
 
-  if (InterfaceManager::is_current_page(EntityPage::unshow)) {
-    if (EntityPage::get_current_state_topic() == *topic) {
-      ESP_LOGD("InterfaceManager", "Entity page for %s is already showing.", topic->c_str());
-      return;
-    }
-    // EntityPage only calls begin_page() when the new entity's state arrives. The page is still current
-    // then, so begin_page() would skip the old entity's unshow: unshow it here instead.
-    EntityPage::unshow();
-  }
-  EntityPage::show(*topic);
+  // if (InterfaceManager::is_current_page(EntityPage::unshow)) {
+  //   if (EntityPage::get_current_state_topic() == *topic) {
+  //     ESP_LOGD("InterfaceManager", "Entity page for %s is already showing.", topic->c_str());
+  //     return;
+  //   }
+  //   // EntityPage only calls begin_page() when the new entity's state arrives. The page is still current
+  //   // then, so begin_page() would skip the old entity's unshow: unshow it here instead.
+  //   // EntityPage::unshow();
+  // }
+  // EntityPage::show(*topic);
 }
 
 void InterfaceManager::_request_page(PageRequest page) {
@@ -297,13 +310,13 @@ void InterfaceManager::_task_page_transitions(void *param) {
     if (requested & PAGE_TRANSITION_SHOW_PAGE) {
       switch (InterfaceManager::_requested_page.exchange(PageRequest::NONE)) {
       case PageRequest::HOME:
-        HomePage::show();
+        // HomePage::show();
         break;
 
       case PageRequest::SCREEN_ON: {
         std::shared_ptr<NSPanelConfig> config;
         if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
-          Nextion::set_brightness_level(config->screen_dim_level, 1000);
+          // Nextion::set_brightness_level(config->screen_dim_level, 1000);
           InterfaceManager::show_default_page();
         } else {
           ESP_LOGE("InterfaceManager", "Failed to get config while trying to turn screen on.");
@@ -366,40 +379,40 @@ void InterfaceManager::_task_unshow_page(void *param) {
 }
 
 void InterfaceManager::_nextion_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-  switch (event_id) {
-  case nextion_event_t::SLEEP_EVENT: {
-    if (!InterfaceManager::_screensaver_blocked.get()) {
-      ESP_LOGD("InterfaceManager", "Got sleep event from InterfaceManager and screensaver is not blocked. Will switch to screensaver page.");
-      ScreensaverPage::show();
-    }
-    MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "0", strlen("0"), true);
-    break;
-  }
+  // switch (event_id) {
+  // case nextion_event_t::SLEEP_EVENT: {
+  //   if (!InterfaceManager::_screensaver_blocked.get()) {
+  //     ESP_LOGD("InterfaceManager", "Got sleep event from InterfaceManager and screensaver is not blocked. Will switch to screensaver page.");
+  //     ScreensaverPage::show();
+  //   }
+  //   MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "0", strlen("0"), true);
+  //   break;
+  // }
 
-  case nextion_event_t::WAKE_EVENT: {
-    // Someone touched the screensaver, unshow it and go to the default page, whatever is selected in the manager
-    InterfaceManager::show_default_page();
-    std::shared_ptr<NSPanelConfig> config;
-    if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-      Nextion::set_brightness_level(config->screen_dim_level, 1000);
-    } else {
-      ESP_LOGE("InterfaceManager", "Failed to get NSPanel Config when unshowing screensaver page!");
-    }
-    MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "1", strlen("1"), true);
-    break;
-  }
+  // case nextion_event_t::WAKE_EVENT: {
+  //   // Someone touched the screensaver, unshow it and go to the default page, whatever is selected in the manager
+  //   InterfaceManager::show_default_page();
+  //   std::shared_ptr<NSPanelConfig> config;
+  //   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+  //     // Nextion::set_brightness_level(config->screen_dim_level, 1000);
+  //   } else {
+  //     ESP_LOGE("InterfaceManager", "Failed to get NSPanel Config when unshowing screensaver page!");
+  //   }
+  //   MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "1", strlen("1"), true);
+  //   break;
+  // }
 
-  case nextion_event_t::DISPLAY_RESTARTED: {
-    // The display is back on its startup page at its default brightness. Restore both through the
-    // page-transition task, which may switch pages; this handler must not.
-    ESP_LOGW("InterfaceManager", "Display restarted, showing the default page again.");
-    InterfaceManager::_request_page(PageRequest::SCREEN_ON);
-    break;
-  }
+  // case nextion_event_t::DISPLAY_RESTARTED: {
+  //   // The display is back on its startup page at its default brightness. Restore both through the
+  //   // page-transition task, which may switch pages; this handler must not.
+  //   ESP_LOGW("InterfaceManager", "Display restarted, showing the default page again.");
+  //   InterfaceManager::_request_page(PageRequest::SCREEN_ON);
+  //   break;
+  // }
 
-  default:
-    break;
-  }
+  // default:
+  //   break;
+  // }
 }
 
 void InterfaceManager::_update_manager_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -407,7 +420,7 @@ void InterfaceManager::_update_manager_event_handler(void *arg, esp_event_base_t
   case updatemanager_event_t::FIRMWARE_UPDATE_STARTED: {
     std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-      Nextion::set_brightness_level(config->screen_dim_level, 1000);
+      // Nextion::set_brightness_level(config->screen_dim_level, 1000);
     }
     // If screensaver blocked is false we are currently not showing loading page. Show it.
     if (!InterfaceManager::_screensaver_blocked.get()) {
@@ -422,7 +435,7 @@ void InterfaceManager::_update_manager_event_handler(void *arg, esp_event_base_t
   case updatemanager_event_t::LITTLEFS_UPDATE_STARTED: {
     std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-      Nextion::set_brightness_level(config->screen_dim_level, 1000);
+      // Nextion::set_brightness_level(config->screen_dim_level, 1000);
     }
     // If screensaver blocked is false we are currently not showing loading page. Show it.
     if (!InterfaceManager::_screensaver_blocked.get()) {
@@ -483,13 +496,13 @@ void InterfaceManager::_nspm_configmanager_event_handler(void *arg, esp_event_ba
     std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
       if (InterfaceManager::_nspm_cur_config == nullptr || InterfaceManager::_nspm_cur_config->screensaver_activation_timeout != config->screensaver_activation_timeout) {
-        if (Nextion::set_timer_value(GUI_HOME_PAGE::timer_screensaver_name, config->screensaver_activation_timeout, pdMS_TO_TICKS(250)) != ESP_OK) {
-          ESP_LOGE("InterfaceManager", "Failed to update timer value for screensaver timeout.");
-        }
+        // if (Nextion::set_timer_value(GUI_HOME_PAGE::timer_screensaver_name, config->screensaver_activation_timeout, pdMS_TO_TICKS(250)) != ESP_OK) {
+        //   ESP_LOGE("InterfaceManager", "Failed to update timer value for screensaver timeout.");
+        // }
       }
 
       if (!ScreensaverPage::showing()) {
-        Nextion::set_brightness_level(config->screen_dim_level, 1000);
+        // Nextion::set_brightness_level(config->screen_dim_level, 1000);
       }
 
       // Update MQTT state topics
@@ -597,7 +610,7 @@ void InterfaceManager::_mqtt_event_handler(void *arg, esp_event_base_t event_bas
           }
           mutable_config->screen_dim_level = new_brightness;
           if (!ScreensaverPage::showing()) { // We are not on screensaver, update screen brightness
-            Nextion::set_brightness_level(new_brightness, 1000);
+            // Nextion::set_brightness_level(new_brightness, 1000);
           }
           std::string send_data = std::to_string(new_brightness).c_str();
           MqttManager::publish(std::string(InterfaceManager::_screen_brightness_state_topic), data.c_str(), send_data.length(), true);
@@ -614,7 +627,7 @@ void InterfaceManager::_mqtt_event_handler(void *arg, esp_event_base_t event_bas
           }
           mutable_config->screensaver_dim_level = new_brightness;
           if (ScreensaverPage::showing()) { // We are not on screensaver, update screen brightness
-            Nextion::set_brightness_level(new_brightness, 1000);
+            // Nextion::set_brightness_level(new_brightness, 1000);
           }
           std::string send_data = std::to_string(new_brightness).c_str();
           MqttManager::publish(std::string(InterfaceManager::_screensaver_brightness_state_topic), data.c_str(), send_data.length(), true);
@@ -659,7 +672,7 @@ void InterfaceManager::_mqtt_event_handler(void *arg, esp_event_base_t event_bas
         }
       } else if (topic_string.compare(InterfaceManager::_screen_raw_commands) == 0) {
         ESP_LOGD("InterfaceManager", "Writing raw Nextion command to display. Command: %s", data.c_str());
-        Nextion::send_raw_command(data.c_str(), 5000); // Try writing raw command data to the Nextion display.
+        // Nextion::send_raw_command(data.c_str(), 5000); // Try writing raw command data to the Nextion display.
       }
       break;
     }

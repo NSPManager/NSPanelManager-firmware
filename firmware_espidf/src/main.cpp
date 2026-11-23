@@ -1,5 +1,5 @@
-#include <BuzzerManager.hpp>
 #include <ButtonManager.hpp>
+#include <BuzzerManager.hpp>
 #include <ConfigManager.hpp>
 #include <EventLoopWatchdog.hpp>
 #include <InterfaceManager.hpp>
@@ -7,16 +7,16 @@
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
 #include <NSPM_version.hpp>
-#include <Nextion.hpp>
+// #include <Nextion.hpp>
 #include <PanelClock.hpp>
 #include <RoomManager.hpp>
 #include <StatusUpdateManager.hpp>
 #include <UpdateManager.hpp>
 #include <WebManager.hpp>
 #include <WiFiManager.hpp>
-#include <esp_log.h>
 #include <algorithm>
 #include <atomic>
+#include <esp_log.h>
 #include <nvs_flash.h>
 #include <string>
 
@@ -220,7 +220,7 @@ extern "C" void app_main() {
   UpdateManager::update_internal_firmware_checksum();
 
   // Nextion::init() logged how the display link came up before panel logs reached MQTT; repeat it now.
-  Nextion::log_link_baud();
+  // Nextion::log_link_baud();
 
   ESP_LOGI("Main", "Task setup OK. Exiting main.");
 }

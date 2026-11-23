@@ -3,7 +3,7 @@
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
 #include <NSPM_ConfigManager_event.hpp>
-#include <Nextion_event.hpp>
+// #include <Nextion_event.hpp>
 #include <RtttlParser.hpp>
 #include <WiFiManager.hpp>
 #include <esp_log.h>
@@ -61,8 +61,8 @@ void BuzzerManager::init() {
   }
 
   BuzzerManager::_initialized = true;
-  esp_event_handler_register(NEXTION_EVENT, nextion_event_t::TOUCH_EVENT, BuzzerManager::_nextion_event_handler, NULL);
-  esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, BuzzerManager::_config_event_handler, NULL);
+  // esp_event_handler_register(NEXTION_EVENT, nextion_event_t::TOUCH_EVENT, BuzzerManager::_nextion_event_handler, NULL);
+  // esp_event_handler_register(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, BuzzerManager::_config_event_handler, NULL);
   ESP_LOGI("BuzzerManager", "Buzzer initialized on GPIO %d.", BuzzerManager::_buzzer_pin);
 #else
   // TODO: Enable once it is known whether the custom PCB has a buzzer, see _buzzer_pin in BuzzerManager.hpp
@@ -87,7 +87,7 @@ void BuzzerManager::play(std::shared_ptr<const std::vector<buzzer_tone_step_t>> 
 
   if (xSemaphoreTake(BuzzerManager::_playback_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
     esp_timer_stop(BuzzerManager::_step_timer); // ESP_ERR_INVALID_STATE if nothing is playing is fine.
-    BuzzerManager::_steps = std::move(steps); // Frees the previous sequence unless someone else still holds it
+    BuzzerManager::_steps = std::move(steps);   // Frees the previous sequence unless someone else still holds it
     BuzzerManager::_current_step = 0;
     BuzzerManager::_start_current_step();
     xSemaphoreGive(BuzzerManager::_playback_mutex);
@@ -156,25 +156,25 @@ void BuzzerManager::raise_event_for_touch(buzzer_event_t event) {
 }
 
 void BuzzerManager::_nextion_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-  nextion_event_touch_t *data = (nextion_event_touch_t *)event_data;
-  bool raise_touch_event = false;
-  if (data->pressed) {
-    BuzzerManager::_awaiting_release = true;
-    BuzzerManager::_pressed_page = data->page_number;
-    BuzzerManager::_pressed_component = data->component_id;
-    raise_touch_event = true;
-  } else if (BuzzerManager::_awaiting_release && BuzzerManager::_pressed_page == data->page_number && BuzzerManager::_pressed_component == data->component_id) {
-    BuzzerManager::_awaiting_release = false; // Already raised when this component was pressed
-  } else {
-    // Most components in the NSPanel Manager TFT only send release events
-    BuzzerManager::_awaiting_release = false;
-    raise_touch_event = true;
-  }
+  // nextion_event_touch_t *data = (nextion_event_touch_t *)event_data;
+  // bool raise_touch_event = false;
+  // if (data->pressed) {
+  //   BuzzerManager::_awaiting_release = true;
+  //   BuzzerManager::_pressed_page = data->page_number;
+  //   BuzzerManager::_pressed_component = data->component_id;
+  //   raise_touch_event = true;
+  // } else if (BuzzerManager::_awaiting_release && BuzzerManager::_pressed_page == data->page_number && BuzzerManager::_pressed_component == data->component_id) {
+  //   BuzzerManager::_awaiting_release = false; // Already raised when this component was pressed
+  // } else {
+  //   // Most components in the NSPanel Manager TFT only send release events
+  //   BuzzerManager::_awaiting_release = false;
+  //   raise_touch_event = true;
+  // }
 
   // A page handler already raised a more specific event for this touch, see raise_event_for_touch()
-  if (raise_touch_event && !BuzzerManager::_touch_event_replaced) {
-    BuzzerManager::_handle_event(buzzer_event_t::TOUCH);
-  }
+  // if (raise_touch_event && !BuzzerManager::_touch_event_replaced) {
+  //   BuzzerManager::_handle_event(buzzer_event_t::TOUCH);
+  // }
   BuzzerManager::_touch_event_replaced = false;
 }
 

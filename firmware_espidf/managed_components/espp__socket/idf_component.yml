@@ -11,7 +11,7 @@ maintainers:
 - William Emfinger <waemfinger@gmail.com>
 repository: git://github.com/esp-cpp/espp.git
 repository_info:
-  commit_sha: 5f818d2b7bc5bbcc83e1089072ff24e3e87661b9
+  commit_sha: da452d00f3a74499f899a69160fa8ea140d14bc9
   path: components/socket
 tags:
 - cpp
@@ -21,4 +21,4 @@ tags:
 - UDP
 - Network
 url: https://github.com/esp-cpp/espp/tree/main/components/socket
-version: 1.3.3
+version: 1.4.6

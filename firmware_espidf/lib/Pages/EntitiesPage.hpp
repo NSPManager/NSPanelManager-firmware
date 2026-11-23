@@ -1,7 +1,7 @@
 #pragma once
 #include <GUI_data.hpp>
 #include <MutexWrapper.hpp>
-#include <Nextion_event.hpp>
+// #include <Nextion_event.hpp>
 #include <atomic>
 #include <esp_event.h>
 #include <memory>
@@ -59,20 +59,20 @@ private:
    */
   static void _handle_nextion_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
-  /**
-   * Handle touch event in "items4" page.
-   */
-  static void _handle_items4_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data);
+  // /**
+  //  * Handle touch event in "items4" page.
+  //  */
+  // static void _handle_items4_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data);
 
-  /**
-   * Handle touch event in "items8" page.
-   */
-  static void _handle_items8_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data);
+  // /**
+  //  * Handle touch event in "items8" page.
+  //  */
+  // static void _handle_items8_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data);
 
-  /**
-   * Handle touch event in "items12" page.
-   */
-  static void _handle_items12_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data);
+  // /**
+  //  * Handle touch event in "items12" page.
+  //  */
+  // static void _handle_items12_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data);
 
   /**
    * Get the entity in the given slot of the given entities page, or nullptr if the slot is empty.

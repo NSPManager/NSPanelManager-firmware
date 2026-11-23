@@ -1,8 +1,8 @@
-#include <PanelRestart.hpp>
 #include <ConfigManager.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
-#include <Nextion.hpp>
+#include <PanelRestart.hpp>
+// #include <Nextion.hpp>
 #include <NSPM_ConfigManager_event.hpp>
 #include <StatusUpdateManager.hpp>
 #include <StatusUpdateManager_events.hpp>
@@ -162,7 +162,8 @@ void StatusUpdateManager::_send_status_update(void *arg) {
     // Warnings are rebuilt on every report, so the manager drops one once it no longer applies.
     StatusUpdateManager::_status_report.n_warnings = 0;
     StatusUpdateManager::_status_report.warnings = NULL;
-    StatusUpdateManager::_link_baud_warning_text = Nextion::get_link_baud_warning();
+    // StatusUpdateManager::_link_baud_warning_text = Nextion::get_link_baud_warning();
+    StatusUpdateManager::_link_baud_warning_text = "";
     if (!StatusUpdateManager::_link_baud_warning_text.empty()) {
       StatusUpdateManager::_link_baud_warning.text = (char *)StatusUpdateManager::_link_baud_warning_text.c_str();
       StatusUpdateManager::_warnings[StatusUpdateManager::_status_report.n_warnings++] = &StatusUpdateManager::_link_baud_warning;

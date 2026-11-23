@@ -1,13 +1,13 @@
 #include <ConfigManager.hpp>
-#include <EntitiesPage.hpp>
+// #include <EntitiesPage.hpp>
 #include <GUI_data.hpp>
 #include <HomePage.hpp>
 #include <InterfaceManager.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
 #include <NSPM_ConfigManager_event.hpp>
-#include <Nextion.hpp>
-#include <Nextion_event.hpp>
+// #include <Nextion.hpp>
+// #include <Nextion_event.hpp>
 #include <RoomManager.hpp>
 #include <RoomManager_event.hpp>
 #include <esp_log.h>
@@ -20,7 +20,7 @@ void HomePage::show() {
 
   std::shared_ptr<PageHandlers> handlers = InterfaceManager::begin_page(HomePage::unshow);
 
-  Nextion::go_to_page(GUI_HOME_PAGE::page_name, 250);
+  // Nextion::go_to_page(GUI_HOME_PAGE::page_name, 250);
 
   std::shared_ptr<NSPanelConfig> config;
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
@@ -31,7 +31,7 @@ void HomePage::show() {
 
   HomePage::_update_display();
   handlers->add_to(RoomManager::event_loop(), ROOMMANAGER_EVENT, ESP_EVENT_ANY_ID, HomePage::_handle_roommanager_event);
-  handlers->add(NEXTION_EVENT, ESP_EVENT_ANY_ID, HomePage::_handle_nextion_event);
+  // handlers->add(NEXTION_EVENT, ESP_EVENT_ANY_ID, HomePage::_handle_nextion_event);
   handlers->add(NSPM_CONFIGMANAGER_EVENT, nspm_configmanager_event::CONFIG_LOADED, HomePage::_handle_config_update);
 
   if (HomePage::_special_mode_timer_handle == NULL) {
@@ -76,19 +76,19 @@ void HomePage::_update_display() {
   std::shared_ptr<NSPanelRoomStatus> status;
   if (HomePage::_current_affect_mode == HomePageAffectMode::ROOM) {
     if (RoomManager::get_home_page_status(&status) == ESP_OK) [[likely]] {
-      Nextion::set_component_text(GUI_HOME_PAGE::mode_label_name, "Room lights", 100);
-      Nextion::set_component_text(GUI_HOME_PAGE::room_label_name, status->name, 100);
-      Nextion::set_component_pic(GUI_HOME_PAGE::button_scenes_name, GUI_HOME_PAGE::button_scenes_room_pic, 250);
-      Nextion::set_component_pic2(GUI_HOME_PAGE::button_scenes_name, GUI_HOME_PAGE::button_scenes_room_pic2, 250);
+      // Nextion::set_component_text(GUI_HOME_PAGE::mode_label_name, "Room lights", 100);
+      // Nextion::set_component_text(GUI_HOME_PAGE::room_label_name, status->name, 100);
+      // Nextion::set_component_pic(GUI_HOME_PAGE::button_scenes_name, GUI_HOME_PAGE::button_scenes_room_pic, 250);
+      // Nextion::set_component_pic2(GUI_HOME_PAGE::button_scenes_name, GUI_HOME_PAGE::button_scenes_room_pic2, 250);
     } else {
       ESP_LOGE("HomePage", "Failed to get status object for home page. Will abort update.");
       return;
     }
   } else if (HomePage::_current_affect_mode == HomePageAffectMode::ALL) {
-    Nextion::set_component_text(GUI_HOME_PAGE::mode_label_name, "All lights", 100);
-    Nextion::set_component_text(GUI_HOME_PAGE::room_label_name, "All", 100);
-    Nextion::set_component_pic(GUI_HOME_PAGE::button_scenes_name, GUI_HOME_PAGE::button_scenes_all_rooms_pic, 250);
-    Nextion::set_component_pic2(GUI_HOME_PAGE::button_scenes_name, GUI_HOME_PAGE::button_scenes_all_rooms_pic2, 250);
+    // Nextion::set_component_text(GUI_HOME_PAGE::mode_label_name, "All lights", 100);
+    // Nextion::set_component_text(GUI_HOME_PAGE::room_label_name, "All", 100);
+    // Nextion::set_component_pic(GUI_HOME_PAGE::button_scenes_name, GUI_HOME_PAGE::button_scenes_all_rooms_pic, 250);
+    // Nextion::set_component_pic2(GUI_HOME_PAGE::button_scenes_name, GUI_HOME_PAGE::button_scenes_all_rooms_pic2, 250);
     if (RoomManager::get_home_page_status_all_rooms(&status) != ESP_OK) [[unlikely]] {
       ESP_LOGW("HomePage", "All-rooms status not yet available; slider updates deferred until MQTT data arrives.");
       return;
@@ -100,14 +100,14 @@ void HomePage::_update_display() {
 
   if (HomePage::_current_edit_mode == HomePageEditMode::ALL_LIGHTS) [[likely]] {
     if (HomePage::_cache_ceiling_light_brightness != status->ceiling_lights_dim_level) {
-      Nextion::set_component_value(GUI_HOME_PAGE::label_ceiling_name, status->ceiling_lights_dim_level, 100);
-      Nextion::set_component_value(GUI_HOME_PAGE::button_ceiling_name, status->ceiling_lights_dim_level > 0, 100);
+      // Nextion::set_component_value(GUI_HOME_PAGE::label_ceiling_name, status->ceiling_lights_dim_level, 100);
+      // Nextion::set_component_value(GUI_HOME_PAGE::button_ceiling_name, status->ceiling_lights_dim_level > 0, 100);
       HomePage::_cache_ceiling_light_brightness = status->ceiling_lights_dim_level;
     }
 
     if (HomePage::_cache_table_light_brightness != status->table_lights_dim_level) {
-      Nextion::set_component_value(GUI_HOME_PAGE::label_table_name, status->table_lights_dim_level, 100);
-      Nextion::set_component_value(GUI_HOME_PAGE::button_table_name, status->table_lights_dim_level > 0, 100);
+      // Nextion::set_component_value(GUI_HOME_PAGE::label_table_name, status->table_lights_dim_level, 100);
+      // Nextion::set_component_value(GUI_HOME_PAGE::button_table_name, status->table_lights_dim_level > 0, 100);
       HomePage::_cache_table_light_brightness = status->table_lights_dim_level;
     }
 
@@ -119,7 +119,7 @@ void HomePage::_update_display() {
     // This is because when the slider is updated it flickers the screen.
     uint8_t brightness_diff = abs(HomePage::_cache_brightness_slider - status->average_dim_level);
     if ((status->average_dim_level == 100 && brightness_diff != 0) || (status->average_dim_level == 0 && brightness_diff != 0) || brightness_diff >= 3) {
-      Nextion::set_component_value(GUI_HOME_PAGE::dimmer_slider_name, status->average_dim_level, 100);
+      // Nextion::set_component_value(GUI_HOME_PAGE::dimmer_slider_name, status->average_dim_level, 100);
       HomePage::_cache_brightness_slider = status->average_dim_level;
     }
 
@@ -131,13 +131,13 @@ void HomePage::_update_display() {
     // This is because when the slider is updated it flickers the screen.
     uint8_t color_temp_diff = abs(HomePage::_cache_color_temperature_slider - status->average_color_temperature);
     if ((status->average_color_temperature == 100 && color_temp_diff != 0) || (status->average_color_temperature == 0 && color_temp_diff != 0) || color_temp_diff >= 3) {
-      Nextion::set_component_value(GUI_HOME_PAGE::color_temperature_slider_name, status->average_color_temperature, 100);
+      // Nextion::set_component_value(GUI_HOME_PAGE::color_temperature_slider_name, status->average_color_temperature, 100);
       HomePage::_cache_color_temperature_slider = status->average_color_temperature;
     }
   } else if (HomePage::_current_edit_mode == HomePageEditMode::CEILING_LIGHTS) {
     if (HomePage::_cache_ceiling_light_brightness != status->ceiling_lights_dim_level) {
-      Nextion::set_component_value(GUI_HOME_PAGE::label_ceiling_name, status->ceiling_lights_dim_level, 100);
-      Nextion::set_component_value(GUI_HOME_PAGE::button_ceiling_name, status->ceiling_lights_dim_level > 0, 100);
+      // Nextion::set_component_value(GUI_HOME_PAGE::label_ceiling_name, status->ceiling_lights_dim_level, 100);
+      // Nextion::set_component_value(GUI_HOME_PAGE::button_ceiling_name, status->ceiling_lights_dim_level > 0, 100);
       HomePage::_cache_ceiling_light_brightness = status->ceiling_lights_dim_level;
     }
 
@@ -149,7 +149,7 @@ void HomePage::_update_display() {
     // This is because when the slider is updated it flickers the screen.
     uint8_t brightness_diff = abs(HomePage::_cache_brightness_slider - status->ceiling_lights_dim_level);
     if ((status->ceiling_lights_dim_level == 100 && brightness_diff != 0) || (status->ceiling_lights_dim_level == 0 && brightness_diff != 0) || brightness_diff >= 3) {
-      Nextion::set_component_value(GUI_HOME_PAGE::dimmer_slider_name, status->ceiling_lights_dim_level, 100);
+      // Nextion::set_component_value(GUI_HOME_PAGE::dimmer_slider_name, status->ceiling_lights_dim_level, 100);
       HomePage::_cache_brightness_slider = status->ceiling_lights_dim_level;
     }
 
@@ -161,13 +161,13 @@ void HomePage::_update_display() {
     // This is because when the slider is updated it flickers the screen.
     uint8_t color_temp_diff = abs(HomePage::_cache_color_temperature_slider - status->ceiling_lights_color_temperature_value);
     if ((status->ceiling_lights_color_temperature_value == 100 && color_temp_diff != 0) || (status->ceiling_lights_color_temperature_value == 0 && color_temp_diff != 0) || color_temp_diff >= 3) {
-      Nextion::set_component_value(GUI_HOME_PAGE::color_temperature_slider_name, status->ceiling_lights_color_temperature_value, 100);
+      // Nextion::set_component_value(GUI_HOME_PAGE::color_temperature_slider_name, status->ceiling_lights_color_temperature_value, 100);
       HomePage::_cache_color_temperature_slider = status->ceiling_lights_color_temperature_value;
     }
   } else if (HomePage::_current_edit_mode == HomePageEditMode::TABLE_LIGHTS) {
     if (HomePage::_cache_table_light_brightness != status->table_lights_dim_level) {
-      Nextion::set_component_value(GUI_HOME_PAGE::label_table_name, status->table_lights_dim_level, 100);
-      Nextion::set_component_value(GUI_HOME_PAGE::button_table_name, status->table_lights_dim_level > 0, 100);
+      // Nextion::set_component_value(GUI_HOME_PAGE::label_table_name, status->table_lights_dim_level, 100);
+      // Nextion::set_component_value(GUI_HOME_PAGE::button_table_name, status->table_lights_dim_level > 0, 100);
       HomePage::_cache_table_light_brightness = status->table_lights_dim_level;
     }
 
@@ -179,7 +179,7 @@ void HomePage::_update_display() {
     // This is because when the slider is updated it flickers the screen.
     uint8_t brightness_diff = abs(HomePage::_cache_brightness_slider - status->table_lights_dim_level);
     if ((status->table_lights_dim_level == 100 && brightness_diff != 0) || (status->table_lights_dim_level == 0 && brightness_diff != 0) || brightness_diff >= 3) {
-      Nextion::set_component_value(GUI_HOME_PAGE::dimmer_slider_name, status->table_lights_dim_level, 100);
+      // Nextion::set_component_value(GUI_HOME_PAGE::dimmer_slider_name, status->table_lights_dim_level, 100);
       HomePage::_cache_brightness_slider = status->table_lights_dim_level;
     }
 
@@ -191,7 +191,7 @@ void HomePage::_update_display() {
     // This is because when the slider is updated it flickers the screen.
     uint8_t color_temp_diff = abs(HomePage::_cache_color_temperature_slider - status->table_lights_color_temperature_value);
     if ((status->table_lights_color_temperature_value == 100 && color_temp_diff != 0) || (status->table_lights_color_temperature_value == 0 && color_temp_diff != 0) || color_temp_diff >= 3) {
-      Nextion::set_component_value(GUI_HOME_PAGE::color_temperature_slider_name, status->table_lights_color_temperature_value, 100);
+      // Nextion::set_component_value(GUI_HOME_PAGE::color_temperature_slider_name, status->table_lights_color_temperature_value, 100);
       HomePage::_cache_color_temperature_slider = status->table_lights_color_temperature_value;
     }
   } else {
@@ -208,66 +208,66 @@ void HomePage::_handle_roommanager_event(void *arg, esp_event_base_t event_base,
 }
 
 void HomePage::_handle_nextion_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-  switch (event_id) {
-  case nextion_event_t::TOUCH_EVENT: {
-    nextion_event_touch_t *data = (nextion_event_touch_t *)event_data;
-    if (data->component_id == GUI_HOME_PAGE::button_ceiling_id) {
-      HomePage::_handle_nextion_event_master_ceiling_lights_button(data->pressed);
-    } else if (data->component_id == GUI_HOME_PAGE::button_table_id) {
-      HomePage::_handle_nextion_event_master_table_lights_button(data->pressed);
-    } else if (data->component_id == GUI_HOME_PAGE::dimmer_slider_id) {
-      HomePage::_update_brightness_slider_cache();
-      HomePage::_handle_brightness_slider_event();
-    } else if (data->component_id == GUI_HOME_PAGE::color_temperature_slider_id) {
-      HomePage::_update_color_temperature_slider_cache();
-      HomePage::_handle_color_temperature_slider_event();
-    } else if (data->component_id == GUI_HOME_PAGE::button_next_room_id) {
-      if (HomePage::_current_affect_mode == HomePage::HomePageAffectMode::ROOM) {
-        RoomManager::go_to_next_room();
-      }
-    } else if (data->component_id == GUI_HOME_PAGE::button_next_mode_id) {
-      switch (HomePage::_current_affect_mode) {
-      case HomePage::HomePageAffectMode::ROOM: {
-        std::shared_ptr<NSPanelConfig> config;
-        if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
-          if (!config->locked_to_default_room) {
-            HomePage::set_current_affect_mode(HomePageAffectMode::ALL);
-          } else {
-            ESP_LOGW("HomePage", "Tried to enter 'All rooms' mode but panel is not allowed to control other rooms than the default.");
-          }
-        } else {
-          ESP_LOGE("HomePage", "Failed to get config while checking if panel is allowed to access other rooms.");
-        }
-        break;
-      }
+  // switch (event_id) {
+  // case nextion_event_t::TOUCH_EVENT: {
+  //   nextion_event_touch_t *data = (nextion_event_touch_t *)event_data;
+  //   if (data->component_id == GUI_HOME_PAGE::button_ceiling_id) {
+  //     HomePage::_handle_nextion_event_master_ceiling_lights_button(data->pressed);
+  //   } else if (data->component_id == GUI_HOME_PAGE::button_table_id) {
+  //     HomePage::_handle_nextion_event_master_table_lights_button(data->pressed);
+  //   } else if (data->component_id == GUI_HOME_PAGE::dimmer_slider_id) {
+  //     HomePage::_update_brightness_slider_cache();
+  //     HomePage::_handle_brightness_slider_event();
+  //   } else if (data->component_id == GUI_HOME_PAGE::color_temperature_slider_id) {
+  //     HomePage::_update_color_temperature_slider_cache();
+  //     HomePage::_handle_color_temperature_slider_event();
+  //   } else if (data->component_id == GUI_HOME_PAGE::button_next_room_id) {
+  //     if (HomePage::_current_affect_mode == HomePage::HomePageAffectMode::ROOM) {
+  //       RoomManager::go_to_next_room();
+  //     }
+  //   } else if (data->component_id == GUI_HOME_PAGE::button_next_mode_id) {
+  //     switch (HomePage::_current_affect_mode) {
+  //     case HomePage::HomePageAffectMode::ROOM: {
+  //       std::shared_ptr<NSPanelConfig> config;
+  //       if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+  //         if (!config->locked_to_default_room) {
+  //           HomePage::set_current_affect_mode(HomePageAffectMode::ALL);
+  //         } else {
+  //           ESP_LOGW("HomePage", "Tried to enter 'All rooms' mode but panel is not allowed to control other rooms than the default.");
+  //         }
+  //       } else {
+  //         ESP_LOGE("HomePage", "Failed to get config while checking if panel is allowed to access other rooms.");
+  //       }
+  //       break;
+  //     }
 
-      case HomePage::HomePageAffectMode::ALL:
-        HomePage::set_current_affect_mode(HomePageAffectMode::ROOM);
-        break;
+  //     case HomePage::HomePageAffectMode::ALL:
+  //       HomePage::set_current_affect_mode(HomePageAffectMode::ROOM);
+  //       break;
 
-      default:
-        ESP_LOGE("HomePage", "Unknown affect mode when processing 'next mode button' event!");
-        break;
-      }
-    } else if (data->component_id == GUI_HOME_PAGE::button_scenes_id) {
-      if (HomePage::_current_affect_mode == HomePage::HomePageAffectMode::ROOM && !data->pressed) {
-        EntitiesPage::show(EntitiesPage::display_type_t::SCENES);
-      } else if (HomePage::_current_affect_mode == HomePage::HomePageAffectMode::ALL && !data->pressed) {
-        EntitiesPage::show(EntitiesPage::display_type_t::GLOBAL_SCENES);
-      }
-    } else if (data->component_id == GUI_HOME_PAGE::button_room_entities_id) {
-      if (HomePage::_current_affect_mode == HomePage::HomePageAffectMode::ROOM && !data->pressed) {
-        EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
-      }
-    } else {
-      ESP_LOGW("HomePage", "Got touch event from unknown ID: %d", data->component_id);
-    }
-    break;
-  }
+  //     default:
+  //       ESP_LOGE("HomePage", "Unknown affect mode when processing 'next mode button' event!");
+  //       break;
+  //     }
+  //   } else if (data->component_id == GUI_HOME_PAGE::button_scenes_id) {
+  //     if (HomePage::_current_affect_mode == HomePage::HomePageAffectMode::ROOM && !data->pressed) {
+  //       EntitiesPage::show(EntitiesPage::display_type_t::SCENES);
+  //     } else if (HomePage::_current_affect_mode == HomePage::HomePageAffectMode::ALL && !data->pressed) {
+  //       EntitiesPage::show(EntitiesPage::display_type_t::GLOBAL_SCENES);
+  //     }
+  //   } else if (data->component_id == GUI_HOME_PAGE::button_room_entities_id) {
+  //     if (HomePage::_current_affect_mode == HomePage::HomePageAffectMode::ROOM && !data->pressed) {
+  //       EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
+  //     }
+  //   } else {
+  //     ESP_LOGW("HomePage", "Got touch event from unknown ID: %d", data->component_id);
+  //   }
+  //   break;
+  // }
 
-  default:
-    break;
-  }
+  // default:
+  //   break;
+  // }
 }
 
 void HomePage::_handle_config_update(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -671,32 +671,32 @@ void HomePage::_send_table_master_button_command_to_manager() {
 
 void HomePage::_update_brightness_slider_cache() {
   int32_t dimmer_slider_value;
-  if (Nextion::get_component_integer_value(GUI_HOME_PAGE::dimmer_slider_name, &dimmer_slider_value, 1000, 250) == ESP_OK) {
-    std::shared_ptr<NSPanelConfig> config;
-    if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-      if (dimmer_slider_value >= config->raise_light_level_to_100_above) {
-        HomePage::_cache_brightness_slider = 100;
+  // if (Nextion::get_component_integer_value(GUI_HOME_PAGE::dimmer_slider_name, &dimmer_slider_value, 1000, 250) == ESP_OK) {
+  //   std::shared_ptr<NSPanelConfig> config;
+  //   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
+  //     if (dimmer_slider_value >= config->raise_light_level_to_100_above) {
+  //       HomePage::_cache_brightness_slider = 100;
 
-        // In the case were we actually raise light level while reading it, update the slider to new value:
-        Nextion::set_component_value(GUI_HOME_PAGE::dimmer_slider_name, 100, 250);
-      } else {
-        HomePage::_cache_brightness_slider = dimmer_slider_value;
-      }
-    } else {
-      HomePage::_cache_brightness_slider = dimmer_slider_value;
-    }
-  } else {
-    ESP_LOGE("HomePage", "Failed to get current color temperature value to update cache!");
-  }
+  //       // In the case were we actually raise light level while reading it, update the slider to new value:
+  //       Nextion::set_component_value(GUI_HOME_PAGE::dimmer_slider_name, 100, 250);
+  //     } else {
+  //       HomePage::_cache_brightness_slider = dimmer_slider_value;
+  //     }
+  //   } else {
+  //     HomePage::_cache_brightness_slider = dimmer_slider_value;
+  //   }
+  // } else {
+  //   ESP_LOGE("HomePage", "Failed to get current color temperature value to update cache!");
+  // }
 }
 
 void HomePage::_update_color_temperature_slider_cache() {
   int32_t color_temperature;
-  if (Nextion::get_component_integer_value(GUI_HOME_PAGE::color_temperature_slider_name, &color_temperature, 1000, 250) == ESP_OK) {
-    HomePage::_cache_color_temperature_slider = color_temperature;
-  } else {
-    ESP_LOGE("HomePage", "Failed to get current color temperature slider value to update cache!");
-  }
+  // if (Nextion::get_component_integer_value(GUI_HOME_PAGE::color_temperature_slider_name, &color_temperature, 1000, 250) == ESP_OK) {
+  //   HomePage::_cache_color_temperature_slider = color_temperature;
+  // } else {
+  //   ESP_LOGE("HomePage", "Failed to get current color temperature slider value to update cache!");
+  // }
 }
 
 void HomePage::_special_mode_timer_callback(void *arg) {
@@ -704,25 +704,25 @@ void HomePage::_special_mode_timer_callback(void *arg) {
   HomePage::_current_edit_mode = HomePage::_special_mode_timer_activation_mode;
 
   if (HomePage::_current_edit_mode == HomePageEditMode::CEILING_LIGHTS) {
-    Nextion::set_component_visibility(GUI_HOME_PAGE::highlight_ceiling_name, true, 100);
-    Nextion::set_component_visibility(GUI_HOME_PAGE::highlight_table_name, false, 100);
-    Nextion::set_component_foreground(GUI_HOME_PAGE::dimmer_slider_name, GUI_HOME_PAGE::slider_highlight_color, 100);
-    Nextion::set_component_foreground(GUI_HOME_PAGE::color_temperature_slider_name, GUI_HOME_PAGE::slider_highlight_color, 100);
+    // Nextion::set_component_visibility(GUI_HOME_PAGE::highlight_ceiling_name, true, 100);
+    // Nextion::set_component_visibility(GUI_HOME_PAGE::highlight_table_name, false, 100);
+    // Nextion::set_component_foreground(GUI_HOME_PAGE::dimmer_slider_name, GUI_HOME_PAGE::slider_highlight_color, 100);
+    // Nextion::set_component_foreground(GUI_HOME_PAGE::color_temperature_slider_name, GUI_HOME_PAGE::slider_highlight_color, 100);
 
     HomePage::_cache_table_light_brightness = -1; // Set cache to -1 so that it updates once special mode ends
-    Nextion::set_component_value(GUI_HOME_PAGE::label_table_name, 0, 100);
-    Nextion::set_component_value(GUI_HOME_PAGE::button_table_name, false, 100);
+    // Nextion::set_component_value(GUI_HOME_PAGE::label_table_name, 0, 100);
+    // Nextion::set_component_value(GUI_HOME_PAGE::button_table_name, false, 100);
     HomePage::_ignore_next_ceiling_button_touch_up = true;
     HomePage::_ignore_next_table_button_touch_up = false;
   } else if (HomePage::_current_edit_mode == HomePageEditMode::TABLE_LIGHTS) {
-    Nextion::set_component_visibility(GUI_HOME_PAGE::highlight_ceiling_name, false, 100);
-    Nextion::set_component_visibility(GUI_HOME_PAGE::highlight_table_name, true, 100);
-    Nextion::set_component_foreground(GUI_HOME_PAGE::dimmer_slider_name, GUI_HOME_PAGE::slider_highlight_color, 100);
-    Nextion::set_component_foreground(GUI_HOME_PAGE::color_temperature_slider_name, GUI_HOME_PAGE::slider_highlight_color, 100);
+    // Nextion::set_component_visibility(GUI_HOME_PAGE::highlight_ceiling_name, false, 100);
+    // Nextion::set_component_visibility(GUI_HOME_PAGE::highlight_table_name, true, 100);
+    // Nextion::set_component_foreground(GUI_HOME_PAGE::dimmer_slider_name, GUI_HOME_PAGE::slider_highlight_color, 100);
+    // Nextion::set_component_foreground(GUI_HOME_PAGE::color_temperature_slider_name, GUI_HOME_PAGE::slider_highlight_color, 100);
 
     HomePage::_cache_ceiling_light_brightness = -1; // Set cache to -1 so that it updates once it special mode ends
-    Nextion::set_component_value(GUI_HOME_PAGE::label_ceiling_name, 0, 100);
-    Nextion::set_component_value(GUI_HOME_PAGE::button_ceiling_name, false, 100);
+    // Nextion::set_component_value(GUI_HOME_PAGE::label_ceiling_name, 0, 100);
+    // Nextion::set_component_value(GUI_HOME_PAGE::button_ceiling_name, false, 100);
     HomePage::_ignore_next_ceiling_button_touch_up = false;
     HomePage::_ignore_next_table_button_touch_up = true;
   } else {
@@ -755,10 +755,10 @@ void HomePage::_special_mode_timeout_timer_callback(void *arg) {
     HomePage::_ignore_next_ceiling_button_touch_up = false;
     HomePage::_ignore_next_table_button_touch_up = false;
 
-    Nextion::set_component_visibility(GUI_HOME_PAGE::highlight_ceiling_name, false, 100);
-    Nextion::set_component_visibility(GUI_HOME_PAGE::highlight_table_name, false, 100);
-    Nextion::set_component_foreground(GUI_HOME_PAGE::dimmer_slider_name, GUI_HOME_PAGE::slider_normal_color, 100);
-    Nextion::set_component_foreground(GUI_HOME_PAGE::color_temperature_slider_name, GUI_HOME_PAGE::slider_normal_color, 100);
+    // Nextion::set_component_visibility(GUI_HOME_PAGE::highlight_ceiling_name, false, 100);
+    // Nextion::set_component_visibility(GUI_HOME_PAGE::highlight_table_name, false, 100);
+    // Nextion::set_component_foreground(GUI_HOME_PAGE::dimmer_slider_name, GUI_HOME_PAGE::slider_normal_color, 100);
+    // Nextion::set_component_foreground(GUI_HOME_PAGE::color_temperature_slider_name, GUI_HOME_PAGE::slider_normal_color, 100);
 
     HomePage::_update_display();
   }
