@@ -33,17 +33,6 @@ void InterfaceManager::init() {
     return;
   }
 
-  {
-    DisplayManager::Lock lv_lock_guard;
-    auto screen2 = lv_obj_create(NULL);
-
-    auto label = lv_label_create(screen2);
-    lv_label_set_text(label, "Test label");
-    lv_obj_center(label);
-
-    lv_screen_load(screen2);
-  }
-
   std::string base_topic = "nspanel/";
   base_topic.append(WiFiManager::mac_string());
   InterfaceManager::_screen_on_off_command_topic = base_topic;

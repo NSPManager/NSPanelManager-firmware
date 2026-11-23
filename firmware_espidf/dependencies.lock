@@ -200,5 +200,5 @@ direct_dependencies:
 - lvgl/lvgl
 - mittelab/nlohmann-json
 manifest_hash: 192b38167cb9454c321df96e00cef3279803583ea79270e9026cf2a640763ff9
-target: esp32
+target: esp32s3
 version: 3.0.0
