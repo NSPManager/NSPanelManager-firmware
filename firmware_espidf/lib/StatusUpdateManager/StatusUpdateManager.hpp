@@ -26,6 +26,19 @@ public:
   // Send the reboot state over MQTT and then reboot.
   static void reboot();
 
+  /**
+   * Send a status report now instead of waiting for the next periodic one, e.g. so that the
+   * manager sees new checksums at once. Runs on the calling task.
+   */
+  static void send_status_update();
+
+  /**
+   * Copy the installed firmware, LittleFS and GUI checksums from ConfigManager into the status
+   * report. Call it from the task that changed them, after changing them: the status report is
+   * sent from the esp_timer task, which must never read the ConfigManager strings while they change.
+   */
+  static void refresh_checksums();
+
 private:
   /**
    * Create a NSPanelStatusReport protobuf object and fill in all data. Then send it out over MQTT.
@@ -119,6 +132,13 @@ private:
 
   // Status report object used to send protobuf data to manager
   static inline NSPanelStatusReport _status_report;
+
+  // Strings the status report points at. The protobuf only holds pointers, so it must own what it
+  // points at for as long as it is packed. Guarded by _status_report_mutex.
+  static inline std::string _md5_firmware;
+  static inline std::string _md5_littlefs;
+  static inline std::string _md5_gui;
+  static inline std::string _ip_address;
 
   // Warning sent in _status_report when the display is not at its operating baud rate. Guarded by
   // _status_report_mutex; the text must outlive packing, since the protobuf only points at it.

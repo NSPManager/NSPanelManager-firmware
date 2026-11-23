@@ -54,9 +54,9 @@ private:
   static void _update_display_brightness();
 
   /**
-   * Go to the correct Nextion page and show/hide the background depending on user settings.
+   * Show the screen for the configured screensaver mode, with the optional parts the user has enabled, and set its brightness.
    */
-  static void _go_to_nextion_page();
+  static void _show_screen_for_mode();
 
   /**
    * Handle events from MQTT manager, such as new weather forecasts sent over MQTT

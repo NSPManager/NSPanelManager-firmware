@@ -1,9 +1,10 @@
+#include <BackgroundManager.hpp>
 #include <ConfigManager.hpp>
 #include <DisplayManager.hpp>
 // #include <EntitiesPage.hpp>
 // #include <EntityPage.hpp>
 #include <GUI_data.hpp>
-// #include <HomePage.hpp>
+#include <HomePage.hpp>
 #include <InterfaceManager.hpp>
 #include <LoadingPage.hpp>
 #include <MqttManager.hpp>
@@ -32,6 +33,11 @@ void InterfaceManager::init() {
     ESP_LOGE("InterfaceManager", "Failed to initialize display. Will not continue with InterfaceManager!");
     return;
   }
+  {
+    DisplayManager::Lock lock;
+    lv_timer_create(InterfaceManager::_screensaver_timer_callback, 1000, nullptr);
+  }
+  BackgroundManager::init(); // Shows the stored background image; it is checked for updates once the config is loaded
 
   std::string base_topic = "nspanel/";
   base_topic.append(WiFiManager::mac_string());
@@ -159,6 +165,13 @@ std::shared_ptr<PageHandlers> InterfaceManager::begin_page(void (*unshow)()) {
     xTaskNotify(InterfaceManager::_page_transitions_task, PAGE_TRANSITION_WIFI_POWER_SAVE, eSetBits);
   }
 
+  // Showing a page restarts the screensaver timeout, as the Nextion timer used to restart with its page.
+  // Without this, turning the screen on over MQTT after a long idle time would show the screensaver again at once.
+  if (DisplayManager::ready()) [[likely]] {
+    DisplayManager::Lock lock;
+    lv_display_trigger_activity(NULL);
+  }
+
   if (previous->unshow == nullptr) {
     delete previous; // First page since boot
   } else if (xQueueSend(InterfaceManager::_unshow_queue, &previous, 0) != pdTRUE) {
@@ -215,7 +228,7 @@ void InterfaceManager::show_default_page() {
   if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
     switch (config->default_page) {
     case NSPanelConfig__NSPanelDefaultPage::NSPANEL_CONFIG__NSPANEL_DEFAULT_PAGE__HOME: {
-      // HomePage::show();
+      HomePage::show();
       break;
     }
 
@@ -231,7 +244,7 @@ void InterfaceManager::show_default_page() {
 
     default: {
       ESP_LOGE("InterfaceManager", "Unknown default page %ld, will default to home page!", static_cast<uint32_t>(config->default_page));
-      // HomePage::show();
+      HomePage::show();
       break;
     }
     }
@@ -242,6 +255,33 @@ void InterfaceManager::show_default_page() {
 
 void InterfaceManager::request_show_home_page() {
   InterfaceManager::_request_page(PageRequest::HOME);
+}
+
+void InterfaceManager::_screensaver_timer_callback(lv_timer_t *timer) {
+  // Runs on the LVGL task with the LVGL lock held. Replaces the Nextion display's
+  // screensaver timer: LVGL resets its inactivity time on every touch.
+  uint32_t timeout = InterfaceManager::_screensaver_timeout_ms;
+  if (timeout == 0 || lv_display_get_inactive_time(NULL) < timeout) {
+    return; // Disabled (or no config loaded yet), or the screen was used recently
+  }
+  if (ScreensaverPage::showing() || LoadingPage::showing() || InterfaceManager::_screensaver_blocked.get()) {
+    return;
+  }
+
+  ESP_LOGD("InterfaceManager", "No touch for %lu ms, showing screensaver.", (unsigned long)timeout);
+  lv_display_trigger_activity(NULL); // Count from zero again, so this fires once per timeout
+  InterfaceManager::_request_page(PageRequest::SCREENSAVER);
+}
+
+void InterfaceManager::request_associate_with_manager() {
+  if (InterfaceManager::_page_transitions_task != NULL) [[likely]] {
+    xTaskNotify(InterfaceManager::_page_transitions_task, PAGE_TRANSITION_ASSOCIATE, eSetBits);
+  }
+}
+
+void InterfaceManager::request_screen_on() {
+  // Called from the LVGL task: the screen state is published by the page-transition task, not here.
+  InterfaceManager::_request_page(PageRequest::SCREEN_ON);
 }
 
 void InterfaceManager::request_show_entity_page(const std::string &state_topic) {
@@ -265,7 +305,7 @@ void InterfaceManager::_show_requested_entity_page() {
   if (ScreensaverPage::showing()) {
     std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
-      // Nextion::set_brightness_level(config->screen_dim_level, 1000);
+      DisplayManager::set_brightness(config->screen_dim_level);
     } else {
       ESP_LOGE("InterfaceManager", "Failed to get config while waking the screen for an entity page.");
     }
@@ -299,22 +339,24 @@ void InterfaceManager::_task_page_transitions(void *param) {
     if (requested & PAGE_TRANSITION_SHOW_PAGE) {
       switch (InterfaceManager::_requested_page.exchange(PageRequest::NONE)) {
       case PageRequest::HOME:
-        // HomePage::show();
+        HomePage::show();
         break;
 
       case PageRequest::SCREEN_ON: {
         std::shared_ptr<NSPanelConfig> config;
         if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
-          // Nextion::set_brightness_level(config->screen_dim_level, 1000);
+          DisplayManager::set_brightness(config->screen_dim_level);
           InterfaceManager::show_default_page();
         } else {
           ESP_LOGE("InterfaceManager", "Failed to get config while trying to turn screen on.");
         }
+        MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "1", strlen("1"), true);
         break;
       }
 
       case PageRequest::SCREENSAVER:
         ScreensaverPage::show();
+        MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "0", strlen("0"), true);
         break;
 
       case PageRequest::ENTITY_PAGE:
@@ -353,7 +395,8 @@ void InterfaceManager::_associate_with_manager_if_ready() {
       ScreensaverPage::init();
       InterfaceManager::_has_been_associated_with_manager = true;
     } else {
-      LoadingPage::set_loading_text("Updated checksums, rebooting.");
+      // Firmware was just updated: UpdateManager stores its checksum, then calls request_associate_with_manager().
+      LoadingPage::set_loading_text("Storing firmware checksum");
     }
   }
 }
@@ -409,7 +452,7 @@ void InterfaceManager::_update_manager_event_handler(void *arg, esp_event_base_t
   case updatemanager_event_t::FIRMWARE_UPDATE_STARTED: {
     std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-      // Nextion::set_brightness_level(config->screen_dim_level, 1000);
+      DisplayManager::set_brightness(config->screen_dim_level);
     }
     // If screensaver blocked is false we are currently not showing loading page. Show it.
     if (!InterfaceManager::_screensaver_blocked.get()) {
@@ -424,7 +467,7 @@ void InterfaceManager::_update_manager_event_handler(void *arg, esp_event_base_t
   case updatemanager_event_t::LITTLEFS_UPDATE_STARTED: {
     std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) {
-      // Nextion::set_brightness_level(config->screen_dim_level, 1000);
+      DisplayManager::set_brightness(config->screen_dim_level);
     }
     // If screensaver blocked is false we are currently not showing loading page. Show it.
     if (!InterfaceManager::_screensaver_blocked.get()) {
@@ -480,18 +523,18 @@ void InterfaceManager::_nspm_configmanager_event_handler(void *arg, esp_event_ba
   switch (event_id) {
   case nspm_configmanager_event::CONFIG_LOADED: {
     InterfaceManager::_nspm_config_loaded = true;
+    BackgroundManager::request_update();
     xTaskNotify(InterfaceManager::_page_transitions_task, PAGE_TRANSITION_ASSOCIATE, eSetBits);
 
     std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
-      if (InterfaceManager::_nspm_cur_config == nullptr || InterfaceManager::_nspm_cur_config->screensaver_activation_timeout != config->screensaver_activation_timeout) {
-        // if (Nextion::set_timer_value(GUI_HOME_PAGE::timer_screensaver_name, config->screensaver_activation_timeout, pdMS_TO_TICKS(250)) != ESP_OK) {
-        //   ESP_LOGE("InterfaceManager", "Failed to update timer value for screensaver timeout.");
-        // }
+      if (InterfaceManager::_screensaver_timeout_ms != (uint32_t)config->screensaver_activation_timeout) {
+        ESP_LOGI("InterfaceManager", "Screensaver activation timeout set to %ld ms.", config->screensaver_activation_timeout);
+        InterfaceManager::_screensaver_timeout_ms = config->screensaver_activation_timeout > 0 ? config->screensaver_activation_timeout : 0;
       }
 
       if (!ScreensaverPage::showing()) {
-        // Nextion::set_brightness_level(config->screen_dim_level, 1000);
+        DisplayManager::set_brightness(config->screen_dim_level);
       }
 
       // Update MQTT state topics
@@ -599,7 +642,7 @@ void InterfaceManager::_mqtt_event_handler(void *arg, esp_event_base_t event_bas
           }
           mutable_config->screen_dim_level = new_brightness;
           if (!ScreensaverPage::showing()) { // We are not on screensaver, update screen brightness
-            // Nextion::set_brightness_level(new_brightness, 1000);
+            DisplayManager::set_brightness(new_brightness);
           }
           std::string send_data = std::to_string(new_brightness).c_str();
           MqttManager::publish(std::string(InterfaceManager::_screen_brightness_state_topic), data.c_str(), send_data.length(), true);
@@ -616,7 +659,7 @@ void InterfaceManager::_mqtt_event_handler(void *arg, esp_event_base_t event_bas
           }
           mutable_config->screensaver_dim_level = new_brightness;
           if (ScreensaverPage::showing()) { // We are not on screensaver, update screen brightness
-            // Nextion::set_brightness_level(new_brightness, 1000);
+            DisplayManager::set_brightness(new_brightness);
           }
           std::string send_data = std::to_string(new_brightness).c_str();
           MqttManager::publish(std::string(InterfaceManager::_screensaver_brightness_state_topic), data.c_str(), send_data.length(), true);

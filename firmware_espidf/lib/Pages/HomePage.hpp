@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <esp_event.h>
 #include <esp_timer.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
 #include <memory>
 #include <optional>
 #include <protobuf_nspanel.pb-c.h>
@@ -41,6 +43,32 @@ public:
    */
   static void set_current_edit_mode(HomePageEditMode mode);
 
+  /**
+   * Touch input from the page's widgets. The LVGL callbacks only queue these
+   * (they run on the LVGL task with the LVGL lock held); _task_handle_input
+   * acts on them, as that may publish to MQTT and update RoomManager.
+   */
+  struct InputEvent {
+    enum Type : uint8_t {
+      CEILING_BUTTON_PRESSED,
+      CEILING_BUTTON_RELEASED,
+      TABLE_BUTTON_PRESSED,
+      TABLE_BUTTON_RELEASED,
+      BRIGHTNESS_SLIDER_SET,
+      COLOR_TEMPERATURE_SLIDER_SET,
+      NEXT_ROOM,
+      NEXT_MODE,
+      SHOW_SCENES,        // The room's scenes, or the global scenes when showing all rooms
+      SHOW_ROOM_ENTITIES, // The room's entities, only when showing a single room
+    } type;
+    int32_t value; // Slider value for the *_SLIDER_SET events
+  };
+
+  /**
+   * Queue touch input for _task_handle_input. Never blocks; input is dropped if the queue is full.
+   */
+  static void queue_input(InputEvent event);
+
 private:
   /**
    * Update displayed values, modes and components given the current room status
@@ -53,26 +81,31 @@ private:
   static void _handle_roommanager_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
   /**
-   * Handle events from Nextion, such as touch events:
-   */
-  static void _handle_nextion_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
-
-  /**
    * Handle event for a new config from MQTTManager:
    */
   static void _handle_config_update(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
   /**
+   * Act on queued touch input, see InputEvent.
+   */
+  static void _task_handle_input(void *param);
+
+  /**
+   * Toggle between showing the current room and all rooms, if the panel may control other rooms.
+   */
+  static void _go_to_next_mode();
+
+  /**
    * Handle "Master ceiling lights" button events
    * @param pressed: Is this a touch down or touch released event
    */
-  static void _handle_nextion_event_master_ceiling_lights_button(bool pressed);
+  static void _handle_master_ceiling_lights_button(bool pressed);
 
   /**
    * Handle "Master table lights" button events
    * @param pressed: Is this a touch down or touch released event
    */
-  static void _handle_nextion_event_master_table_lights_button(bool pressed);
+  static void _handle_master_table_lights_button(bool pressed);
 
   /**
    * Handle touch event on "Ceiling master button"
@@ -95,14 +128,14 @@ private:
   static void _handle_color_temperature_slider_event();
 
   /**
-   * Update the cached value for the "Brightness"-slider
+   * Set the cached value for the "Brightness"-slider from a value the user selected on it
    */
-  static void _update_brightness_slider_cache();
+  static void _update_brightness_slider_cache(int32_t value);
 
   /**
-   * Update the cached value for the "Color temperature"-slider
+   * Set the cached value for the "Color temperature"-slider from a value the user selected on it
    */
-  static void _update_color_temperature_slider_cache();
+  static void _update_color_temperature_slider_cache(int32_t value);
 
   /**
    * Function that will be called once the "Special mode" (ie. hold on table or ceiling lights buttons) timer triggers
@@ -154,6 +187,9 @@ private:
 
   // The actual handle to access the ESP timer that handles special mode deactivation
   static inline esp_timer_handle_t _special_mode_timeout_timer_handle = NULL;
+
+  // Touch input waiting for _task_handle_input
+  static inline QueueHandle_t _input_queue = NULL;
 
   // The default room from the last config this page saw, used to check if the "default room" has changed when a new config is received.
   // Written from whichever task calls show() (default loop, MQTT task, RoomManager loop) and from the config handler on the default

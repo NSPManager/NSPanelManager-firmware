@@ -1,4 +1,5 @@
 #include <ConfigManager.hpp>
+#include <InterfaceManager.hpp>
 #include <LittleFS.hpp>
 #include <LoadingPage.hpp>
 #include <MqttManager.hpp>
@@ -247,6 +248,7 @@ void UpdateManager::update_gui(void *param) {
     std::string gui_md5 = std::string((char *)data.data(), data.size());
     ESP_LOGI("UpdateManager", "Got new GUI md5 checksum from manager: %s", gui_md5.c_str());
     ConfigManager::md5_gui = gui_md5;
+    StatusUpdateManager::refresh_checksums();
     ConfigManager::save_config();
 
     ESP_LOGI("UpdateManager", "GUI file successfully updated and new md5 checksum stored. Will reboot in 5 seconds.");
@@ -289,6 +291,7 @@ void UpdateManager::update_firmware(void *param) {
         ESP_LOGI("UpdateManager", "This is a force update, clearing stored checksum for firmware and littlefs.");
         ConfigManager::md5_data_file = "";
         ConfigManager::md5_firmware = "";
+        StatusUpdateManager::refresh_checksums();
         ConfigManager::save_config();
       }
       ESP_LOGI("UpdateManager", "New firmware available. Will update OTA.");
@@ -357,6 +360,7 @@ esp_err_t UpdateManager::update_littlefs(void *param, bool force_update) {
       if (result == ESP_OK) {
         ESP_LOGI("UpdateManager", "LittleFS update complete, will save new MD5 checksum.");
         ConfigManager::md5_data_file = md5_string;
+        StatusUpdateManager::refresh_checksums();
         // Save the existing config loaded into memory into the new LittleFS partition.
         if (LittleFS::mount() != ESP_OK || ConfigManager::save_config() != ESP_OK) {
           ESP_LOGE("UpdateManager", "Failed to save settings to the new LittleFS image.");
@@ -394,6 +398,7 @@ esp_err_t UpdateManager::_restore_config_after_failed_littlefs_update() {
   LittleFS::unmount(); // In case it is mounted; format() needs it unmounted.
   // Clear the stored checksum so that the manager sees LittleFS as out of date and offers it again.
   ConfigManager::md5_data_file = "";
+  StatusUpdateManager::refresh_checksums();
   if (LittleFS::format() != ESP_OK || LittleFS::mount() != ESP_OK || ConfigManager::save_config() != ESP_OK) {
     ESP_LOGE("UpdateManager", "Failed to write the settings back to LittleFS. They are only in RAM now.");
     return ESP_FAIL;
@@ -440,14 +445,16 @@ void UpdateManager::update_internal_firmware_checksum() {
   ConfigManager::has_updated = false;
   // Save the existing config loaded into memory into the new LittleFS partition.
   if (ConfigManager::save_config() == ESP_OK) {
-    ESP_LOGI("UpdateManager", "Updated stored firmware checksum to %s. Will reboot.", md5_string.c_str());
+    ESP_LOGI("UpdateManager", "Updated stored firmware checksum to %s.", md5_string.c_str());
   } else {
     ESP_LOGE("UpdateManager", "Failed to save config!");
   }
 
-  // Always reboot: InterfaceManager stays on the "Updated checksums, rebooting." page while has_updated was set.
-  vTaskDelay(pdTICKS_TO_MS(10));
-  StatusUpdateManager::reboot();
+  // No reboot needed: the manager takes the installed checksums from every status report, so
+  // send one now with the new checksum. Then leave the loading page, which waited for this.
+  StatusUpdateManager::refresh_checksums();
+  StatusUpdateManager::send_status_update();
+  InterfaceManager::request_associate_with_manager();
 }
 
 esp_err_t UpdateManager::_setup_http_client(esp_http_client_handle_t *client, std::vector<uint8_t> *return_data, const char *download_url, int64_t offset, int64_t length) {

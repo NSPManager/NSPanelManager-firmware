@@ -4,6 +4,7 @@
 #include <atomic>
 #include <esp_event.h>
 #include <functional>
+#include <lvgl.h>
 #include <memory>
 #include <protobuf_nspanel.pb-c.h>
 
@@ -62,6 +63,19 @@ public:
    * Wakes the screen first if the screensaver is showing. Safe to call from any task.
    */
   static void request_show_entity_page(const std::string &state_topic);
+
+  /**
+   * @brief Turn the screen on: restore its brightness and show the default page, from the page-transition task.
+   * Used when the screensaver is touched. Safe to call from any task, including the LVGL task.
+   */
+  static void request_screen_on();
+
+  /**
+   * @brief Leave the loading page for the default page once the config and home page status are loaded.
+   * Call when something the loading page waited for has finished, e.g. storing the checksum of newly
+   * installed firmware. Safe to call from any task.
+   */
+  static void request_associate_with_manager();
 
 private:
   // Pages that can be requested from the page-transition task. Only the latest
@@ -153,6 +167,15 @@ private:
   // Done on this task so that every caller of begin_page() stays non-blocking and the mode is always
   // decided from the page that is current when it runs, however the transitions interleave.
   static constexpr uint32_t PAGE_TRANSITION_WIFI_POWER_SAVE = 1 << 2;
+
+  /**
+   * Show the screensaver once the screen has not been touched for the configured timeout.
+   * An lv_timer, so it runs on the LVGL task.
+   */
+  static void _screensaver_timer_callback(lv_timer_t *timer);
+
+  // Screensaver activation timeout from the config, in milliseconds. 0 disables the screensaver timeout.
+  static inline std::atomic<uint32_t> _screensaver_timeout_ms = 0;
 
   // Vars
   // Queue of unshow function pointer to call from _task_unshow_page

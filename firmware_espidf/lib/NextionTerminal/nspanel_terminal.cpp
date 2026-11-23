@@ -282,9 +282,6 @@ void NSPanelDisplay::lvgl_flush_cb_(lv_display_t *disp, const lv_area_t *area, u
     self->draw_pixels_at(int(area->x1), int(area->y1), w, h, px_map, size_t(w) * 2u);
   }
 
-  ESP_LOGI(TAG, "flush %d,%d %dx%d stream=%d", int(area->x1), int(area->y1),
-           int(lv_area_get_width(area)), int(lv_area_get_height(area)),
-           self ? int(self->state_ == State::STREAM) : -1);
   lv_display_flush_ready(disp);
 }
 

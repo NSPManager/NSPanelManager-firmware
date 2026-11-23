@@ -40,9 +40,7 @@ void StatusUpdateManager::init() {
   StatusUpdateManager::_status_report.rssi = 0;
   StatusUpdateManager::_status_report.temperature = 0;
   StatusUpdateManager::_status_report.mac_address = (char *)WiFiManager::mac_string();
-  StatusUpdateManager::_status_report.md5_firmware = (char *)ConfigManager::md5_firmware.c_str();
-  StatusUpdateManager::_status_report.md5_littlefs = (char *)ConfigManager::md5_data_file.c_str();
-  StatusUpdateManager::_status_report.md5_tft_gui = (char *)ConfigManager::md5_gui.c_str();
+  StatusUpdateManager::refresh_checksums();
   nspanel_warning__init(&StatusUpdateManager::_link_baud_warning);
   StatusUpdateManager::_link_baud_warning.level = NSPANEL_WARNING_LEVEL__WARNING;
 #if defined(BOARD_CUSTOM)
@@ -136,6 +134,24 @@ void StatusUpdateManager::reboot() {
   PanelRestart::restart();
 }
 
+void StatusUpdateManager::send_status_update() {
+  StatusUpdateManager::_send_status_update(NULL);
+}
+
+void StatusUpdateManager::refresh_checksums() {
+  if (xSemaphoreTake(StatusUpdateManager::_status_report_mutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
+    ESP_LOGE("StatusUpdateManager", "Failed to get _status_report_mutex when updating checksums! The manager will see the old checksums.");
+    return;
+  }
+  StatusUpdateManager::_md5_firmware = ConfigManager::md5_firmware;
+  StatusUpdateManager::_md5_littlefs = ConfigManager::md5_data_file;
+  StatusUpdateManager::_md5_gui = ConfigManager::md5_gui;
+  StatusUpdateManager::_status_report.md5_firmware = (char *)StatusUpdateManager::_md5_firmware.c_str();
+  StatusUpdateManager::_status_report.md5_littlefs = (char *)StatusUpdateManager::_md5_littlefs.c_str();
+  StatusUpdateManager::_status_report.md5_tft_gui = (char *)StatusUpdateManager::_md5_gui.c_str();
+  xSemaphoreGive(StatusUpdateManager::_status_report_mutex);
+}
+
 void StatusUpdateManager::_send_status_update(void *arg) {
   int current_wifi_rssi;
   if (esp_wifi_sta_get_rssi(&current_wifi_rssi) == ESP_OK) [[likely]] {
@@ -152,7 +168,8 @@ void StatusUpdateManager::_send_status_update(void *arg) {
 
     size_t heap_used_pct = (total_heap_used / total_heap_size) * 100;
     StatusUpdateManager::_status_report.heap_used_pct = heap_used_pct;
-    StatusUpdateManager::_status_report.ip_address = (char *)WiFiManager::ip_string().c_str();
+    StatusUpdateManager::_ip_address = WiFiManager::ip_string();
+    StatusUpdateManager::_status_report.ip_address = (char *)StatusUpdateManager::_ip_address.c_str();
     StatusUpdateManager::_status_report.temperature = StatusUpdateManager::_measured_average_temperature.get();
 #if defined(BOARD_CUSTOM)
     StatusUpdateManager::_status_report.humidity = StatusUpdateManager::_measured_average_humidity.get();

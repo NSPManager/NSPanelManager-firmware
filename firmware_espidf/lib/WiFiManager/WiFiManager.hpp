@@ -1,7 +1,6 @@
 #pragma once
 #include <MutexWrapper.hpp>
 #include <atomic>
-#include <dns_server.hpp>
 #include <esp_wifi.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -94,7 +93,6 @@ private:
   static inline TimerHandle_t _fallback_timer;
 
   // DNS Server to handle captive portal
-  static inline espp::DnsServer *_dns_server = nullptr;
 
   // WiFi initialization config
   static inline wifi_init_config_t _init_config;

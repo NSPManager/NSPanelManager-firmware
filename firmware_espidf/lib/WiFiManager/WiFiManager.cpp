@@ -1,3 +1,4 @@
+#include <CaptivePortalDns.hpp>
 #include <ConfigManager.hpp>
 #include <WiFiManager.hpp>
 #include <esp_event.h>
@@ -137,19 +138,8 @@ void WiFiManager::start_ap(std::string *ssid) {
   sprintf(ip_addr_str, IPSTR, IP2STR(&ip_info.ip));
   ESP_LOGI("WiFiManager", "SoftAP started with IP %s", ip_addr_str);
 
-  if (WiFiManager::_dns_server == nullptr) {
-    espp::DnsServer::Config dns_config{
-        .ip_address = "192.168.4.1",
-        .log_level = espp::Logger::Verbosity::INFO,
-    };
-
-    WiFiManager::_dns_server = new espp::DnsServer(dns_config);
-    std::error_code ec;
-    if (WiFiManager::_dns_server->start(ec)) {
-      ESP_LOGI("WiFiManager", "DNS Server for captive portal popup started.");
-    } else {
-      ESP_LOGE("WiFiManager", "Failed to start DNS server. Captive portal popup will not work in client device. Error code: %d", ec.value());
-    }
+  if (CaptivePortalDns::start(ip_info.ip) != ESP_OK) {
+    ESP_LOGE("WiFiManager", "Failed to start DNS server. Captive portal popup will not work in client device.");
   }
 
   std::string captive_portal_url = "http://";
@@ -189,9 +179,7 @@ void WiFiManager::_event_handler(void *arg, esp_event_base_t event_base, int32_t
       wifi_event_sta_connected_t *connected = (wifi_event_sta_connected_t *)event_data;
       ESP_LOGI("WiFiManager", "Connected to WiFi, AP " MACSTR " on channel %d.", MAC2STR(connected->bssid), connected->channel);
       WiFiManager::_connected = true;
-      if (WiFiManager::_dns_server != nullptr) {
-        WiFiManager::_dns_server->stop();
-      }
+      CaptivePortalDns::stop();
       break;
     }
 
