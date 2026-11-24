@@ -5,6 +5,7 @@
 #include <EntitiesPage.hpp>
 #include <EntityPage.hpp>
 #include <HomePage.hpp>
+#include <IconPackManager.hpp>
 #include <InterfaceManager.hpp>
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
@@ -206,7 +207,9 @@ void build_grid(int32_t page_type) {
   const int32_t box_w = (GRID_W - (GRID_COLUMNS - 1) * gap) / GRID_COLUMNS;
   const int32_t box_h = (GRID_H - (rows - 1) * gap) / rows;
   const bool icon_above_name = page_type == 4;
-  const lv_font_t *icon_font = icon_above_name ? &font_entity_icons_48 : &font_entity_icons_28;
+  // Custom icons from the manager's icon pack, falling back to the built-in icons
+  const lv_font_t *icon_font = icon_above_name ? IconPackManager::font(&font_entity_icons_48, IconPackManager::ENTITY_ICON_SIZE_LARGE)
+                                               : IconPackManager::font(&font_entity_icons_28, IconPackManager::ENTITY_ICON_SIZE_SMALL);
   const lv_font_t *name_font = page_type == 12 ? &font_screensaver_text_15 : &font_screensaver_text_18;
 
   for (int32_t i = 0; i < page_type; i++) {
@@ -247,6 +250,9 @@ void set_text(lv_obj_t *label, const char *text) {
 }
 
 void show_slot(Slot &slot, const NSPanelRoomEntitiesPage__EntitySlot *data) {
+  if (data != nullptr) {
+    IconPackManager::icon_shown(data->icon);
+  }
   set_text(slot.icon, data != nullptr ? data->icon : "");
   set_text(slot.name, data != nullptr ? data->name : "");
   slot.icon_color = data != nullptr ? color_from_rgb565(data->pco) : lv_color_hex(COLOR_FOREGROUND);
@@ -323,6 +329,17 @@ void EntitiesPage::unshow() {
   EntitiesPage::_save_scene = false;
 }
 
+void EntitiesPage::refresh_icons() {
+  if (ui.screen == nullptr) {
+    return;
+  }
+  build_grid(0); // No label may keep using the old pack's fonts, which are freed after this
+  std::shared_ptr<NSPanelRoomEntitiesPage> page = EntitiesPage::_current_entities_page.get();
+  if (page != nullptr && InterfaceManager::is_current_page(EntitiesPage::unshow)) {
+    EntitiesPage::_update_display(page); // Builds the slots again, with the new fonts
+  }
+}
+
 void EntitiesPage::queue_input(InputEvent event) {
   if (EntitiesPage::_input_queue != NULL && xQueueSend(EntitiesPage::_input_queue, &event, 0) != pdTRUE) {
     ESP_LOGW("EntitiesPage", "Input queue full, dropped touch input.");
@@ -378,7 +395,9 @@ void EntitiesPage::_task_handle_input(void *param) {
     if (xQueueReceive(EntitiesPage::_input_queue, &event, portMAX_DELAY) != pdTRUE) {
       continue;
     }
+    ESP_LOGD("EntitiesPage", "Input %d, slot %u.", (int)event.type, event.slot);
     if (!InterfaceManager::is_current_page(EntitiesPage::unshow)) {
+      ESP_LOGD("EntitiesPage", "Ignoring input, the entities page is no longer shown.");
       continue; // Touched just before another page was shown
     }
 
@@ -403,8 +422,10 @@ void EntitiesPage::_task_handle_input(void *param) {
     }
     NSPanelRoomEntitiesPage__EntitySlot *entity = EntitiesPage::_get_entity_in_slot(page, event.slot);
     if (entity == nullptr) {
+      ESP_LOGD("EntitiesPage", "No entity in slot %u.", event.slot);
       continue; // Empty slot
     }
+    ESP_LOGD("EntitiesPage", "Slot %u: '%s', type %d, state topic '%s'.", event.slot, entity->name, (int)entity->type, entity->mqtt_state_topic);
 
     bool scenes = EntitiesPage::_display_type == display_type_t::SCENES || EntitiesPage::_display_type == display_type_t::GLOBAL_SCENES;
     if (scenes) {
@@ -438,8 +459,19 @@ void EntitiesPage::_task_handle_input(void *param) {
         EntitiesPage::_handle_entity_button_pressed(page, event.slot);
         break;
       case InputEvent::NAME_CLICKED:
-        if (entity->mqtt_state_topic[0] != '\0') {
-          EntityPage::show(entity->mqtt_state_topic);
+        switch (entity->type) {
+        case NSPANEL_ROOM_ENTITIES_PAGE__ENTITY_SLOT__ENTITY_TYPE__ENTITY_TYPE_LIGHT:
+        case NSPANEL_ROOM_ENTITIES_PAGE__ENTITY_SLOT__ENTITY_TYPE__ENTITY_TYPE_THERMOSTAT:
+        case NSPANEL_ROOM_ENTITIES_PAGE__ENTITY_SLOT__ENTITY_TYPE__ENTITY_TYPE_COVER:
+        case NSPANEL_ROOM_ENTITIES_PAGE__ENTITY_SLOT__ENTITY_TYPE__ENTITY_TYPE_MEDIA_PLAYER:
+          if (entity->mqtt_state_topic[0] != '\0') {
+            EntityPage::show(entity->mqtt_state_topic);
+          }
+          break;
+        default:
+          // Switches, buttons and the like can only be toggled, so they have no page of their own.
+          EntitiesPage::_handle_entity_button_pressed(page, event.slot);
+          break;
         }
         break;
       default:

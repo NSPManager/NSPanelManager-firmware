@@ -1,25 +1,32 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
 #include <esp_event.h>
+#include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
 #include <freertos/semphr.h>
 #include <memory>
+#include <protobuf_nspanel.pb-c.h>
 #include <protobuf_nspanel_entity.pb-c.h>
 #include <string>
 
 /*
- * The page that will handle control of individual entities
+ * The page that controls a single entity: a light (brightness, colour temperature or colour), a
+ * thermostat (set temperature and its options) or a cover (open/stop/close, presets, position and
+ * tilt). It follows the entity's state topic and draws the view for the entity's type. Entities
+ * that can only be toggled, such as switches, have no page: the entities page toggles them.
  */
 class EntityPage {
 public:
   /**
-   * Show the loading page
+   * Show the page for the entity whose state is published on the given topic.
    */
   static void show(std::string state_topic);
 
   /**
-   * Unshow the loading page
+   * The page has been replaced by another page.
    */
   static void unshow();
 
@@ -34,6 +41,57 @@ public:
    */
   static std::string get_current_state_topic();
 
+  /**
+   * Touch input from the page's widgets. The LVGL callbacks only queue these (they run on the LVGL
+   * task with the LVGL lock held); _task_handle_input acts on them, as that publishes to MQTT and
+   * switches pages.
+   */
+  struct InputEvent {
+    enum Type : uint8_t {
+      BACK,
+      MODE,               // Header button: light colour temperature/colour, cover position/tilt
+      SLIDER_SET,         // A slider was released. index: which Slider, value: its value
+      THERMOSTAT_UP,      // Raise the set temperature, or the next value of the option being edited
+      THERMOSTAT_DOWN,    // Lower the set temperature, or the previous value of the option being edited
+      THERMOSTAT_OPTION,  // index: option tapped
+      THERMOSTAT_SEND_SET_TEMPERATURE, // The set temperature has not changed for a moment: send it
+      COVER_OPEN,
+      COVER_STOP,
+      COVER_CLOSE,
+      COVER_PRESET, // index: preset 0-2
+    } type;
+    uint8_t index;
+    int16_t value;
+  };
+
+  enum Slider : uint8_t {
+    LIGHT_BRIGHTNESS,
+    LIGHT_COLOR_TEMPERATURE_OR_SATURATION,
+    LIGHT_HUE,
+    COVER_POSITION, // Position or tilt, after the cover's edit mode
+  };
+
+  /**
+   * Queue touch input for _task_handle_input. Never blocks; input is dropped if the queue is full.
+   */
+  static void queue_input(InputEvent event);
+
+  /**
+   * The icon pack changed: draw thermostat option icons with its font. Called with the LVGL lock
+   * held, see IconPackManager::add_on_change().
+   */
+  static void refresh_icons();
+
+  // What the light and cover views edit, switched with the header's mode button.
+  enum class LightMode : uint8_t {
+    COLOR_TEMPERATURE,
+    COLOR,
+  };
+  enum class CoverMode : uint8_t {
+    POSITION,
+    TILT,
+  };
+
 private:
   /**
    * Handle events from MQTT, such as new state events:
@@ -41,54 +99,37 @@ private:
   static void _handle_mqtt_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
   /**
-   * Handle events from Nextion, such as touch events:
-   */
-  static void _handle_nextion_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
-
-  /**
-   * Handle event for a new config from MQTTManager:
-   */
-  static void _handle_config_update(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
-
-  /**
-   * Delegate to the correct update method
+   * Draw the view for the current state. Takes the LVGL lock.
    */
   static void _update_display();
 
   /**
-   * Delegate to the correct touch method
+   * Act on queued touch input, see InputEvent.
    */
-  static void _handle_touch_event(const std::shared_ptr<NSPanelEntityState> &state, uint16_t component_id, bool pressed);
+  static void _task_handle_input(void *param);
+  static void _handle_light_input(const std::shared_ptr<NSPanelEntityState> &state, const InputEvent &event);
+  static void _handle_thermostat_input(const std::shared_ptr<NSPanelEntityState> &state, const InputEvent &event);
+  static void _handle_cover_input(const std::shared_ptr<NSPanelEntityState> &state, const InputEvent &event);
 
-  /*
-   * Update displayed page and value of "Light" page.
+  /**
+   * Go back to the entities page, sending a thermostat change that has not been sent yet.
    */
-  static void _update_display_light();
+  static void _go_back();
 
-  /*
-   * Handle touch event for "Light" page.
+  /**
+   * Publish a command to the manager.
    */
-  static void _handle_touch_event_light(const std::shared_ptr<NSPanelEntityState> &state, uint16_t component_id, bool pressed);
+  static void _send_command(NSPanelMQTTManagerCommand *command);
 
-  /*
-   * Update displayed page and value of "Thermostat" page.
-   */
-  static void _update_display_thermostat();
+  static void _send_light_command(const NSPanelEntityState__Light *light, Slider slider, int32_t value);
 
-  /*
-   * Update displayed page and value of "Cover" page.
-   */
-  static void _update_display_cover();
+  // Send the option being edited, or the set temperature if it was changed, and stop editing.
+  static void _send_thermostat_option_command(const std::shared_ptr<NSPanelEntityState> &state);
+  static void _send_thermostat_setpoint_command(const std::shared_ptr<NSPanelEntityState> &state);
+  static void _set_temperature_timer_callback(void *arg);
 
-  /*
-   * Handle Nextion string event.
-   */
-  static void _handle_string_event_thermostat(const std::shared_ptr<NSPanelEntityState> &state, char *data);
-
-  /*
-   * Update displayed page and value of "Media player" page.
-   */
-  static void _update_display_media_player();
+  static void _send_cover_action(const NSPanelEntityState__Cover *cover, NSPanelMQTTManagerCommand__CoverCommand__Action action);
+  static void _send_cover_position(const NSPanelEntityState__Cover *cover, bool tilt, int32_t position);
 
   /**
    * properly delete pointer and clear old data when shared_ptr expires
@@ -96,50 +137,45 @@ private:
   static void _delete_nspanel_entity_state_object(NSPanelEntityState *object);
 
   // Get a shared_ptr to the current state of the entity.
-  static inline std::shared_ptr<NSPanelEntityState> _get_current_state();
-
-  // If currently editing, check what has changed and sent the new setting to the manager to apply setting.
-  static void _send_thermostat_option_command();
-
-  // Send new set temp for a thermostat
-  static void _send_thermostat_setpoint_command();
-
-  // What is the page currently showing
-  enum _entity_page_modes {
-    LIGHT_COLOR_TEMPERATURE,
-    LIGHT_RGB,
-    THERMOSTAT,
-    MEDIA_PLAYER,
-    COVER,
-  };
-  static inline std::atomic<_entity_page_modes> _current_mode;
+  static std::shared_ptr<NSPanelEntityState> _get_current_state();
 
   // Vars
-  // The state topic of the given entity
+  // The state topic of the given entity. Written by show() only; guarded by _current_state_mutex.
   static inline std::string _current_entity_mqtt_topic;
+  static inline bool _mqtt_handler_registered = false;
 
-  // Are we currently displaying the page?
-  static inline std::atomic<bool> _currently_showing = false;
+  // Light: what the second slider edits. Taken from the light's state when its first state arrives.
+  static inline std::atomic<LightMode> _light_mode = LightMode::COLOR_TEMPERATURE;
+  // Cover: what the slider and buttons control.
+  static inline std::atomic<CoverMode> _cover_mode = CoverMode::POSITION;
+  // Set until the first state of the entity shown has arrived.
+  static inline std::atomic<bool> _waiting_for_first_state = true;
 
-  // The last name to be updated on the display.
-  static inline std::string _last_displayed_name = "";
+  // Thermostat. Only used by the input task, apart from the display, which reads them under the
+  // LVGL lock after the input task changed them. Editing an option cycles through its values
+  // locally; the value is sent when another option is tapped, the same option is tapped again, or
+  // the page is left.
+  static inline int8_t _editing_option = -1; // Index of the option being edited, -1 when none
+  static inline int8_t _editing_value = -1;  // Index of the value selected for it
+  // The set temperature asked for with up/down, valid while _set_temperature_changed. It is sent
+  // SET_TEMPERATURE_SEND_DELAY after the last tap, and shown until the thermostat reports it.
+  static inline float _requested_set_temperature = 0;
+  static inline bool _set_temperature_changed = false;
+  static inline esp_timer_handle_t _set_temperature_timer = NULL;
 
-  // Light specific variables
-  static inline uint8_t _last_brightness = 0;
-  static inline uint8_t _last_kelvin_pct = 0;
-  static inline uint8_t _last_hue = 0;
-  static inline uint8_t _last_saturation_pct = 0;
+  // Cover: the last position asked for from this page, shown on the slider until the cover
+  // reports that it reached it, or until the request times out.
+  static inline std::atomic<int32_t> _pending_position = -1;
+  static inline std::atomic<int64_t> _pending_position_requested_at = 0;
+  static constexpr int64_t _pending_position_timeout_us = 5 * 1000 * 1000;
 
-  // Thermostat specific variables
-  static inline std::atomic<bool> _is_currently_editing = false;
-  static inline uint8_t _selected_thermostat_option_index = 0;
-
-  // Written by the MQTT handler, read by the Nextion event loop. Never dereference _current_state directly:
+  // Written by the MQTT handler, read by the input task. Never dereference _current_state directly:
   // `->` on a shared_ptr returns a raw pointer and holds no reference, so a new state arriving mid-read can
   // free the one you are reading. Call _get_current_state() once per entry point, keep that copy for the
   // whole operation, and pass it down by const&. It returns nullptr until the first state has arrived.
   static inline SemaphoreHandle_t _current_state_mutex = NULL;
   static inline std::shared_ptr<NSPanelEntityState> _current_state;
 
-  static inline portMUX_TYPE _entity_page_spinlock = portMUX_INITIALIZER_UNLOCKED;
+  // Touch input waiting for _task_handle_input
+  static inline QueueHandle_t _input_queue = NULL;
 };

@@ -50,6 +50,12 @@ public:
    */
   static void queue_input(InputEvent event);
 
+  /**
+   * The icon pack changed: rebuild the slots with its fonts, and redraw the page if it is shown.
+   * Called with the LVGL lock held, see IconPackManager::init().
+   */
+  static void refresh_icons();
+
 private:
   /**
    * Show the given entities page. Runs on the RoomManager event loop.

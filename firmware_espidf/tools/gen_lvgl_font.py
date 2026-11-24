@@ -74,6 +74,11 @@ def render_svg_glyph(font, ch, size, svg_path, reference):
     }
 
 
+def parse_char(text):
+    # A character for --map and --svg: itself, or U+XXXX for characters that are separators there (",", "=").
+    return chr(int(text[2:], 16)) if text.startswith("U+") and len(text) > 2 else text
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--font", required=True)
@@ -83,7 +88,8 @@ def main():
     parser.add_argument(
         "--map",
         default="",
-        help="Store TTF glyphs as other characters, e.g. A=F05A8,B=F0594: 'A' then renders as icon U+F05A8",
+        help="Store TTF glyphs as other characters, e.g. A=F05A8,B=F0594: 'A' then renders as icon U+F05A8. "
+        "Write ',' and '=' as U+002C and U+003D.",
     )
     parser.add_argument(
         "--svg",
@@ -102,10 +108,11 @@ def main():
             sources[chr(code)] = chr(code)
     for part in filter(None, args.map.split(",")):
         ch, _, code = part.partition("=")
-        sources[ch] = chr(int(code, 16))
+        sources[parse_char(ch)] = chr(int(code, 16))
     svgs = {}
     for part in filter(None, args.svg.split(",")):
         ch, _, rest = part.partition("=")
+        ch = parse_char(ch)
         svg_path, _, reference = rest.rpartition(":")
         svgs[ch] = (svg_path, chr(int(reference, 16)))
         sources[ch] = ch

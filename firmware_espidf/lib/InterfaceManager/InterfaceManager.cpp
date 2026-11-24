@@ -1,8 +1,10 @@
 #include <BackgroundManager.hpp>
+#include <IconPackManager.hpp>
+#include <ManagerFile.hpp>
 #include <ConfigManager.hpp>
 #include <DisplayManager.hpp>
 #include <EntitiesPage.hpp>
-// #include <EntityPage.hpp>
+#include <EntityPage.hpp>
 #include <GUI_data.hpp>
 #include <HomePage.hpp>
 #include <InterfaceManager.hpp>
@@ -37,7 +39,11 @@ void InterfaceManager::init() {
     DisplayManager::Lock lock;
     lv_timer_create(InterfaceManager::_screensaver_timer_callback, 1000, nullptr);
   }
-  BackgroundManager::init(); // Shows the stored background image; it is checked for updates once the config is loaded
+  // Show the stored background image and icon pack. Both are checked for updates once the config is loaded.
+  BackgroundManager::init();
+  IconPackManager::add_on_change(EntitiesPage::refresh_icons);
+  IconPackManager::add_on_change(EntityPage::refresh_icons);
+  IconPackManager::init();
 
   std::string base_topic = "nspanel/";
   base_topic.append(WiFiManager::mac_string());
@@ -312,16 +318,11 @@ void InterfaceManager::_show_requested_entity_page() {
     MqttManager::publish(InterfaceManager::_screen_on_off_state_topic, "1", strlen("1"), true);
   }
 
-  // if (InterfaceManager::is_current_page(EntityPage::unshow)) {
-  //   if (EntityPage::get_current_state_topic() == *topic) {
-  //     ESP_LOGD("InterfaceManager", "Entity page for %s is already showing.", topic->c_str());
-  //     return;
-  //   }
-  //   // EntityPage only calls begin_page() when the new entity's state arrives. The page is still current
-  //   // then, so begin_page() would skip the old entity's unshow: unshow it here instead.
-  //   // EntityPage::unshow();
-  // }
-  // EntityPage::show(*topic);
+  if (InterfaceManager::is_current_page(EntityPage::unshow) && EntityPage::get_current_state_topic() == *topic) {
+    ESP_LOGD("InterfaceManager", "Entity page for %s is already showing.", topic->c_str());
+    return;
+  }
+  EntityPage::show(*topic); // Also switches from another entity's page
 }
 
 void InterfaceManager::_request_page(PageRequest page) {
@@ -523,7 +524,7 @@ void InterfaceManager::_nspm_configmanager_event_handler(void *arg, esp_event_ba
   switch (event_id) {
   case nspm_configmanager_event::CONFIG_LOADED: {
     InterfaceManager::_nspm_config_loaded = true;
-    BackgroundManager::request_update();
+    ManagerFile::request_updates(); // Background image and icon pack
     xTaskNotify(InterfaceManager::_page_transitions_task, PAGE_TRANSITION_ASSOCIATE, eSetBits);
 
     std::shared_ptr<NSPanelConfig> config;
