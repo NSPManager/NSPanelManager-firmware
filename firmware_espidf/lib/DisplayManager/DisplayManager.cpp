@@ -1,5 +1,7 @@
 #include <ConfigManager.hpp>
 #include <DisplayManager.hpp>
+#include <LoadingPage.hpp>
+#include <StatusUpdateManager.hpp>
 #include <driver/gpio.h>
 #include <driver/uart.h>
 #include <esp_log.h>
@@ -35,10 +37,32 @@ esp_err_t DisplayManager::init() {
     return err;
   }
 
+  DisplayManager::_orientation = ConfigManager::display_orientation;
+  switch (DisplayManager::_orientation) {
+  case ConfigManager::DisplayOrientation::PORTRAIT:
+    DisplayManager::_width = PORTRAIT_WIDTH;
+    DisplayManager::_height = PORTRAIT_HEIGHT;
+    ESP_LOGI("DisplayManager", "Display orientation: portrait, %ux%u.", DisplayManager::_width, DisplayManager::_height);
+    ESP_LOGW("DisplayManager", "There are no portrait page layouts yet: pages are laid out for landscape.");
+    break;
+  case ConfigManager::DisplayOrientation::LANDSCAPE_MIRRORED:
+    DisplayManager::_width = LANDSCAPE_WIDTH;
+    DisplayManager::_height = LANDSCAPE_HEIGHT;
+    ESP_LOGW("DisplayManager", "Display orientation: mirrored landscape, %ux%u. Mirroring is not supported yet, shown as landscape.",
+             DisplayManager::_width, DisplayManager::_height);
+    break;
+  case ConfigManager::DisplayOrientation::LANDSCAPE:
+  default:
+    DisplayManager::_width = LANDSCAPE_WIDTH;
+    DisplayManager::_height = LANDSCAPE_HEIGHT;
+    ESP_LOGI("DisplayManager", "Display orientation: landscape, %ux%u.", DisplayManager::_width, DisplayManager::_height);
+    break;
+  }
+
   nspanel_terminal::NSPanelDisplay::Config config = {
       .uart_port = DISPLAY_UART,
-      .width = WIDTH,
-      .height = HEIGHT,
+      .width = DisplayManager::_width,
+      .height = DisplayManager::_height,
       .initial_brightness = 100,
       .tft_url = "",
   };
@@ -46,12 +70,17 @@ esp_err_t DisplayManager::init() {
   lv_init();
   lv_tick_set_cb([]() -> uint32_t { return (uint32_t)(esp_timer_get_time() / 1000); });
 
-  lv_display_t *display = lv_display_create(WIDTH, HEIGHT);
+  lv_display_t *display = lv_display_create(DisplayManager::_width, DisplayManager::_height);
   if (display == nullptr) {
     ESP_LOGE("DisplayManager", "Failed to create LVGL display!");
     return ESP_ERR_NO_MEM;
   }
   lv_display_set_buffers(display, DisplayManager::_display_buf, NULL, sizeof(DisplayManager::_display_buf), LV_DISPLAY_RENDER_MODE_PARTIAL);
+  if (lv_display_get_buf_active(display) == nullptr) {
+    // lv_display_set_buffers() returns nothing: a rejected buffer only shows as a display with no buffer.
+    ESP_LOGE("DisplayManager", "LVGL rejected the draw buffer at %p (alignment?). Nothing can be drawn!", (void *)DisplayManager::_display_buf);
+    return ESP_FAIL;
+  }
   lv_display_set_color_format(display, LV_COLOR_FORMAT_RGB565);
 
   auto &nspanel_display = nspanel_terminal::NSPanelDisplay::instance();
@@ -119,6 +148,47 @@ esp_err_t DisplayManager::_init_uart() {
     return err;
   }
   return ESP_OK;
+}
+
+void DisplayManager::apply_orientation_from_config(NSPanelConfig__NSPanelDisplayOrientation orientation) {
+  ConfigManager::DisplayOrientation new_orientation;
+  switch (orientation) {
+  case NSPANEL_CONFIG__NSPANEL_DISPLAY_ORIENTATION__LANDSCAPE_MIRRORED:
+    new_orientation = ConfigManager::DisplayOrientation::LANDSCAPE_MIRRORED;
+    break;
+  case NSPANEL_CONFIG__NSPANEL_DISPLAY_ORIENTATION__PORTRAIT:
+    new_orientation = ConfigManager::DisplayOrientation::PORTRAIT;
+    break;
+  default: // Including managers too old to send it: they only know landscape interfaces for this firmware.
+    new_orientation = ConfigManager::DisplayOrientation::LANDSCAPE;
+    break;
+  }
+
+  if (new_orientation == DisplayManager::_orientation || DisplayManager::_restart_pending) {
+    return;
+  }
+
+  ESP_LOGI("DisplayManager", "Display orientation changed from %d to %d. Will restart to apply it.", static_cast<int>(DisplayManager::_orientation),
+           static_cast<int>(new_orientation));
+  ConfigManager::display_orientation = new_orientation;
+  if (ConfigManager::save_config() != ESP_OK) {
+    ESP_LOGE("DisplayManager", "Failed to save the new display orientation. Will not restart.");
+    return;
+  }
+  // Restart from a task of its own: this is called from an event handler, and the restart waits for
+  // the status report to be sent.
+  DisplayManager::_restart_pending = true;
+  if (xTaskCreatePinnedToCore(DisplayManager::_task_restart_for_orientation, "orientation_rst", 4096, NULL, 2, NULL, 1) != pdPASS) {
+    ESP_LOGE("DisplayManager", "Failed to start restart task. The new orientation is applied on the next restart.");
+  }
+}
+
+void DisplayManager::_task_restart_for_orientation(void *param) {
+  LoadingPage::show();
+  LoadingPage::set_loading_text("Changing display orientation");
+  LoadingPage::set_secondary_text("");
+  vTaskDelay(pdMS_TO_TICKS(500)); // Let the message reach the display
+  StatusUpdateManager::reboot(); // Does not return.
 }
 
 void DisplayManager::set_brightness(int percent) {

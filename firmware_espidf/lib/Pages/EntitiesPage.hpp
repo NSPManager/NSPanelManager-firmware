@@ -1,9 +1,9 @@
 #pragma once
-#include <GUI_data.hpp>
 #include <MutexWrapper.hpp>
-// #include <Nextion_event.hpp>
 #include <atomic>
 #include <esp_event.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
 #include <memory>
 #include <protobuf_nspanel.pb-c.h>
 #include <string>
@@ -23,31 +23,38 @@ public:
   static void show(display_type_t display_type);
 
   /**
-   * Unshow the loading page
+   * Unshow the entities page
    */
   static void unshow();
 
   /**
-   * Update display with new values from the given entities page.
+   * Touch input from the page's widgets. The LVGL callbacks only queue these (they run on the LVGL
+   * task with the LVGL lock held); _task_handle_input acts on them, as that publishes to MQTT and
+   * switches pages.
    */
-  static void _update_display(const std::shared_ptr<NSPanelRoomEntitiesPage> &page);
+  struct InputEvent {
+    enum Type : uint8_t {
+      BACK,
+      PREVIOUS_PAGE,
+      NEXT_PAGE,
+      ICON_PRESSED,  // Touch down on a slot's icon: starts saving a scene
+      ICON_RELEASED, // Touch up on a slot's icon: cancels saving a scene that is not saved yet
+      ICON_CLICKED,  // Tap on a slot's icon: toggles the entity
+      NAME_CLICKED,  // Tap on a slot's name: opens the entity, or activates the scene
+    } type;
+    uint8_t slot; // For the slot events: which slot, 0 to the page type - 1
+  };
 
   /**
-   * Updated displayed items in each slot from the given page. Returns early if the render goes stale.
+   * Queue touch input for _task_handle_input. Never blocks; input is dropped if the queue is full.
    */
-  static void _update_displayed_items(const std::shared_ptr<NSPanelRoomEntitiesPage> &page);
+  static void queue_input(InputEvent event);
 
 private:
   /**
-   * True if a render of the given page should be abandoned: either we have left the page, or RoomManager holds
-   * newer page data, in which case a ROOM_ENTITIES_PAGE_UPDATED event for it is already queued.
+   * Show the given entities page. Runs on the RoomManager event loop.
    */
-  static bool _render_is_stale(const std::shared_ptr<NSPanelRoomEntitiesPage> &page);
-
-  /**
-   * Update a given items slot with the given EntitySlot data. In case slot_data is nullptr, blank the slot.
-   */
-  static void _update_displayed_item_in_slot(NSPanelRoomEntitiesPage__EntitySlot *slot_data, const GUI_ITEMS_PAGE_ITEM_DATA page_slot);
+  static void _update_display(const std::shared_ptr<NSPanelRoomEntitiesPage> &page);
 
   /**
    * Handle RoomManager event
@@ -55,24 +62,15 @@ private:
   static void _handle_roommanager_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
   /**
-   * Handle Nextion events, such as touch
+   * Act on queued touch input, see InputEvent.
    */
-  static void _handle_nextion_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+  static void _task_handle_input(void *param);
 
-  // /**
-  //  * Handle touch event in "items4" page.
-  //  */
-  // static void _handle_items4_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data);
-
-  // /**
-  //  * Handle touch event in "items8" page.
-  //  */
-  // static void _handle_items8_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data);
-
-  // /**
-  //  * Handle touch event in "items12" page.
-  //  */
-  // static void _handle_items12_touch_event(const std::shared_ptr<NSPanelRoomEntitiesPage> &page, nextion_event_touch_t *touch_data);
+  /**
+   * Show the previous or next entities, scenes or global scenes page.
+   */
+  static void _go_to_previous_page();
+  static void _go_to_next_page();
 
   /**
    * Get the entity in the given slot of the given entities page, or nullptr if the slot is empty.
@@ -98,8 +96,8 @@ private:
   static void _task_save_scene_progress(void *scene_slot);
 
   // Vars
-  // Shared between tasks: written by the RoomManager event loop and unshow(), read by the Nextion
-  // event loop and the save-scene task.
+  // Shared between tasks: written by the RoomManager event loop and unshow(), read by the input task
+  // and the save-scene task.
   //
   // Never dereference this directly. `->` on a shared_ptr returns a raw pointer and holds no reference,
   // so if another task replaces or clears the page while you are reading through it, the old page can be
@@ -111,20 +109,14 @@ private:
   // it while another task assigns it is a data race.
   static inline MutexWrapped<std::shared_ptr<NSPanelRoomEntitiesPage>> _current_entities_page;
 
-  // Set to 4, 8 or 12. Used to determine if we should send the command to switch page on Nextion display.
-  static inline std::atomic<uint8_t> _currently_showing_page_type = 0;
-
   static inline std::atomic<display_type_t> _display_type = display_type_t::ENTITIES;
-
-  // What is the currently displayed header text. Used to determine if we should update header text.
-  static inline MutexWrapped<std::string> _currently_showing_header_text;
-
-  // The MQTT where the current entities page update is sent.
-  static inline MutexWrapped<std::string> _current_entities_page_mqtt_topic;
 
   // Task handle for task that will update the screen and save a scene.
   static inline TaskHandle_t _save_scene_task_handle = NULL;
 
   // The entities page slot to save the scene.
   static inline std::atomic<bool> _save_scene = false;
+
+  // Touch input waiting for _task_handle_input
+  static inline QueueHandle_t _input_queue = NULL;
 };

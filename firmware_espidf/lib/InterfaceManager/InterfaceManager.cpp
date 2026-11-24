@@ -1,7 +1,7 @@
 #include <BackgroundManager.hpp>
 #include <ConfigManager.hpp>
 #include <DisplayManager.hpp>
-// #include <EntitiesPage.hpp>
+#include <EntitiesPage.hpp>
 // #include <EntityPage.hpp>
 #include <GUI_data.hpp>
 #include <HomePage.hpp>
@@ -232,15 +232,15 @@ void InterfaceManager::show_default_page() {
       break;
     }
 
-      // case NSPanelConfig__NSPanelDefaultPage::NSPANEL_CONFIG__NSPANEL_DEFAULT_PAGE__SCENES: {
-      //   EntitiesPage::show(EntitiesPage::display_type_t::SCENES);
-      //   break;
-      // }
+    case NSPanelConfig__NSPanelDefaultPage::NSPANEL_CONFIG__NSPANEL_DEFAULT_PAGE__SCENES: {
+      EntitiesPage::show(EntitiesPage::display_type_t::SCENES);
+      break;
+    }
 
-      // case NSPanelConfig__NSPanelDefaultPage::NSPANEL_CONFIG__NSPANEL_DEFAULT_PAGE__ENTITIES: {
-      //   EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
-      //   break;
-      // }
+    case NSPanelConfig__NSPanelDefaultPage::NSPANEL_CONFIG__NSPANEL_DEFAULT_PAGE__ENTITIES: {
+      EntitiesPage::show(EntitiesPage::display_type_t::ENTITIES);
+      break;
+    }
 
     default: {
       ESP_LOGE("InterfaceManager", "Unknown default page %ld, will default to home page!", static_cast<uint32_t>(config->default_page));
@@ -528,6 +528,8 @@ void InterfaceManager::_nspm_configmanager_event_handler(void *arg, esp_event_ba
 
     std::shared_ptr<NSPanelConfig> config;
     if (NSPM_ConfigManager::get_config(&config) == ESP_OK) [[likely]] {
+      DisplayManager::apply_orientation_from_config(config->display_orientation); // Restarts if it changed
+
       if (InterfaceManager::_screensaver_timeout_ms != (uint32_t)config->screensaver_activation_timeout) {
         ESP_LOGI("InterfaceManager", "Screensaver activation timeout set to %ld ms.", config->screensaver_activation_timeout);
         InterfaceManager::_screensaver_timeout_ms = config->screensaver_activation_timeout > 0 ? config->screensaver_activation_timeout : 0;

@@ -133,6 +133,13 @@ esp_err_t ConfigManager::load_config() {
         (strncmp("true", config_data["use_new_upload_protocol"].get<std::string>().c_str(), sizeof("true")) == 0);
   }
 
+  if (config_data.contains("display_orientation") && config_data["display_orientation"].is_number_integer()) {
+    int orientation = config_data["display_orientation"].get<int>();
+    if (orientation >= 0 && orientation <= static_cast<int>(ConfigManager::DisplayOrientation::PORTRAIT)) {
+      ConfigManager::display_orientation = static_cast<ConfigManager::DisplayOrientation>(orientation);
+    }
+  }
+
   // Handle has_updated
   if (config_data.contains("has_updated") && config_data["has_updated"].is_boolean()) {
     ConfigManager::has_updated = config_data["has_updated"].get<bool>();
@@ -211,6 +218,7 @@ void ConfigManager::create_default() {
   ConfigManager::mqtt_password = "";
 
   ConfigManager::has_updated = false;
+  ConfigManager::display_orientation = ConfigManager::DisplayOrientation::LANDSCAPE;
   ConfigManager::md5_firmware_pending = "";
   ConfigManager::md5_firmware = "";
   ConfigManager::md5_data_file = "";
@@ -259,6 +267,7 @@ esp_err_t ConfigManager::save_config() {
 
   json["use_new_upload_protocol"] = ConfigManager::use_latest_nextion_upload_protocol;
   json["has_updated"] = ConfigManager::has_updated;
+  json["display_orientation"] = static_cast<int>(ConfigManager::display_orientation);
 
   json["upload_baud"] = ConfigManager::nextion_upload_baudrate;
   json["comms_baud"] = ConfigManager::communication_baud_rate;

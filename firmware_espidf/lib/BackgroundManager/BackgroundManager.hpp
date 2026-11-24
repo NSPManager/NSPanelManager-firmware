@@ -58,6 +58,7 @@ private:
   static uint8_t *_load_stored_image();
   static void _store_image(const uint8_t *pixels, const std::string &etag);
   static void _remove_stored_image();
+  static void _log_store_failure(const char *step);
 
   static inline TaskHandle_t _task = NULL;
 

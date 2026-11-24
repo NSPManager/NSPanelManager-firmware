@@ -39,13 +39,13 @@ constexpr int32_t TOP_BAR_Y = 6;
 constexpr int32_t TOP_BAR_H = 41;
 constexpr int32_t CARD_Y = 54;
 constexpr int32_t CARD_H = 210;
-constexpr int32_t CARD_W = (DisplayManager::WIDTH - 2 * MARGIN - 3 * GAP) / 4;
+constexpr int32_t CARD_W = (DisplayManager::LANDSCAPE_WIDTH - 2 * MARGIN - 3 * GAP) / 4;
 constexpr int32_t CARD_CENTER_X = CARD_W / 2;
 constexpr int32_t VALUE_LABEL_Y = 152; // Brightness value under the ceiling and table light icons
 constexpr int32_t ICON_CENTER_Y = 106; // Sun and color ring on the slider cards
 constexpr int32_t BOTTOM_BAR_Y = 271;
 constexpr int32_t BOTTOM_BAR_H = 42;
-constexpr int32_t BOTTOM_BAR_W = (DisplayManager::WIDTH - 2 * MARGIN - GAP) / 2;
+constexpr int32_t BOTTOM_BAR_W = (DisplayManager::LANDSCAPE_WIDTH - 2 * MARGIN - GAP) / 2;
 constexpr int32_t BOTTOM_BAR_TEXT_X = 46; // Left of the room/mode text, right of the chevron
 constexpr int32_t SLIDER_PAD = 6;         // Space between the card edge and the slider line at 0 and 100
 constexpr int32_t SLIDER_LINE_H = 3;
@@ -337,7 +337,7 @@ void build_screen() {
   lv_obj_set_style_bg_opa(ui.screen, LV_OPA_COVER, 0);
   BackgroundManager::attach(ui.screen);
 
-  lv_obj_t *top_bar = create_panel(ui.screen, MARGIN, TOP_BAR_Y, DisplayManager::WIDTH - 2 * MARGIN, TOP_BAR_H, false);
+  lv_obj_t *top_bar = create_panel(ui.screen, MARGIN, TOP_BAR_Y, DisplayManager::LANDSCAPE_WIDTH - 2 * MARGIN, TOP_BAR_H, false);
   lv_obj_add_event_cb(top_bar, draw_top_bar_icon, LV_EVENT_DRAW_MAIN, nullptr);
   create_hit_area(top_bar, 0, 100, HomePage::InputEvent::SHOW_SCENES); // The sliders icon, with some room around it
 
@@ -372,7 +372,7 @@ void build_screen() {
   // The chevron is small, so it gets the whole bottom left corner of the screen: from the screen's
   // edges to the separator, and from below the light cards. Created last, so it is on top.
   constexpr int32_t corner_y = CARD_Y + CARD_H;
-  create_hit_area(ui.screen, 0, MARGIN + BOTTOM_BAR_TEXT_X - 2, HomePage::InputEvent::NEXT_ROOM, corner_y, DisplayManager::HEIGHT - corner_y);
+  create_hit_area(ui.screen, 0, MARGIN + BOTTOM_BAR_TEXT_X - 2, HomePage::InputEvent::NEXT_ROOM, corner_y, DisplayManager::LANDSCAPE_HEIGHT - corner_y);
 }
 
 void set_label_text(lv_obj_t *label, const char *text) {

@@ -651,7 +651,37 @@ const ProtobufCEnumDescriptor nspanel_config__nspanel_sound_event__descriptor =
   nspanel_config__nspanel_sound_event__value_ranges,
   NULL,NULL,NULL,NULL   /* reserved[1234] */
 };
-static const ProtobufCFieldDescriptor nspanel_config__field_descriptors[40] =
+static const ProtobufCEnumValue nspanel_config__nspanel_display_orientation__enum_values_by_number[3] =
+{
+  { "LANDSCAPE", "NSPANEL_CONFIG__NSPANEL_DISPLAY_ORIENTATION__LANDSCAPE", 0 },
+  { "LANDSCAPE_MIRRORED", "NSPANEL_CONFIG__NSPANEL_DISPLAY_ORIENTATION__LANDSCAPE_MIRRORED", 1 },
+  { "PORTRAIT", "NSPANEL_CONFIG__NSPANEL_DISPLAY_ORIENTATION__PORTRAIT", 2 },
+};
+static const ProtobufCIntRange nspanel_config__nspanel_display_orientation__value_ranges[] = {
+{0, 0},{0, 3}
+};
+static const ProtobufCEnumValueIndex nspanel_config__nspanel_display_orientation__enum_values_by_name[3] =
+{
+  { "LANDSCAPE", 0 },
+  { "LANDSCAPE_MIRRORED", 1 },
+  { "PORTRAIT", 2 },
+};
+const ProtobufCEnumDescriptor nspanel_config__nspanel_display_orientation__descriptor =
+{
+  PROTOBUF_C__ENUM_DESCRIPTOR_MAGIC,
+  "NSPanelConfig.NSPanelDisplayOrientation",
+  "NSPanelDisplayOrientation",
+  "NSPanelConfig__NSPanelDisplayOrientation",
+  "",
+  3,
+  nspanel_config__nspanel_display_orientation__enum_values_by_number,
+  3,
+  nspanel_config__nspanel_display_orientation__enum_values_by_name,
+  1,
+  nspanel_config__nspanel_display_orientation__value_ranges,
+  NULL,NULL,NULL,NULL   /* reserved[1234] */
+};
+static const ProtobufCFieldDescriptor nspanel_config__field_descriptors[41] =
 {
   {
     "name",
@@ -1133,6 +1163,18 @@ static const ProtobufCFieldDescriptor nspanel_config__field_descriptors[40] =
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
+  {
+    "display_orientation",
+    49,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_ENUM,
+    0,   /* quantifier_offset */
+    offsetof(NSPanelConfig, display_orientation),
+    &nspanel_config__nspanel_display_orientation__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
 };
 static const unsigned nspanel_config__field_indices_by_name[] = {
   38,   /* field[38] = button1_entity_page_topic */
@@ -1148,6 +1190,7 @@ static const unsigned nspanel_config__field_indices_by_name[] = {
   29,   /* field[29] = default_light_brightess */
   2,   /* field[2] = default_page */
   1,   /* field[1] = default_room */
+  40,   /* field[40] = display_orientation */
   23,   /* field[23] = global_scene_entity_page_ids */
   31,   /* field[31] = inside_temperature_sensor_mqtt_topic */
   15,   /* field[15] = is_us_panel */
@@ -1183,7 +1226,7 @@ static const ProtobufCIntRange nspanel_config__number_ranges[5 + 1] =
   { 30, 23 },
   { 35, 27 },
   { 37, 28 },
-  { 0, 40 }
+  { 0, 41 }
 };
 const ProtobufCMessageDescriptor nspanel_config__descriptor =
 {
@@ -1193,7 +1236,7 @@ const ProtobufCMessageDescriptor nspanel_config__descriptor =
   "NSPanelConfig",
   "",
   sizeof(NSPanelConfig),
-  40,
+  41,
   nspanel_config__field_descriptors,
   nspanel_config__field_indices_by_name,
   5,  nspanel_config__number_ranges,

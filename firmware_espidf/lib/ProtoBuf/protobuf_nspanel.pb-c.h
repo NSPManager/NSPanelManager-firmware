@@ -92,6 +92,25 @@ typedef enum _NSPanelConfig__NSPanelSoundEvent {
   NSPANEL_CONFIG__NSPANEL_SOUND_EVENT__SCENE_SAVED = 2
     PROTOBUF_C__FORCE_ENUM_TO_BE_INT_SIZE(NSPANEL_CONFIG__NSPANEL_SOUND_EVENT)
 } NSPanelConfig__NSPanelSoundEvent;
+/*
+ * How the panel's display is mounted. The panel stores this and uses it from the next boot on
+ * to set up its display, restarting when it changes. EU panels are always LANDSCAPE.
+ */
+typedef enum _NSPanelConfig__NSPanelDisplayOrientation {
+  /*
+   * EU panel, or US panel mounted horizontally
+   */
+  NSPANEL_CONFIG__NSPANEL_DISPLAY_ORIENTATION__LANDSCAPE = 0,
+  /*
+   * US panel mounted horizontally, turned the other way round
+   */
+  NSPANEL_CONFIG__NSPANEL_DISPLAY_ORIENTATION__LANDSCAPE_MIRRORED = 1,
+  /*
+   * US panel mounted vertically
+   */
+  NSPANEL_CONFIG__NSPANEL_DISPLAY_ORIENTATION__PORTRAIT = 2
+    PROTOBUF_C__FORCE_ENUM_TO_BE_INT_SIZE(NSPANEL_CONFIG__NSPANEL_DISPLAY_ORIENTATION)
+} NSPanelConfig__NSPanelDisplayOrientation;
 typedef enum _NSPanelStatusReport__State {
   NSPANEL_STATUS_REPORT__STATE__ONLINE = 0,
   NSPANEL_STATUS_REPORT__STATE__OFFLINE = 1,
@@ -252,10 +271,11 @@ struct  NSPanelConfig
    */
   char *button1_entity_page_topic;
   char *button2_entity_page_topic;
+  NSPanelConfig__NSPanelDisplayOrientation display_orientation;
 };
 #define NSPANEL_CONFIG__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&nspanel_config__descriptor) \
-    , (char *)protobuf_c_empty_string, 0, NSPANEL_CONFIG__NSPANEL_DEFAULT_PAGE__HOME, 0, 0, 0, 0, 0, 0, 0, NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITH_BACKGROUND, 0, 0, 0, 0, 0, 0,NULL, 0, 0, 0, 0, NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT, NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT, 0,NULL, 0, 0, 0, 0,NULL, 0,NULL, 0, 0, (char *)protobuf_c_empty_string, 0, 0, 0, 0, 0,NULL, (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string }
+    , (char *)protobuf_c_empty_string, 0, NSPANEL_CONFIG__NSPANEL_DEFAULT_PAGE__HOME, 0, 0, 0, 0, 0, 0, 0, NSPANEL_CONFIG__NSPANEL_SCREENSAVER_MODE__WEATHER_WITH_BACKGROUND, 0, 0, 0, 0, 0, 0,NULL, 0, 0, 0, 0, NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT, NSPANEL_CONFIG__NSPANEL_BUTTON_MODE__DIRECT, 0,NULL, 0, 0, 0, 0,NULL, 0,NULL, 0, 0, (char *)protobuf_c_empty_string, 0, 0, 0, 0, 0,NULL, (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, NSPANEL_CONFIG__NSPANEL_DISPLAY_ORIENTATION__LANDSCAPE }
 
 
 struct  NSPanelWarning
@@ -850,6 +870,7 @@ extern const ProtobufCEnumDescriptor    nspanel_config__nspanel_default_page__de
 extern const ProtobufCEnumDescriptor    nspanel_config__nspanel_screensaver_mode__descriptor;
 extern const ProtobufCEnumDescriptor    nspanel_config__nspanel_button_mode__descriptor;
 extern const ProtobufCEnumDescriptor    nspanel_config__nspanel_sound_event__descriptor;
+extern const ProtobufCEnumDescriptor    nspanel_config__nspanel_display_orientation__descriptor;
 extern const ProtobufCMessageDescriptor nspanel_warning__descriptor;
 extern const ProtobufCMessageDescriptor nspanel_status_report__descriptor;
 extern const ProtobufCEnumDescriptor    nspanel_status_report__state__descriptor;

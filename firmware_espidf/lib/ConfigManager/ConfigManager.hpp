@@ -111,6 +111,15 @@ public:
   // MD5 checksum of the firmware that was flashed, promoted to md5_firmware on next boot when has_updated is set.
   static inline std::string md5_firmware_pending;
 
+  // How the display is mounted, as NSPanelConfig.display_orientation from the manager (same values).
+  // Stored locally because the display is set up at boot, before the manager's config arrives.
+  enum class DisplayOrientation : uint8_t {
+    LANDSCAPE = 0,          // EU panel, or US panel mounted horizontally
+    LANDSCAPE_MIRRORED = 1, // US panel mounted horizontally, turned the other way round
+    PORTRAIT = 2,           // US panel mounted vertically
+  };
+  static inline DisplayOrientation display_orientation = DisplayOrientation::LANDSCAPE;
+
   // Global log level to set for all components
   static inline esp_log_level_t log_level = esp_log_level_t::ESP_LOG_DEBUG;
 

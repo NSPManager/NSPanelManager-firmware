@@ -14,7 +14,7 @@ constexpr uint32_t COLOR_FOREGROUND = 0xFFFFFF;
 constexpr uint32_t COLOR_LAMP_SHADE = 0xFFEE33;
 
 constexpr int32_t LOGO_WIDTH = 296;
-constexpr int32_t LOGO_X = (DisplayManager::WIDTH - LOGO_WIDTH) / 2;
+constexpr int32_t LOGO_X = (DisplayManager::LANDSCAPE_WIDTH - LOGO_WIDTH) / 2;
 constexpr int32_t LINE_THICKNESS = 3;
 
 constexpr int32_t TOP_LINE_Y = 137;
@@ -111,7 +111,7 @@ void build_screen() {
 
   create_lamp(_screen);
 
-  int32_t text_width = DisplayManager::WIDTH - STATUS_X - 16;
+  int32_t text_width = DisplayManager::LANDSCAPE_WIDTH - STATUS_X - 16;
   _loading_text = create_label(_screen, &lv_font_montserrat_14, "");
   lv_label_set_long_mode(_loading_text, LV_LABEL_LONG_MODE_DOTS);
   lv_obj_set_width(_loading_text, text_width);

@@ -3,7 +3,9 @@
 #include <DisplayManager.hpp>
 #include <NSPM_ConfigManager.hpp>
 #include <cstdio>
+#include <cerrno>
 #include <cstring>
+#include <esp_littlefs.h>
 #include <esp_heap_caps.h>
 #include <esp_http_client.h>
 #include <esp_log.h>
@@ -13,19 +15,25 @@
 
 namespace {
 constexpr const char *IMAGE_PATH = "/littlefs/background.bin";
-constexpr const char *IMAGE_TMP_PATH = "/littlefs/background.tmp";
+constexpr const char *IMAGE_TMP_PATH = "/littlefs/background.tmp"; // Only removed: written by earlier firmware
 constexpr const char *ETAG_PATH = "/littlefs/background.etag";
-constexpr uint32_t IMAGE_STRIDE = DisplayManager::WIDTH * 2; // RGB565
-constexpr size_t IMAGE_SIZE = IMAGE_STRIDE * DisplayManager::HEIGHT;
+// The image is the size of the display, which depends on its orientation.
+uint32_t image_stride() {
+  return DisplayManager::width() * 2; // RGB565
+}
+size_t image_size() {
+  return image_stride() * DisplayManager::height();
+}
 
 uint8_t *alloc_pixels() {
   // The image is far too large for internal RAM, which Wi-Fi needs.
-  return static_cast<uint8_t *>(heap_caps_malloc(IMAGE_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  return static_cast<uint8_t *>(heap_caps_malloc(image_size(), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
 }
 
+// The ETag file is written after the image, so the image only counts as stored when both exist.
 bool stored_image_exists() {
   struct stat st;
-  return stat(IMAGE_PATH, &st) == 0 && (size_t)st.st_size == IMAGE_SIZE;
+  return stat(ETAG_PATH, &st) == 0 && stat(IMAGE_PATH, &st) == 0 && (size_t)st.st_size == image_size();
 }
 
 esp_err_t http_event_handler(esp_http_client_event_t *event) {
@@ -129,27 +137,27 @@ bool BackgroundManager::_download() {
       changed = true;
     }
   } else if (status == 200) {
-    if (content_length != (int64_t)IMAGE_SIZE) {
-      ESP_LOGE("BackgroundManager", "Background image has %lld bytes, expected %u (%ux%u RGB565). Ignoring it.", content_length, (unsigned)IMAGE_SIZE,
-               (unsigned)DisplayManager::WIDTH, (unsigned)DisplayManager::HEIGHT);
+    if (content_length != (int64_t)image_size()) {
+      ESP_LOGE("BackgroundManager", "Background image has %lld bytes, expected %u (%ux%u RGB565). Ignoring it.", content_length, (unsigned)image_size(),
+               (unsigned)DisplayManager::width(), (unsigned)DisplayManager::height());
     } else if (uint8_t *pixels = alloc_pixels(); pixels == nullptr) {
       ESP_LOGE("BackgroundManager", "Not enough PSRAM for a background image.");
     } else {
       size_t received = 0;
-      while (received < IMAGE_SIZE) {
-        int read = esp_http_client_read(client, (char *)pixels + received, IMAGE_SIZE - received);
+      while (received < image_size()) {
+        int read = esp_http_client_read(client, (char *)pixels + received, image_size() - received);
         if (read <= 0) {
           break;
         }
         received += read;
       }
-      if (received == IMAGE_SIZE) {
+      if (received == image_size()) {
         ESP_LOGI("BackgroundManager", "Downloaded new background image.");
         BackgroundManager::_store_image(pixels, new_etag);
         BackgroundManager::_set_image(pixels);
         changed = true;
       } else {
-        ESP_LOGE("BackgroundManager", "Background image download ended after %u of %u bytes.", (unsigned)received, (unsigned)IMAGE_SIZE);
+        ESP_LOGE("BackgroundManager", "Background image download ended after %u of %u bytes.", (unsigned)received, (unsigned)image_size());
         heap_caps_free(pixels);
       }
     }
@@ -168,10 +176,10 @@ void BackgroundManager::_set_image(uint8_t *pixels) {
     image = new lv_image_dsc_t{};
     image->header.magic = LV_IMAGE_HEADER_MAGIC;
     image->header.cf = LV_COLOR_FORMAT_RGB565;
-    image->header.w = DisplayManager::WIDTH;
-    image->header.h = DisplayManager::HEIGHT;
-    image->header.stride = IMAGE_STRIDE;
-    image->data_size = IMAGE_SIZE;
+    image->header.w = DisplayManager::width();
+    image->header.h = DisplayManager::height();
+    image->header.stride = image_stride();
+    image->data_size = image_size();
     image->data = pixels;
   }
 
@@ -214,11 +222,11 @@ uint8_t *BackgroundManager::_load_stored_image() {
     return nullptr;
   }
   FILE *file = fopen(IMAGE_PATH, "rb");
-  size_t read = file != NULL ? fread(pixels, 1, IMAGE_SIZE, file) : 0;
+  size_t read = file != NULL ? fread(pixels, 1, image_size(), file) : 0;
   if (file != NULL) {
     fclose(file);
   }
-  if (read != IMAGE_SIZE) {
+  if (read != image_size()) {
     ESP_LOGE("BackgroundManager", "Failed to read stored background image.");
     heap_caps_free(pixels);
     return nullptr;
@@ -227,33 +235,47 @@ uint8_t *BackgroundManager::_load_stored_image() {
 }
 
 void BackgroundManager::_store_image(const uint8_t *pixels, const std::string &etag) {
-  // The old image goes first: LittleFS on the Sonoff has no room for two. The new image is
-  // written to a temporary file, so a power loss never leaves a partial image behind; at
-  // worst there is no stored image and it is downloaded again.
+  // The old image goes first: LittleFS on the Sonoff has no room for two. The image is written
+  // straight to its final name (rename() is not available: CONFIG_VFS_SUPPORT_DIR is off), and
+  // the ETag file after it marks it complete, see stored_image_exists(). LittleFS only commits a
+  // file when it is closed, so a power loss leaves no image or a complete one, never part of one.
+  // The image is shown anyway when storing fails; it is then downloaded again on the next start.
   BackgroundManager::_remove_stored_image();
-  FILE *file = fopen(IMAGE_TMP_PATH, "wb");
-  size_t written = file != NULL ? fwrite(pixels, 1, IMAGE_SIZE, file) : 0;
-  if (file != NULL) {
-    fclose(file);
-  }
-  if (written != IMAGE_SIZE) {
-    // Shown anyway, but downloaded again on the next start.
-    ESP_LOGW("BackgroundManager", "Failed to store background image in LittleFS (full?). It will be downloaded again after a restart.");
-    remove(IMAGE_TMP_PATH);
+  if (etag.empty()) {
+    ESP_LOGW("BackgroundManager", "The manager sent no ETag for the background image, so it is not stored. It will be downloaded again after a restart.");
     return;
   }
-  if (rename(IMAGE_TMP_PATH, IMAGE_PATH) != 0) {
-    ESP_LOGW("BackgroundManager", "Failed to store background image in LittleFS.");
-    remove(IMAGE_TMP_PATH);
+  FILE *file = fopen(IMAGE_PATH, "wb");
+  if (file == NULL) {
+    BackgroundManager::_log_store_failure("create the file");
     return;
   }
-  if (!etag.empty()) {
-    file = fopen(ETAG_PATH, "w");
-    if (file != NULL) {
-      fwrite(etag.data(), 1, etag.size(), file);
-      fclose(file);
-    }
+  size_t written = fwrite(pixels, 1, image_size(), file);
+  // fclose() writes out what fwrite() buffered, so it can fail too, e.g. when LittleFS is full.
+  bool closed = fclose(file) == 0;
+  if (written != image_size() || !closed) {
+    BackgroundManager::_log_store_failure(written != image_size() ? "write the image" : "finish writing the image");
+    remove(IMAGE_PATH);
+    return;
   }
+  file = fopen(ETAG_PATH, "w");
+  written = file != NULL ? fwrite(etag.data(), 1, etag.size(), file) : 0;
+  closed = file != NULL && fclose(file) == 0;
+  if (written != etag.size() || !closed) {
+    BackgroundManager::_log_store_failure("write the image's ETag");
+    BackgroundManager::_remove_stored_image();
+    return;
+  }
+  ESP_LOGI("BackgroundManager", "Stored background image in LittleFS.");
+}
+
+void BackgroundManager::_log_store_failure(const char *step) {
+  int error = errno; // Before anything else can change it
+  size_t total = 0, used = 0;
+  esp_littlefs_info("spiffs", &total, &used);
+  ESP_LOGW("BackgroundManager", "Failed to store background image in LittleFS: could not %s (%s). LittleFS uses %u of %u bytes, the image needs %u. "
+           "It will be downloaded again after a restart.",
+           step, strerror(error), (unsigned)used, (unsigned)total, (unsigned)image_size());
 }
 
 void BackgroundManager::_remove_stored_image() {

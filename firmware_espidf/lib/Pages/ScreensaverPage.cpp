@@ -43,7 +43,7 @@ constexpr const char *ICON_THERMOMETER = "t";
 
 constexpr uint32_t COLOR_BACKGROUND = 0x000000;
 constexpr uint32_t COLOR_FOREGROUND = 0xFFFFFF;
-constexpr int32_t SCREEN_RIGHT = DisplayManager::WIDTH - 14; // Right edge of right-aligned text
+constexpr int32_t SCREEN_RIGHT = DisplayManager::LANDSCAPE_WIDTH - 14; // Right edge of right-aligned text
 constexpr int32_t FORECAST_DAYS = 5;
 constexpr int32_t FORECAST_X = 74; // Center of the first forecast column
 constexpr int32_t FORECAST_SPACING = 75;
@@ -205,7 +205,7 @@ void build_minimal_screen() {
   m.inside_temperature_icon = create_icon(m.screen, &font_screensaver_icons_18, ICON_HOME_TEMPERATURE, 383, 13);
   m.inside_temperature = create_label(m.screen, &font_screensaver_text_18, 405, 17);
 
-  constexpr int32_t center_x = DisplayManager::WIDTH / 2;
+  constexpr int32_t center_x = DisplayManager::LANDSCAPE_WIDTH / 2;
   m.time = create_label(m.screen, &font_screensaver_clock_86, center_x, 103, Anchor::CENTER, CLOCK_W);
   m.am_pm = create_label(m.screen, &font_screensaver_text_15, center_x + 120, 135);
   m.date = create_label(m.screen, &font_screensaver_text_18, center_x, 190, Anchor::CENTER, 260);

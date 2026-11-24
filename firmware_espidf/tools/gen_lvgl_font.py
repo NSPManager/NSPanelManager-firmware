@@ -12,6 +12,8 @@ Example:
 """
 import argparse
 import os
+import subprocess
+import tempfile
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -48,6 +50,30 @@ def render_glyph(font, ch, size, source=None):
     }
 
 
+def render_svg_glyph(font, ch, size, svg_path, reference):
+    # Render an SVG as the glyph for `ch`, single colour from its alpha, at the size and position of
+    # the TTF glyph `reference`, so an icon from elsewhere lines up with the font's own icons.
+    ref = render_glyph(font, ch, size, reference)
+    side = min(ref["box_w"], ref["box_h"])
+    with tempfile.TemporaryDirectory() as tmp:
+        png = os.path.join(tmp, "glyph.png")
+        subprocess.run(["rsvg-convert", "-a", "-w", str(side), "-h", str(side), "-o", png, svg_path], check=True)
+        alpha = Image.open(png).convert("RGBA").getchannel("A")
+    w, h = alpha.size
+    pixels = [alpha.getpixel((x, y)) >> 4 for y in range(h) for x in range(w)]
+    if len(pixels) % 2:
+        pixels.append(0)
+    return {
+        "char": ch,
+        "bitmap": bytes((pixels[i] << 4) | pixels[i + 1] for i in range(0, len(pixels), 2)),
+        "adv_w": ref["adv_w"],
+        "box_w": w,
+        "box_h": h,
+        "ofs_x": ref["ofs_x"] + (ref["box_w"] - w) // 2,
+        "ofs_y": ref["ofs_y"] + (ref["box_h"] - h) // 2,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--font", required=True)
@@ -58,6 +84,11 @@ def main():
         "--map",
         default="",
         help="Store TTF glyphs as other characters, e.g. A=F05A8,B=F0594: 'A' then renders as icon U+F05A8",
+    )
+    parser.add_argument(
+        "--svg",
+        default="",
+        help="Store SVG images as characters, sized and placed like a TTF glyph, e.g. y=openhab.svg:F07D0. Needs rsvg-convert.",
     )
     parser.add_argument("--name", required=True)
     parser.add_argument("-o", "--output", required=True)
@@ -72,13 +103,22 @@ def main():
     for part in filter(None, args.map.split(",")):
         ch, _, code = part.partition("=")
         sources[ch] = chr(int(code, 16))
+    svgs = {}
+    for part in filter(None, args.svg.split(",")):
+        ch, _, rest = part.partition("=")
+        svg_path, _, reference = rest.rpartition(":")
+        svgs[ch] = (svg_path, chr(int(reference, 16)))
+        sources[ch] = ch
     chars = sorted(sources)
-    glyphs = [render_glyph(font, ch, args.size, sources[ch]) for ch in chars]
+    glyphs = [
+        render_svg_glyph(font, ch, args.size, *svgs[ch]) if ch in svgs else render_glyph(font, ch, args.size, sources[ch])
+        for ch in chars
+    ]
     ascent, descent = font.getmetrics()
     cap_height = font.getbbox("H", anchor="ls")[3] - font.getbbox("H", anchor="ls")[1]
     x_height = font.getbbox("x", anchor="ls")[3] - font.getbbox("x", anchor="ls")[1]
 
-    description = args.map if args.map else "".join(chars)
+    description = ",".join(filter(None, [args.map, args.svg])) if args.map or args.svg else "".join(chars)
     if args.range:
         description = f"{args.range} {args.chars}".strip()
 
