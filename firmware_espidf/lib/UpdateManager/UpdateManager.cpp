@@ -595,6 +595,9 @@ void UpdateManager::_mqtt_event_handler(void *arg, esp_event_base_t event_base, 
             ESP_LOGE("UpdateManager", "Failed to create the reboot task. Restarting without the status report.");
             PanelRestart::restart();
           }
+        } else if ((command_string == "firmware_update" || command_string == "firmware_update_force" || command_string == "tft_update") &&
+                   UpdateManager::_current_update_task != NULL) {
+          ESP_LOGW("UpdateManager", "Ignoring command '%s', an update is already running.", command_string.c_str());
         } else if (command_string.compare("firmware_update") == 0 && UpdateManager::_current_update_task == NULL) {
           UpdateManager::_force_update = false;
           xTaskCreatePinnedToCore(UpdateManager::update_firmware, "update_firmware", 8192, NULL, 2, &UpdateManager::_current_update_task, 1);

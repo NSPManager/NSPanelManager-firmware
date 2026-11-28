@@ -59,6 +59,7 @@ public:
       COVER_STOP,
       COVER_CLOSE,
       COVER_PRESET, // index: preset 0-2
+      STATE_RECEIVED, // A new state arrived over MQTT: redraw. Drawn here, not on the MQTT task, see _handle_mqtt_event
     } type;
     uint8_t index;
     int16_t value;
@@ -150,6 +151,8 @@ private:
   static inline std::atomic<CoverMode> _cover_mode = CoverMode::POSITION;
   // Set until the first state of the entity shown has arrived.
   static inline std::atomic<bool> _waiting_for_first_state = true;
+  // A STATE_RECEIVED is in the input queue: states that arrive meanwhile need no other.
+  static inline std::atomic<bool> _redraw_queued = false;
 
   // Thermostat. Only used by the input task, apart from the display, which reads them under the
   // LVGL lock after the input task changed them. Editing an option cycles through its values

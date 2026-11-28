@@ -26,6 +26,13 @@ public:
   static bool connected();
 
   /**
+   * Take and give back esp-mqtt's API lock, which publish(), subscribe() and the MQTT task's event
+   * dispatch hold. Returns at once unless the lock is held: by the MQTT task while it runs the
+   * event handlers. Only for watchdogs, to notice a handler that never returns.
+   */
+  static void probe_api_lock();
+
+  /**
    * @brief Add the given MQTT topic to the set of topics the panel stays subscribed to.
    * Never blocks on the network, so it is safe to call from any event handler. The
    * subscription task sends the SUBSCRIBE, retries it until the broker acknowledges it,

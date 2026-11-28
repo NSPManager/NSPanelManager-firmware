@@ -8,6 +8,7 @@
 #include <MqttManager.hpp>
 #include <NSPM_ConfigManager.hpp>
 #include <StatusUpdateManager.hpp>
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -122,6 +123,18 @@ struct {
   lv_obj_t *close_box, *close_icon;
   SliderCard cover_slider;
 } ui;
+
+// What the input task is doing, logged when its queue overflows: what it is stuck on.
+TaskHandle_t input_task = NULL;
+std::atomic<const char *> input_step{"idle"};
+std::atomic<int64_t> input_step_since{0};
+
+void set_input_step(const char *step) {
+  if (xTaskGetCurrentTaskHandle() == input_task) {
+    input_step = step;
+    input_step_since = esp_timer_get_time();
+  }
+}
 
 // Set temperature: when it was sent, so the requested value is shown until the thermostat reports it.
 int64_t set_temperature_sent_at = 0;
@@ -580,7 +593,7 @@ void EntityPage::show(std::string state_topic) {
     // First time the page is shown
     EntityPage::_current_state_mutex = xSemaphoreCreateMutex();
     EntityPage::_input_queue = xQueueCreate(8, sizeof(InputEvent));
-    if (EntityPage::_input_queue == NULL || xTaskCreatePinnedToCore(EntityPage::_task_handle_input, "entity_input", 4096, NULL, 3, NULL, 1) != pdPASS) {
+    if (EntityPage::_input_queue == NULL || xTaskCreatePinnedToCore(EntityPage::_task_handle_input, "entity_input", 4096, NULL, 3, &input_task, 1) != pdPASS) {
       ESP_LOGE("EntityPage", "Failed to start input task. Entity page will not react to touch!");
     }
     esp_timer_create_args_t timer_args = {};
@@ -664,8 +677,16 @@ void EntityPage::refresh_icons() {
 
 void EntityPage::queue_input(InputEvent event) {
   if (EntityPage::_input_queue != NULL && xQueueSend(EntityPage::_input_queue, &event, 0) != pdTRUE) {
-    ESP_LOGW("EntityPage", "Input queue full, dropped touch input.");
+    // The input task is stuck: say on what.
+    static const char *const task_states[] = {"running", "ready", "blocked", "suspended", "deleted", "invalid"};
+    eTaskState task_state = input_task != NULL ? eTaskGetState(input_task) : eInvalid;
+    ESP_LOGW("EntityPage", "Input queue full, dropped touch input. The input task is %s, at step '%s' for %lld ms.",
+             task_states[task_state <= eInvalid ? task_state : eInvalid], input_step.load(), (esp_timer_get_time() - input_step_since.load()) / 1000);
   }
+}
+
+namespace {
+const EntityPage::InputEvent redraw_event = {EntityPage::InputEvent::STATE_RECEIVED, 0, 0};
 }
 
 void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -706,16 +727,27 @@ void EntityPage::_handle_mqtt_event(void *arg, esp_event_base_t event_base, int3
       EntityPage::_cover_mode = new_state->cover->can_set_position || !new_state->cover->can_set_tilt_position ? CoverMode::POSITION : CoverMode::TILT;
     }
   }
-  EntityPage::_update_display();
+  // Never draw here. esp-mqtt runs this handler on its task holding its API lock, so waiting here
+  // for the LVGL lock stops every publish and subscribe on the panel until the LVGL lock is free,
+  // and the input task, which publishes, would wait on this. Have the input task draw instead.
+  if (!EntityPage::_redraw_queued.exchange(true)) {
+    if (EntityPage::_input_queue == NULL || xQueueSend(EntityPage::_input_queue, &redraw_event, 0) != pdTRUE) {
+      EntityPage::_redraw_queued = false; // The next state or input draws it
+      ESP_LOGW("EntityPage", "Input queue full, the new state is shown with the next one.");
+    }
+  }
 }
 
 void EntityPage::_update_display() {
+  set_input_step("update display: waiting for the state mutex");
   std::shared_ptr<NSPanelEntityState> state = EntityPage::_get_current_state();
   if (state == nullptr) {
     return;
   }
 
+  set_input_step("update display: waiting for the LVGL lock");
   DisplayManager::Lock lock;
+  set_input_step("update display: drawing");
   if (ui.screen == nullptr) {
     return;
   }
@@ -863,13 +895,24 @@ void EntityPage::_update_display() {
 void EntityPage::_task_handle_input(void *param) {
   InputEvent event;
   for (;;) {
+    set_input_step("idle");
     if (xQueueReceive(EntityPage::_input_queue, &event, portMAX_DELAY) != pdTRUE) {
       continue;
     }
+    set_input_step("handling input");
+    if (event.type == InputEvent::STATE_RECEIVED) {
+      EntityPage::_redraw_queued = false; // Before drawing, so a state arriving while drawing is drawn too
+      if (InterfaceManager::is_current_page(EntityPage::unshow)) {
+        EntityPage::_update_display();
+      }
+      continue;
+    }
+    ESP_LOGD("EntityPage", "Input %d, index %u, value %d.", (int)event.type, event.index, event.value);
     if (!InterfaceManager::is_current_page(EntityPage::unshow)) {
       continue; // Touched just before another page was shown
     }
     if (event.type == InputEvent::BACK) {
+      set_input_step("going back to the entities page");
       EntityPage::_go_back();
       continue;
     }
@@ -1152,6 +1195,7 @@ void EntityPage::_send_command(NSPanelMQTTManagerCommand *command) {
     ESP_LOGE("EntityPage", "Failed to pack protobuf command.");
     return;
   }
+  set_input_step("publishing a command");
   if (MqttManager::publish(NSPM_ConfigManager::get_manager_command_topic(), (const char *)buffer.data(), packed_length, false) != ESP_OK) [[unlikely]] {
     ESP_LOGE("EntityPage", "Failed to send MQTT message with command payload.");
   }
@@ -1162,6 +1206,7 @@ void EntityPage::_delete_nspanel_entity_state_object(NSPanelEntityState *object)
 }
 
 std::shared_ptr<NSPanelEntityState> EntityPage::_get_current_state() {
+  set_input_step("waiting for the state mutex");
   if (EntityPage::_current_state_mutex != NULL && xSemaphoreTake(EntityPage::_current_state_mutex, pdMS_TO_TICKS(5000)) == pdPASS) [[likely]] {
     std::shared_ptr<NSPanelEntityState> ret = EntityPage::_current_state;
     xSemaphoreGive(EntityPage::_current_state_mutex);

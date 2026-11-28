@@ -270,6 +270,12 @@ void MqttManager::_task_send_online_update(void *param) {
   }
 }
 
+void MqttManager::probe_api_lock() {
+  if (MqttManager::_mqtt_client != NULL) {
+    esp_mqtt_client_get_outbox_size(MqttManager::_mqtt_client); // Holds the API lock while it reads the size
+  }
+}
+
 bool MqttManager::connected() {
   return MqttManager::_connected;
 }

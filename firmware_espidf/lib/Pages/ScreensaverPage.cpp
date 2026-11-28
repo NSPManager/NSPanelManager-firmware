@@ -396,18 +396,18 @@ void ScreensaverPage::_mqtt_event_handler(void *arg, esp_event_base_t event_base
       // Got new temperature from MQTT, update display.
       std::string new_temperature_string = std::string(event->data, event->data_len).c_str();
       ScreensaverPage::_current_temperature.set(new_temperature_string);
-      ScreensaverPage::_update_displayed_temperature();
+      ScreensaverPage::_changed |= CHANGED_TEMPERATURE;
     } else if (topic_string.compare(time_topic) == 0) {
       ScreensaverPage::_current_time = std::string(event->data, event->data_len);
-      ScreensaverPage::_update_displayed_time();
+      ScreensaverPage::_changed |= CHANGED_TIME;
     } else if (topic_string.compare(date_topic) == 0) {
       // We got new date, update display:
       ScreensaverPage::_current_date = std::string(event->data, event->data_len);
-      ScreensaverPage::_update_displayed_date();
+      ScreensaverPage::_changed |= CHANGED_DATE;
     } else if (topic_string.compare(ampm_topic) == 0) {
       // We got new AM/PM, update display:
       ScreensaverPage::_am_pm_string = std::string(event->data, event->data_len);
-      ScreensaverPage::_update_displayed_time();
+      ScreensaverPage::_changed |= CHANGED_TIME;
     } else if (topic_string.compare(weather_topic) == 0) {
       if (ScreensaverPage::_weather_update_data_mutex != NULL) {
         if (xSemaphoreTake(ScreensaverPage::_weather_update_data_mutex, pdMS_TO_TICKS(250)) == pdPASS) {
@@ -547,12 +547,29 @@ void ScreensaverPage::_subscribe_to_mqtt_topics() {
   }
 }
 
+void ScreensaverPage::_draw_changes(lv_timer_t *timer) {
+  uint8_t changed = ScreensaverPage::_changed.exchange(0);
+  if (changed & CHANGED_TIME) {
+    ScreensaverPage::_update_displayed_time();
+  }
+  if (changed & CHANGED_DATE) {
+    ScreensaverPage::_update_displayed_date();
+  }
+  if (changed & CHANGED_TEMPERATURE) {
+    ScreensaverPage::_update_displayed_temperature();
+  }
+}
+
 void ScreensaverPage::_update_displayed_time() {
   std::string time = ScreensaverPage::_current_time.get();
   std::string am_pm = ScreensaverPage::_am_pm_string.get();
   DisplayManager::Lock lock;
   if (blank_screen == nullptr) {
     return;
+  }
+  if (ScreensaverPage::_draw_changes_timer == nullptr) {
+    // Draws what the MQTT handler received, on the LVGL task. See _changed.
+    ScreensaverPage::_draw_changes_timer = lv_timer_create(&ScreensaverPage::_draw_changes, 250, nullptr);
   }
   set_text(weather.time, time.c_str());
   set_text(weather.am_pm, am_pm.c_str());

@@ -2,6 +2,7 @@
 #include <MutexWrapper.hpp>
 #include <atomic>
 #include <esp_event.h>
+#include <lvgl.h>
 #include <protobuf_nspanel.pb-c.h>
 
 class ScreensaverPage {
@@ -102,6 +103,14 @@ private:
 
   // The current temperature that is to be displayed
   static inline MutexWrapped<std::string> _current_temperature;
+
+  // What the MQTT handler received and has not been drawn yet, CHANGED_* bits. The handler never
+  // draws: esp-mqtt runs it holding its API lock, and waiting there for the LVGL lock would stop
+  // every publish on the panel meanwhile. _draw_changes draws them, on an LVGL timer.
+  static constexpr uint8_t CHANGED_TIME = 1, CHANGED_DATE = 2, CHANGED_TEMPERATURE = 4;
+  static inline std::atomic<uint8_t> _changed = 0;
+  static inline lv_timer_t *_draw_changes_timer = nullptr; // Guarded by the LVGL lock
+  static void _draw_changes(lv_timer_t *timer);
 
   // MQTT state topic for any configured inside temperature sensor. In case of empty, use internal NTC thermistor.
   static inline MutexWrapped<std::string> _inside_temperature_sensor_state_topic;
